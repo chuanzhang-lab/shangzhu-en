@@ -23,6 +23,10 @@ dependencies = [
     "psycopg[binary]>=3.3,<4",          # PostgresStore 持久化首选（任务数据落盘本机 PG；
                                         # 历史教训：放 extra 会被 uv sync 剪掉→静默降级丢数据，
                                         # 护栏见 tests/test_persistence_guard.py）
+    "PyYAML>=6,<7",                     # 解析 config/industry_templates.yaml 与 src/i18n/*.yaml。
+                                        # 历史教训同上：此前只靠 langchain 传递依赖，
+                                        # decision_engine/workflow_engine 顶层 import 却未声明，
+                                        # uv sync 一剪即 ImportError。护栏见 tests/test_i18n_guard.py
 ]
 
 [tool.uv]

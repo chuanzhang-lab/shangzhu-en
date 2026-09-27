@@ -1,0 +1,8 @@
+# English copy resources — single source of truth for output-layer text
+# (loaded by src/i18n/__init__.py)
+# Convention: nested structure is flattened to dotted keys (fmt.traffic_unit.per_day).
+# Key set MUST stay in sync with zh.yaml — enforced by tests/test_i18n_guard.py.
+fmt:
+  traffic_unit:
+    fallback: "units/day"
+    per_day: "/day"

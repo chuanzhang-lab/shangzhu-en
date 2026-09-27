@@ -1,0 +1,7 @@
+# 中文文案资源 —— 输出层展示文案的唯一出处（src/i18n/__init__.py 加载）
+# 约定：嵌套结构按点分键摊平（fmt.traffic_unit.per_day），键名语义化三级。
+# 本文件的中文值必须与外置改造前代码中的原文**逐字节一致**。
+fmt:
+  traffic_unit:
+    fallback: "单/天"
+    per_day: "/天"
