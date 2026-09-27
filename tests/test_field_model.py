@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from field_model import (
     DERIVED_SPECS, INPUT_SPECS, derive, consistency_issues, derived_values, _DERIVED_ORDER,
+    field_unit,
 )
 
 
@@ -110,8 +111,12 @@ def test_fm9_gross_margin_ratio_contract():
     assert abs(derive({"gross_margin": 0.4})[0]["variable_cost_ratio"] - 0.6) < 1e-9
     assert abs(derive({"gross_margin": 0.6})[0]["variable_cost_ratio"] - 0.4) < 1e-9
     assert abs(derive({"variable_cost_ratio": 0.4})[0]["gross_margin"] - 0.6) < 1e-9
-    assert DERIVED_SPECS["gross_margin"]["unit"] == "0~1"
-    assert INPUT_SPECS["gross_margin"]["unit"] == "0~1"
+    # 口径契约：用 unit_key（"ratio" = 0~1）断言，而非展示文案。
+    # 文案已外置（i18n），unit 会随 locale 变化；unit_key 才是语言无关的口径标识。
+    assert DERIVED_SPECS["gross_margin"]["unit_key"] == "ratio"
+    assert INPUT_SPECS["gross_margin"]["unit_key"] == "ratio"
+    # 中文下展示仍为 0~1（保证外置改造没有偷换口径）
+    assert field_unit("gross_margin") == "0~1"
 
 
 def test_fm10_percent_fields_display_as_percent():

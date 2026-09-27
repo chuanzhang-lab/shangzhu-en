@@ -170,3 +170,96 @@ fmt:
     no_zero_cash: "🟢 **Cash is not exhausted within 12 months** (based on current inputs; the conclusion moves if assumptions do)."
     max_shortfall: "💰 **Largest cumulative shortfall**: about **{value} CNY** (the gap after the zero-cash month)."
     note: "> Cash flow tracks actual receipts and payments only (one-off large items, collection delays, quarterly payments) and is decoupled from profit (P&L)."
+
+# ── Field model (src/field_model.py) ────────────────────────────────────
+# Specs store label_key / unit_key only; text is resolved through t() at render
+# time, so switching locale never rebuilds the model.
+field:
+  label:
+    total_investment: "Total investment"
+    monthly_rent: "Monthly rent"
+    daily_traffic: "Daily traffic"
+    price_per_unit: "Unit price"
+    employee_count: "Headcount"
+    avg_salary: "Average salary"
+    labor_burden: "Labor burden rate"
+    variable_cost_ratio: "Variable cost ratio"
+    unit_variable_cost: "Unit variable cost"
+    gross_margin: "Gross margin"
+    utilities: "Utilities"
+    packaging: "Packaging"
+    commission: "Commission"
+    other_fixed: "Other fixed"
+    equipment_ratio: "Equipment share"
+    monthly_revenue: "Monthly revenue"
+    monthly_profit: "Monthly profit"
+    monthly_expense: "Monthly fixed cost (explicit total)"
+    stage: "Stage"
+    industry: "Industry"
+    founder_count: "Founders"
+    monthly_growth_rate: "Monthly growth rate"
+    seasonal_factor: "Seasonal factor"
+    analysis_months: "Months analysed"
+    monthly_labor: "Monthly labor"
+    monthly_fixed_cost: "Monthly fixed cost"
+    monthly_variable_cost: "Monthly variable cost"
+    annual_fixed_cost: "Annual fixed cost"
+    available_cash: "Available cash"
+
+  unit:
+    yuan: "CNY"
+    yuan_per_month: "CNY/month"
+    yuan_per_year: "CNY/year"
+    yuan_per_unit: "CNY/unit"
+    person_per_day: "customers/day"
+    person: "people"
+    ratio: "0~1"
+    month: "months"
+
+  # Fixed-cost component names (a different register from field labels)
+  comp:
+    rent: "Rent"
+    labor: "Labor"
+
+  # Source semantics
+  src:
+    user_direct: "Provided directly by the user"
+    derived: "Derived by formula"
+
+  # Formula descriptions (with actual numbers)
+  desc:
+    monthly_revenue: "Daily traffic {traffic} × unit price {price} × {days} days"
+    vcr_from_unit_cost: "Unit variable cost {uvc} ÷ unit price {price}"
+    vcr_from_gross_margin: "1 − gross margin {gm}"
+    monthly_labor: "Headcount {count} × average {salary} {yuan}"
+    labor_burden_tail: " ×(1+{rate} burden)"
+    monthly_variable_cost: "Monthly revenue {rev} × variable cost ratio {vcr}"
+    monthly_profit: "Monthly revenue {rev} − monthly fixed cost {fixed} − monthly variable cost {variable}"
+    variable_cost_per_unit: "Unit price {price} × variable cost ratio {vcr}"
+    annual_fixed_cost: "Monthly fixed cost {fixed} × {months}"
+    gross_margin: "1 − variable cost ratio {vcr}"
+    available_cash_with_ratio: "Total investment {investment} ×(1−equipment share {ratio})"
+    available_cash: "Total investment {investment}"
+    fixed_cost_labor: "Labor ({count}×{salary})"
+    fixed_cost_fallback: "Fixed cost components"
+
+  # Consistency rules
+  rule:
+    revenue_vs_traffic: "Monthly revenue {rev} differs by more than 50% from {implied} implied by daily {traffic} × price {price} × {days} days — please confirm the definition"
+    cost_unsustainable: "Total cost {total} is more than 10× monthly revenue {rev}; this parameter combination is not physically sustainable"
+    vcr_vs_gross_margin: "Gross margin {gm}% contradicts variable cost ratio {vcr}% (the ratio implies a gross margin of {implied}%); currently calculated on the variable-cost-ratio basis — keep only one if gross margin should govern"
+
+  # Conflict-resolution ops
+  op:
+    set_revenue: "Set monthly revenue to {value} (traffic × price × {days})"
+    set_revenue_reason: "Traffic {traffic} × price {price} × {days} days = {implied}"
+    set_traffic: "Set traffic to {value}/day (back-solved from monthly revenue)"
+    set_traffic_reason: "Monthly revenue {rev} ÷ ({price}×{days}) = {implied}"
+    set_gross_margin: "Set gross margin to {value}% (implied by variable cost ratio)"
+    set_gross_margin_reason: "1 − variable cost ratio {vcr}% = {value}%"
+    set_vcr: "Set variable cost ratio to {value}% (implied by gross margin)"
+    set_vcr_reason: "1 − gross margin {gm}% = {value}%"
+
+  msg:
+    cycle_dependency: "The field model contains a dependency cycle: {cycle}"
+    missing_deps: "dependent inputs"

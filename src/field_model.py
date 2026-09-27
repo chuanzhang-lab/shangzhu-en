@@ -12,56 +12,74 @@
 绝不填任何猜测性默认——输入缺失即 missing，由上层决定如何呈现。
 
 骨架完整性（D13 改进）：
-- INPUT_SPECS：输入字段声明（label/unit/type/aliases），与 DERIVED_SPECS 统一
+- INPUT_SPECS：输入字段声明（label_key/unit_key/type），与 DERIVED_SPECS 统一
 - derive()：始终尝试公式（不做 deps 硬门控），返回 (values, meta)
 - monthly_fixed_cost：真公式（sum of present components）
 - variable_cost_ratio：多路推导（user > unit_var÷price > 1−gm > None）
 - _topo_order()：循环依赖检测
 - 所有公式用 .get() 容错
-"""
 
-from __future__ import annotations
+文案外置：`label` / `unit` 只存**键**（label_key / unit_key），展示时经 `t()` 解析，
+因此切换 locale 无需重建模型。⚠️ `aliases` 是抽取器的中文别名，属输入层（P2），
+**不参与外置**，改动它会直接破坏参数抽取。
+"""
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from i18n import t
+
+# 引擎侧写死的数据标记（非文案）——与 formatter 的同名常量同源
+_USER_SOURCE_MARK = "[用户]"
+
+
+def _L(suffix: str) -> str:
+    """字段标签键 → 文案。"""
+    return t(f"field.label.{suffix}")
+
+
+def _U(unit_key: str) -> str:
+    """单位键 → 文案（空键返回空串，不是缺失）。"""
+    return t(f"field.unit.{unit_key}") if unit_key else ""
+
+
 # ── 输入字段声明 ─────────────────────────────────────────────────────────
-# 用户可提供的字段：label/unit/type/aliases（aliases 是抽取器的别名列表）
+# 用户可提供的字段：label_key/unit_key/type
 INPUT_SPECS: Dict[str, Dict[str, Any]] = {
-    "total_investment": {"label": "总投资", "unit": "元", "type": "float"},
-    "monthly_rent": {"label": "月租金", "unit": "元/月", "type": "float"},
-    "daily_traffic": {"label": "日均客流", "unit": "人/天", "type": "float"},
-    "price_per_unit": {"label": "客单价", "unit": "元", "type": "float"},
-    "employee_count": {"label": "员工人数", "unit": "人", "type": "float"},
-    "avg_salary": {"label": "人均薪资", "unit": "元/月", "type": "float"},
-    "labor_burden": {"label": "劳动负担率", "unit": "", "type": "float"},
-    "variable_cost_ratio": {"label": "变动成本率", "unit": "0~1", "type": "float"},
-    "unit_variable_cost": {"label": "单位变动成本", "unit": "元/单位", "type": "float"},
+    "total_investment": {"label_key": "total_investment", "unit_key": "yuan", "type": "float"},
+    "monthly_rent": {"label_key": "monthly_rent", "unit_key": "yuan_per_month", "type": "float"},
+    "daily_traffic": {"label_key": "daily_traffic", "unit_key": "person_per_day", "type": "float"},
+    "price_per_unit": {"label_key": "price_per_unit", "unit_key": "yuan", "type": "float"},
+    "employee_count": {"label_key": "employee_count", "unit_key": "person", "type": "float"},
+    "avg_salary": {"label_key": "avg_salary", "unit_key": "yuan_per_month", "type": "float"},
+    "labor_burden": {"label_key": "labor_burden", "unit_key": "", "type": "float"},
+    "variable_cost_ratio": {"label_key": "variable_cost_ratio", "unit_key": "ratio", "type": "float"},
+    "unit_variable_cost": {"label_key": "unit_variable_cost", "unit_key": "yuan_per_unit", "type": "float"},
     # S3（2026-09-12）：统一为 0~1 口径 —— 与 param_guard 的归一化、
     # 与 variable_cost_ratio 的 "0~1" 对齐。旧声明 "%" 与公式里的 ÷100 自相矛盾，
     # 导致 derive({"gross_margin": 0.6}) 算出 vcr=0.994（应为 0.4）。
-    "gross_margin": {"label": "毛利率", "unit": "0~1", "type": "float"},
-    "utilities": {"label": "水电", "unit": "元/月", "type": "float"},
-    "packaging": {"label": "包装", "unit": "元/月", "type": "float"},
-    "commission": {"label": "提成", "unit": "元/月", "type": "float"},
-    "other_fixed": {"label": "其他固定", "unit": "元/月", "type": "float"},
-    "equipment_ratio": {"label": "设备占比", "unit": "0~1", "type": "float"},
-    "monthly_revenue": {"label": "月营收", "unit": "元/月", "type": "float"},
-    "monthly_profit": {"label": "月利润", "unit": "元/月", "type": "float"},
-    "monthly_expense": {"label": "月固定成本（显式总数）", "unit": "元/月", "type": "float"},
-    "stage": {"label": "阶段", "unit": "", "type": "str"},
-    "industry": {"label": "行业", "unit": "", "type": "str"},
-    "founder_count": {"label": "创始人数", "unit": "人", "type": "int"},
-    "monthly_growth_rate": {"label": "月增长率", "unit": "0~1", "type": "float"},
-    "seasonal_factor": {"label": "季节因子", "unit": "", "type": "float"},
-    "analysis_months": {"label": "分析月数", "unit": "月", "type": "int"},
+    "gross_margin": {"label_key": "gross_margin", "unit_key": "ratio", "type": "float"},
+    "utilities": {"label_key": "utilities", "unit_key": "yuan_per_month", "type": "float"},
+    "packaging": {"label_key": "packaging", "unit_key": "yuan_per_month", "type": "float"},
+    "commission": {"label_key": "commission", "unit_key": "yuan_per_month", "type": "float"},
+    "other_fixed": {"label_key": "other_fixed", "unit_key": "yuan_per_month", "type": "float"},
+    "equipment_ratio": {"label_key": "equipment_ratio", "unit_key": "ratio", "type": "float"},
+    "monthly_revenue": {"label_key": "monthly_revenue", "unit_key": "yuan_per_month", "type": "float"},
+    "monthly_profit": {"label_key": "monthly_profit", "unit_key": "yuan_per_month", "type": "float"},
+    "monthly_expense": {"label_key": "monthly_expense", "unit_key": "yuan_per_month", "type": "float"},
+    "stage": {"label_key": "stage", "unit_key": "", "type": "str"},
+    "industry": {"label_key": "industry", "unit_key": "", "type": "str"},
+    "founder_count": {"label_key": "founder_count", "unit_key": "person", "type": "int"},
+    "monthly_growth_rate": {"label_key": "monthly_growth_rate", "unit_key": "ratio", "type": "float"},
+    "seasonal_factor": {"label_key": "seasonal_factor", "unit_key": "", "type": "float"},
+    "analysis_months": {"label_key": "analysis_months", "unit_key": "month", "type": "int"},
 }
 
 # ── 派生字段声明 ─────────────────────────────────────────────────────────
 # 每个字段：
 #   deps    : 依赖字段（用于拓扑排序，不用于硬门控）
 #   formula : 计算公式（lambda params -> value；用 .get() 容错；返回 None 即 missing）
-#   label   : 中文名
-#   unit    : 单位
+#   label_key: 显示名键（经 t() 解析）
+#   unit_key: 单位键（经 t() 解析）
 #   kind    : "derived"（纯公式推） | "override"（用户可覆盖，优先用用户值）
 #   user_direct_ok: 是否允许显示「用户直接给出」（仅 monthly_revenue/monthly_profit）
 #   describe: 返回「带实际数字的公式说明」字符串
@@ -117,9 +135,11 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
         "deps": ["daily_traffic", "price_per_unit"],
         "formula": lambda p: _prod([p.get("daily_traffic"), p.get("price_per_unit"),
                                     DAYS_PER_MONTH]),
-        "label": "月营收", "unit": "元/月", "kind": "override", "user_direct_ok": True,
-        "describe": lambda p: (f"日均客流 {p.get('daily_traffic', 0):g} × 客单价 "
-                               f"{p.get('price_per_unit', 0):g} × {DAYS_PER_MONTH}天"),
+        "label_key": "monthly_revenue", "unit_key": "yuan_per_month", "kind": "override", "user_direct_ok": True,
+        "describe": lambda p: t("field.desc.monthly_revenue",
+                                traffic=f"{p.get('daily_traffic', 0):g}",
+                                price=f"{p.get('price_per_unit', 0):g}",
+                                days=DAYS_PER_MONTH),
     },
     # 变动成本率：多路推导（用户 > unit_var÷price > 1−gm > None）
     # S3：gm 为 0~1 口径，故此处是 `1 − gm`（不再是 `1 − gm/100`）。
@@ -132,14 +152,16 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
             if p.get("gross_margin") is not None
             else None
         ),
-        "label": "变动成本率", "unit": "0~1", "kind": "override", "user_direct_ok": True,
+        "label_key": "variable_cost_ratio", "unit_key": "ratio", "kind": "override", "user_direct_ok": True,
         "display_percent": True,   # 内部 0~1，展示为百分数
         "describe": lambda p: (
-            f"单位变动成本 {p.get('unit_variable_cost', 0):g} ÷ 客单价 {p.get('price_per_unit', 0):g}"
+            t("field.desc.vcr_from_unit_cost",
+              uvc=f"{p.get('unit_variable_cost', 0):g}",
+              price=f"{p.get('price_per_unit', 0):g}")
             if p.get("unit_variable_cost") is not None
-            else f"1 − 毛利率 {p.get('gross_margin', 0):.0%}"
+            else t("field.desc.vcr_from_gross_margin", gm=f"{p.get('gross_margin', 0):.0%}")
             if p.get("gross_margin") is not None
-            else "公式推导"
+            else t("field.src.derived")
         ),
     },
     # 月人工现金：人数 × 人均薪资（中间量）
@@ -149,8 +171,11 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
         # —— 用户说「我不请人」时不会顺带说薪资，按缺失处理会让成本归因显示"未知"。
         "formula": lambda p: (0 if p.get("employee_count") == 0
                               else _prod([p.get("employee_count"), p.get("avg_salary")])),
-        "label": "月人工", "unit": "元/月", "kind": "derived", "_hidden": True,
-        "describe": lambda p: f"员工 {p.get('employee_count', 0):g} 人 × 人均 {p.get('avg_salary', 0):g} 元",
+        "label_key": "monthly_labor", "unit_key": "yuan_per_month", "kind": "derived", "_hidden": True,
+        "describe": lambda p: t("field.desc.monthly_labor",
+                                count=f"{p.get('employee_count', 0):g}",
+                                salary=f"{p.get('avg_salary', 0):g}",
+                                yuan=_U("yuan")),
     },
     # 月人工（含负担）：裸薪 × (1+负担率)
     "monthly_labor": {
@@ -158,10 +183,15 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
         # F9：labor_burden 缺失时按 0 计（不是缺失），但 monthly_labor_cash 缺失就真缺失。
         "formula": lambda p: (None if p.get("monthly_labor_cash") is None
                               else p["monthly_labor_cash"] * (1 + (p.get("labor_burden") or 0))),
-        "label": "月人工", "unit": "元/月", "kind": "derived",
-        "describe": lambda p: (f"员工 {p.get('employee_count', 0):g} 人 × 人均 {p.get('avg_salary', 0):g} 元"
-                               + (f" ×(1+{p.get('labor_burden_rate', 0):.0%}负担)"
-                                  if p.get("labor_burden_rate") else "")),
+        "label_key": "monthly_labor", "unit_key": "yuan_per_month", "kind": "derived",
+        "describe": lambda p: (
+            t("field.desc.monthly_labor",
+              count=f"{p.get('employee_count', 0):g}",
+              salary=f"{p.get('avg_salary', 0):g}",
+              yuan=_U("yuan"))
+            + (t("field.desc.labor_burden_tail", rate=f"{p.get('labor_burden_rate', 0):.0%}")
+               if p.get("labor_burden_rate") else "")
+        ),
     },
     # 月固定成本：组件求和（有值组件之和，无值跳过，全 None → None）
     "monthly_fixed_cost": {
@@ -173,15 +203,17 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
             None if all(p.get(k) is None for k in _FIXED_COST_PARTS)
             else sum((p.get(k) or 0) for k in _FIXED_COST_PARTS)
         ),
-        "label": "月固定成本", "unit": "元/月", "kind": "override",
+        "label_key": "monthly_fixed_cost", "unit_key": "yuan_per_month", "kind": "override",
         "describe": lambda p: _describe_fixed_cost(p),
     },
     # 月变动成本：月营收 × 变动成本率
     "monthly_variable_cost": {
         "deps": ["monthly_revenue", "variable_cost_ratio"],
         "formula": lambda p: _prod([p.get("monthly_revenue"), p.get("variable_cost_ratio")]),
-        "label": "月变动成本", "unit": "元/月", "kind": "derived",
-        "describe": lambda p: f"月营收 {p.get('monthly_revenue', 0):g} × 变动成本率 {p.get('variable_cost_ratio', 0):.0%}",
+        "label_key": "monthly_variable_cost", "unit_key": "yuan_per_month", "kind": "derived",
+        "describe": lambda p: t("field.desc.monthly_variable_cost",
+                                rev=f"{p.get('monthly_revenue', 0):g}",
+                                vcr=f"{p.get('variable_cost_ratio', 0):.0%}"),
     },
     # 月利润：营收 - 固定 - 变动
     "monthly_profit": {
@@ -192,31 +224,37 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
             if all(p.get(d) is not None for d in ("monthly_revenue", "monthly_fixed_cost", "monthly_variable_cost"))
             else None
         ),
-        "label": "月利润", "unit": "元/月", "kind": "override", "user_direct_ok": True,
-        "describe": lambda p: (f"月营收 {p.get('monthly_revenue', 0):g} − 月固定成本 {p.get('monthly_fixed_cost', 0):g}"
-                               f" − 月变动成本 {p.get('monthly_variable_cost', 0):g}"),
+        "label_key": "monthly_profit", "unit_key": "yuan_per_month", "kind": "override", "user_direct_ok": True,
+        "describe": lambda p: t("field.desc.monthly_profit",
+                                rev=f"{p.get('monthly_revenue', 0):g}",
+                                fixed=f"{p.get('monthly_fixed_cost', 0):g}",
+                                variable=f"{p.get('monthly_variable_cost', 0):g}"),
     },
     # 单位变动成本：客单价 × 变动成本率
     "variable_cost_per_unit": {
         "deps": ["price_per_unit", "variable_cost_ratio"],
         "formula": lambda p: _prod([p.get("price_per_unit"), p.get("variable_cost_ratio")]),
-        "label": "单位变动成本", "unit": "元/单位", "kind": "derived",
-        "describe": lambda p: f"客单价 {p.get('price_per_unit', 0):g} × 变动成本率 {p.get('variable_cost_ratio', 0):.0%}",
+        "label_key": "unit_variable_cost", "unit_key": "yuan_per_unit", "kind": "derived",
+        "describe": lambda p: t("field.desc.variable_cost_per_unit",
+                                price=f"{p.get('price_per_unit', 0):g}",
+                                vcr=f"{p.get('variable_cost_ratio', 0):.0%}"),
     },
     # 年固定成本：月固定 × 12
     "annual_fixed_cost": {
         "deps": ["monthly_fixed_cost"],
         "formula": lambda p: _prod([p.get("monthly_fixed_cost"), MONTHS_PER_YEAR]),
-        "label": "年固定成本", "unit": "元/年", "kind": "derived",
-        "describe": lambda p: f"月固定成本 {p.get('monthly_fixed_cost', 0):g} × 12",
+        "label_key": "annual_fixed_cost", "unit_key": "yuan_per_year", "kind": "derived",
+        "describe": lambda p: t("field.desc.annual_fixed_cost",
+                                fixed=f"{p.get('monthly_fixed_cost', 0):g}",
+                                months=MONTHS_PER_YEAR),
     },
     # 毛利率：1 - 变动成本率（S3：统一 0~1 口径，展示时 ×100）
     "gross_margin": {
         "deps": ["variable_cost_ratio"],
         "formula": lambda p: round(1 - p.get("variable_cost_ratio", 0), 4) if p.get("variable_cost_ratio") is not None else None,
-        "label": "毛利率", "unit": "0~1", "kind": "derived",
+        "label_key": "gross_margin", "unit_key": "ratio", "kind": "derived",
         "display_percent": True,   # 内部 0~1，展示为百分数
-        "describe": lambda p: f"1 − 变动成本率 {p.get('variable_cost_ratio', 0):.0%}",
+        "describe": lambda p: t("field.desc.gross_margin", vcr=f"{p.get('variable_cost_ratio', 0):.0%}"),
     },
     # 可用现金：总投资（设备占比可选扣减）
     "available_cash": {
@@ -226,11 +264,13 @@ DERIVED_SPECS: Dict[str, Dict[str, Any]] = {
             if p.get("equipment_ratio") is not None
             else p.get("total_investment")
         ) if p.get("total_investment") is not None else None,
-        "label": "可用现金", "unit": "元", "kind": "derived",
+        "label_key": "available_cash", "unit_key": "yuan", "kind": "derived",
         "describe": lambda p: (
-            f"总投资 {p.get('total_investment', 0):g} ×(1−设备占比 {p.get('equipment_ratio', 0):.0%})"
+            t("field.desc.available_cash_with_ratio",
+              investment=f"{p.get('total_investment', 0):g}",
+              ratio=f"{p.get('equipment_ratio', 0):.0%}")
             if p.get("equipment_ratio") is not None
-            else f"总投资 {p.get('total_investment', 0):g}"
+            else t("field.desc.available_cash", investment=f"{p.get('total_investment', 0):g}")
         ),
     },
 }
@@ -256,12 +296,12 @@ B_FIELD_DEPENDENCIES: dict = {
 
 def clear_stale_overrides(old_params: dict, new_params: dict, user_overrides: dict) -> dict:
     """当 A 类依赖字段变化时，清掉旧 B 类用户值。
-    
+
     参数：
         old_params: 历史参数
         new_params: 本轮新参数
         user_overrides: 当前 B 类字段用户覆盖 {field: value}
-    
+
     返回：
         更新后的 user_overrides（已清除失效覆盖）
     """
@@ -281,21 +321,29 @@ def clear_stale_overrides(old_params: dict, new_params: dict, user_overrides: di
 # ── 统一字段注册表 ──────────────────────────────────────────────────────
 
 def field_label(name: str) -> str:
-    """字段中文名：先查派生表，再查输入表，兜底字段名。"""
+    """字段显示名（随 locale）：先查派生表，再查输入表，兜底字段名本身。"""
     if name in DERIVED_SPECS:
-        return DERIVED_SPECS[name]["label"]
-    return INPUT_SPECS.get(name, {}).get("label", name)
+        return _L(DERIVED_SPECS[name]["label_key"])
+    spec = INPUT_SPECS.get(name)
+    return _L(spec["label_key"]) if spec else name
+
+
+def field_unit(name: str) -> str:
+    """字段显示单位（随 locale）。"""
+    spec = DERIVED_SPECS.get(name) or INPUT_SPECS.get(name)
+    return _U(spec["unit_key"]) if spec else ""
 
 
 # ── 固定成本组件展示 ────────────────────────────────────────────────────
 
+# (标签键所在命名空间, 字段名)：租金/人工 用组件专属文案，其余复用字段标签
 _FIXED_COST_COMPONENTS = [
-    ("租金", "monthly_rent"),
-    ("人工", "monthly_labor"),
-    ("水电", "utilities"),
-    ("包装", "packaging"),
-    ("提成", "commission"),
-    ("其他固定", "other_fixed"),
+    ("field.comp.rent", "monthly_rent"),
+    ("field.comp.labor", "monthly_labor"),
+    ("field.label.utilities", "utilities"),
+    ("field.label.packaging", "packaging"),
+    ("field.label.commission", "commission"),
+    ("field.label.other_fixed", "other_fixed"),
 ]
 
 
@@ -303,14 +351,16 @@ def _describe_fixed_cost(p: Dict[str, Any]) -> str:
     """动态列出实际存在的固定成本组件。"""
     has_labor = p.get("employee_count") is not None and p.get("avg_salary") is not None
     parts: List[str] = []
-    for label, key in _FIXED_COST_COMPONENTS:
-        if key == "monthly_labor":
+    for key, field in _FIXED_COST_COMPONENTS:
+        if field == "monthly_labor":
             if has_labor:
-                parts.append(f"人工 ({p.get('employee_count', 0):g}×{p.get('avg_salary', 0):g})")
+                parts.append(t("field.desc.fixed_cost_labor",
+                               count=f"{p.get('employee_count', 0):g}",
+                               salary=f"{p.get('avg_salary', 0):g}"))
             continue
-        if p.get(key) is not None:
-            parts.append(label)
-    return " + ".join(parts) if parts else "固定成本组件"
+        if p.get(field) is not None:
+            parts.append(t(key))
+    return " + ".join(parts) if parts else t("field.desc.fixed_cost_fallback")
 
 
 # ── 通用求值器（拓扑求值 + 循环检测）────────────────────────────────────
@@ -326,7 +376,7 @@ def _topo_order() -> List[str]:
             return
         if name in in_progress:
             cycle = " → ".join(path + (name,))
-            raise ValueError(f"字段模型存在循环依赖: {cycle}")
+            raise ValueError(t("field.msg.cycle_dependency", cycle=cycle))
         in_progress.add(name)
         for dep in DERIVED_SPECS[name]["deps"]:
             if dep in DERIVED_SPECS:
@@ -370,7 +420,7 @@ def derive(params: Dict[str, Any], user_overrides: Optional[Dict[str, Any]] = No
             val = user_overrides[name]
             values[name] = val
             work[name] = val
-            formula_desc = "用户直接给出"
+            formula_desc = t("field.src.user_direct")
             if spec.get("describe"):
                 try:
                     formula_desc = spec["describe"](work)
@@ -384,7 +434,7 @@ def derive(params: Dict[str, Any], user_overrides: Optional[Dict[str, Any]] = No
             values[name] = val
             work[name] = val
             # 仍然算 describe（带数字公式），「用户直接给出」由 derived_values 靠 src 判定
-            formula_desc = "用户直接给出"
+            formula_desc = t("field.src.user_direct")
             if spec.get("describe"):
                 try:
                     formula_desc = spec["describe"](work)
@@ -401,7 +451,7 @@ def derive(params: Dict[str, Any], user_overrides: Optional[Dict[str, Any]] = No
             work[name] = val
             values[name] = val
             # 公式说明
-            formula_desc = "公式推导"
+            formula_desc = t("field.src.derived")
             if spec.get("describe"):
                 try:
                     formula_desc = spec["describe"](work)
@@ -423,8 +473,9 @@ def _rule_revenue_vs_traffic_price(params: Dict[str, Any]) -> Optional[str]:
     if all(isinstance(x, (int, float)) and x > 0 for x in (rev, traffic, price)):
         implied = monthly_revenue_from_traffic(traffic, price)
         if abs(implied - rev) / rev > 0.5:
-            return (f"月营收 {rev:,.0f} 与「日均{traffic:g}×单价{price:g}×{DAYS_PER_MONTH}天」"
-                    f"推算 {implied:,.0f} 差异超 50%，请确认口径")
+            return t("field.rule.revenue_vs_traffic",
+                     rev=f"{rev:,.0f}", traffic=f"{traffic:g}", price=f"{price:g}",
+                     days=DAYS_PER_MONTH, implied=f"{implied:,.0f}")
     return None
 
 
@@ -436,8 +487,8 @@ def _rule_cost_structure(params: Dict[str, Any]) -> Optional[str]:
         if isinstance(rev, (int, float)) and rev > 0:
             total_cost = fixed + rev * vc_ratio
             if total_cost > rev * 10:
-                return (f"总成本 {total_cost:,.0f} 超月营收 {rev:,.0f} 10 倍，"
-                        f"参数组合物理上不可持续")
+                return t("field.rule.cost_unsustainable",
+                         total=f"{total_cost:,.0f}", rev=f"{rev:,.0f}")
     return None
 
 
@@ -463,9 +514,9 @@ def _rule_vcr_vs_gross_margin(params: Dict[str, Any]) -> Optional[str]:
     implied = 1.0 - float(vcr)
     # 容差 2 个百分点：避免浮点噪声与四舍五入（如 vcr=0.4 → gm=0.6 精确相等时不得误报）
     if abs(implied - float(gm)) > 0.02:
-        return (f"毛利率 {float(gm) * 100:.0f}% 与变动成本率 {float(vcr) * 100:.0f}% 矛盾"
-                f"（按变动成本率推算毛利率应为 {implied * 100:.0f}%）；"
-                f"当前按变动成本率口径计算，若应以毛利率为准请只保留其一")
+        return t("field.rule.vcr_vs_gross_margin",
+                 gm=f"{float(gm) * 100:.0f}", vcr=f"{float(vcr) * 100:.0f}",
+                 implied=f"{implied * 100:.0f}")
     return None
 
 
@@ -501,17 +552,22 @@ def conflict_resolution_ops(params: Dict[str, Any]) -> List[Dict[str, Any]]:
         if abs(implied - rev) / rev > 0.5:
             # 方案A：按客流×单价×30 修正月营收
             ops.append({
-                "propose": "set", "label": f"月营收改为 {implied:,.0f}（按客流×单价×30）",
+                "propose": "set",
+                "label": t("field.op.set_revenue", value=f"{implied:,.0f}", days=DAYS_PER_MONTH),
                 "changes": {"monthly_revenue": implied},
-                "reason": f"客流{traffic:g}×单价{price:g}×{DAYS_PER_MONTH}天 = {implied:,.0f}",
+                "reason": t("field.op.set_revenue_reason", traffic=f"{traffic:g}",
+                            price=f"{price:g}", days=DAYS_PER_MONTH, implied=f"{implied:,.0f}"),
                 "hypothesis": None,
             })
             # 方案B：按月营收反推客流
             implied_traffic = round(rev / (price * DAYS_PER_MONTH), 0)
             ops.append({
-                "propose": "set", "label": f"客流改为 {implied_traffic:.0f}/天（按月营收反推）",
+                "propose": "set",
+                "label": t("field.op.set_traffic", value=f"{implied_traffic:.0f}"),
                 "changes": {"daily_traffic": implied_traffic},
-                "reason": f"月营收{rev:,.0f} ÷ ({price:g}×30) = {implied_traffic:.0f}",
+                "reason": t("field.op.set_traffic_reason", rev=f"{rev:,.0f}",
+                            price=f"{price:g}", days=DAYS_PER_MONTH,
+                            implied=f"{implied_traffic:.0f}"),
                 "hypothesis": None,
             })
 
@@ -526,16 +582,18 @@ def conflict_resolution_ops(params: Dict[str, Any]) -> List[Dict[str, Any]]:
         if abs(implied_gm - float(gm)) > 0.02:
             ops.append({
                 "propose": "set",
-                "label": f"毛利率改为 {implied_gm * 100:.0f}%（按变动成本率推算）",
+                "label": t("field.op.set_gross_margin", value=f"{implied_gm * 100:.0f}"),
                 "changes": {"gross_margin": round(implied_gm, 4)},
-                "reason": f"1 − 变动成本率 {float(vcr) * 100:.0f}% = {implied_gm * 100:.0f}%",
+                "reason": t("field.op.set_gross_margin_reason", vcr=f"{float(vcr) * 100:.0f}",
+                            value=f"{implied_gm * 100:.0f}"),
                 "hypothesis": None,
             })
             ops.append({
                 "propose": "set",
-                "label": f"变动成本率改为 {implied_vcr * 100:.0f}%（按毛利率推算）",
+                "label": t("field.op.set_vcr", value=f"{implied_vcr * 100:.0f}"),
                 "changes": {"variable_cost_ratio": round(implied_vcr, 4)},
-                "reason": f"1 − 毛利率 {float(gm) * 100:.0f}% = {implied_vcr * 100:.0f}%",
+                "reason": t("field.op.set_vcr_reason", gm=f"{float(gm) * 100:.0f}",
+                            value=f"{implied_vcr * 100:.0f}"),
                 "hypothesis": None,
             })
     return ops
@@ -589,25 +647,25 @@ def derived_values(params: Dict[str, Any], src: Optional[Dict[str, str]] = None)
         m = meta.get(name, {})
         # 展示口径：内部 0~1 的比例类字段（毛利率 / 变动成本率）在展示层 ×100 成百分数。
         # 既保持与旧版一致的视觉，也修掉「0.4 0~1」被 f"{v:,.0f}" 渲染成「0 0~1」的错。
-        disp_val, disp_unit = val, spec["unit"]
+        disp_val, disp_unit = val, _U(spec["unit_key"])
         if spec.get("display_percent") and isinstance(val, (int, float)):
             disp_val, disp_unit = round(val * 100, 1), "%"
         item: Dict[str, Any] = {
-            "field": name, "label": spec["label"], "unit": disp_unit,
+            "field": name, "label": _L(spec["label_key"]), "unit": disp_unit,
             "status": "ok" if val is not None else "missing",
         }
         if val is not None:
             item["value"] = round(disp_val, 2) if isinstance(disp_val, float) else disp_val
             # 公式说明：仅「用户可直接给」且来源确为[用户]时写「用户直接给出」
             s = src.get(name, "")
-            if s.startswith("[用户]") and spec.get("user_direct_ok"):
-                item["formula"] = "用户直接给出"
+            if s.startswith(_USER_SOURCE_MARK) and spec.get("user_direct_ok"):
+                item["formula"] = t("field.src.user_direct")
             else:
-                item["formula"] = m.get("formula", "公式推导")
+                item["formula"] = m.get("formula", t("field.src.derived"))
         else:
             item["value"] = None
             item["formula"] = ""
             causes = _missing_root_causes(name, params, values)
-            item["missing"] = "、".join(dict.fromkeys(causes)) if causes else "依赖输入"
+            item["missing"] = "、".join(dict.fromkeys(causes)) if causes else t("field.msg.missing_deps")
         out.append(item)
     return out

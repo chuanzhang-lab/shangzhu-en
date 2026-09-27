@@ -169,3 +169,95 @@ fmt:
     no_zero_cash: "🟢 **12 个月内现金未耗尽**（基于当前输入；假设若变结论动）。"
     max_shortfall: "💰 **累计最大缺口**：约 **{value} 元**（在归零月之后的缺口）。"
     note: "> 现金流只关注「实际到账/支出」（含一次性大额、到账延迟、季度支付），与利润（P&L）解耦。"
+
+# ── 字段模型（src/field_model.py）───────────────────────────────────────
+# label_key / unit_key 只存键，展示时经 t() 解析，切换 locale 无需重建模型。
+field:
+  label:
+    total_investment: "总投资"
+    monthly_rent: "月租金"
+    daily_traffic: "日均客流"
+    price_per_unit: "客单价"
+    employee_count: "员工人数"
+    avg_salary: "人均薪资"
+    labor_burden: "劳动负担率"
+    variable_cost_ratio: "变动成本率"
+    unit_variable_cost: "单位变动成本"
+    gross_margin: "毛利率"
+    utilities: "水电"
+    packaging: "包装"
+    commission: "提成"
+    other_fixed: "其他固定"
+    equipment_ratio: "设备占比"
+    monthly_revenue: "月营收"
+    monthly_profit: "月利润"
+    monthly_expense: "月固定成本（显式总数）"
+    stage: "阶段"
+    industry: "行业"
+    founder_count: "创始人数"
+    monthly_growth_rate: "月增长率"
+    seasonal_factor: "季节因子"
+    analysis_months: "分析月数"
+    monthly_labor: "月人工"
+    monthly_fixed_cost: "月固定成本"
+    monthly_variable_cost: "月变动成本"
+    annual_fixed_cost: "年固定成本"
+    available_cash: "可用现金"
+
+  unit:
+    yuan: "元"
+    yuan_per_month: "元/月"
+    yuan_per_year: "元/年"
+    yuan_per_unit: "元/单位"
+    person_per_day: "人/天"
+    person: "人"
+    ratio: "0~1"
+    month: "月"
+
+  # 固定成本组件名（与字段标签不同口径：租金≠月租金、人工≠月人工）
+  comp:
+    rent: "租金"
+    labor: "人工"
+
+  # 来源语义
+  src:
+    user_direct: "用户直接给出"
+    derived: "公式推导"
+
+  # 公式说明（带实际数字）
+  desc:
+    monthly_revenue: "日均客流 {traffic} × 客单价 {price} × {days}天"
+    vcr_from_unit_cost: "单位变动成本 {uvc} ÷ 客单价 {price}"
+    vcr_from_gross_margin: "1 − 毛利率 {gm}"
+    monthly_labor: "员工 {count} 人 × 人均 {salary} {yuan}"
+    labor_burden_tail: " ×(1+{rate}负担)"
+    monthly_variable_cost: "月营收 {rev} × 变动成本率 {vcr}"
+    monthly_profit: "月营收 {rev} − 月固定成本 {fixed} − 月变动成本 {variable}"
+    variable_cost_per_unit: "客单价 {price} × 变动成本率 {vcr}"
+    annual_fixed_cost: "月固定成本 {fixed} × {months}"
+    gross_margin: "1 − 变动成本率 {vcr}"
+    available_cash_with_ratio: "总投资 {investment} ×(1−设备占比 {ratio})"
+    available_cash: "总投资 {investment}"
+    fixed_cost_labor: "人工 ({count}×{salary})"
+    fixed_cost_fallback: "固定成本组件"
+
+  # 一致性规则
+  rule:
+    revenue_vs_traffic: "月营收 {rev} 与「日均{traffic}×单价{price}×{days}天」推算 {implied} 差异超 50%，请确认口径"
+    cost_unsustainable: "总成本 {total} 超月营收 {rev} 10 倍，参数组合物理上不可持续"
+    vcr_vs_gross_margin: "毛利率 {gm}% 与变动成本率 {vcr}% 矛盾（按变动成本率推算毛利率应为 {implied}%）；当前按变动成本率口径计算，若应以毛利率为准请只保留其一"
+
+  # 冲突处置 ops
+  op:
+    set_revenue: "月营收改为 {value}（按客流×单价×{days}）"
+    set_revenue_reason: "客流{traffic}×单价{price}×{days}天 = {implied}"
+    set_traffic: "客流改为 {value}/天（按月营收反推）"
+    set_traffic_reason: "月营收{rev} ÷ ({price}×{days}) = {implied}"
+    set_gross_margin: "毛利率改为 {value}%（按变动成本率推算）"
+    set_gross_margin_reason: "1 − 变动成本率 {vcr}% = {value}%"
+    set_vcr: "变动成本率改为 {value}%（按毛利率推算）"
+    set_vcr_reason: "1 − 毛利率 {gm}% = {value}%"
+
+  msg:
+    cycle_dependency: "字段模型存在循环依赖: {cycle}"
+    missing_deps: "依赖输入"

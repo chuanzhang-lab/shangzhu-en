@@ -113,11 +113,12 @@ def test_t_invalid_locale_falls_back_to_zh():
 # 已完成文案外置的模块（M2 起逐个加入，改一个加一个）
 CONVERTED_MODULES = [
     os.path.join("src", "router", "formatter.py"),
+    os.path.join("src", "field_model.py"),
 ]
 
 # 白名单：**引擎产出的数据值**，不是展示文案。展示层必须按原样匹配它们，
 # 因此不能外置。M4 引擎侧 i18n 后应改为状态码匹配，届时白名单应清空。
-ENGINE_DATA_LITERALS = {"[缺失]", "变动成本", "无限"}
+ENGINE_DATA_LITERALS = {"[缺失]", "变动成本", "无限", "[用户]"}
 
 
 def _cjk_string_literals(path: str):
@@ -155,6 +156,33 @@ def test_no_hardcoded_cjk_in_converted_modules():
             f"{rel} 仍有硬编码中文字面量（英文版会露中文）: "
             + "; ".join(f"L{ln}:{v!r}" for ln, v in leftovers)
         )
+
+
+def test_rendered_copy_has_no_unfilled_placeholders():
+    """渲染出的文案不得残留未填充的 {xxx}。
+
+    典型成因：调用 `t(key, ...)` 时漏传参数。`t()` 在 format 失败时按设计
+    返回未填充模板（不中断业务），若无人值守就会把 `{days}` 直接显示给用户。
+    本测试用真实调用路径兜住这类漏传。
+    """
+    from field_model import conflict_resolution_ops, derived_values
+
+    texts = []
+    for op in conflict_resolution_ops(
+        {"monthly_revenue": 20000, "daily_traffic": 100, "price_per_unit": 12}
+    ):
+        texts.append(op["label"])
+        texts.append(op["reason"])
+    for item in derived_values(
+        {"monthly_revenue": 60000, "monthly_rent": 8000, "employee_count": 2,
+         "avg_salary": 5000, "variable_cost_ratio": 0.35}
+    ):
+        texts.append(item["label"])
+        texts.append(item.get("formula") or "")
+        texts.append(item.get("missing") or "")
+
+    bad = [s for s in texts if "{" in s or "}" in s]
+    assert not bad, f"文案残留未填充占位符（t() 调用漏传参数）: {bad}"
 
 
 def test_i18n_module_has_no_reverse_dependency_on_business_modules():
