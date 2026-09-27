@@ -110,6 +110,53 @@ def test_t_invalid_locale_falls_back_to_zh():
     assert i18n.get_locale() == "zh"
 
 
+# 已完成文案外置的模块（M2 起逐个加入，改一个加一个）
+CONVERTED_MODULES = [
+    os.path.join("src", "router", "formatter.py"),
+]
+
+# 白名单：**引擎产出的数据值**，不是展示文案。展示层必须按原样匹配它们，
+# 因此不能外置。M4 引擎侧 i18n 后应改为状态码匹配，届时白名单应清空。
+ENGINE_DATA_LITERALS = {"[缺失]", "变动成本", "无限"}
+
+
+def _cjk_string_literals(path: str):
+    """返回文件中所有「非 docstring」的含中文字符串字面量。"""
+    import ast as _ast
+
+    tree = _ast.parse(_read(path))
+    docs = set()
+    for nd in _ast.walk(tree):
+        if isinstance(nd, (_ast.Module, _ast.ClassDef, _ast.FunctionDef, _ast.AsyncFunctionDef)):
+            body = nd.body
+            if body and isinstance(body[0], _ast.Expr) and isinstance(body[0].value, _ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                docs.add(id(body[0].value))
+    out = []
+    for nd in _ast.walk(tree):
+        if isinstance(nd, _ast.Constant) and isinstance(nd.value, str) and id(nd) not in docs:
+            if re.search(r"[一-鿿]", nd.value):
+                out.append((nd.lineno, nd.value))
+    return out
+
+
+def test_no_hardcoded_cjk_in_converted_modules():
+    """已改造模块不得残留硬编码中文——否则英文版会出现中文残片。
+
+    白名单只允许「引擎数据值」这类必须原样匹配的字面量。
+    """
+    assert CONVERTED_MODULES, "尚未登记任何已改造模块"
+    for rel in CONVERTED_MODULES:
+        path = os.path.join(ROOT, rel)
+        leftovers = [
+            (ln, v) for ln, v in _cjk_string_literals(path) if v not in ENGINE_DATA_LITERALS
+        ]
+        assert not leftovers, (
+            f"{rel} 仍有硬编码中文字面量（英文版会露中文）: "
+            + "; ".join(f"L{ln}:{v!r}" for ln, v in leftovers)
+        )
+
+
 def test_i18n_module_has_no_reverse_dependency_on_business_modules():
     """i18n 层不得反向依赖任何业务模块（依赖必须单向：业务 → i18n）。
 

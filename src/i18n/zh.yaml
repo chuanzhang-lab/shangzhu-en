@@ -1,7 +1,171 @@
 # 中文文案资源 —— 输出层展示文案的唯一出处（src/i18n/__init__.py 加载）
-# 约定：嵌套结构按点分键摊平（fmt.traffic_unit.per_day），键名语义化三级。
+# 约定：嵌套结构按点分键摊平（fmt.scan.title），键名语义化三级。
 # 本文件的中文值必须与外置改造前代码中的原文**逐字节一致**。
+
 fmt:
+  # ── 通用片段 ──────────────────────────────────────────────────────────
+  common:
+    project_type_default: "项目"
+    money: "{v} 元"
+    delta_money: "+{v} 元"
+    unknown: "未知"
+    unknown_pending: "未知/待填"
+    assumptions_header: "## 当前假设（补充即可生效）"
+    assumptions_table_header: "| 参数 | 当前值 | 来源 |"
+    supplement: "- 补充：{item}"
+
+  # ── 客流单位 ──────────────────────────────────────────────────────────
   traffic_unit:
     fallback: "单/天"
     per_day: "/天"
+
+  # ── 参数不足骨架 ──────────────────────────────────────────────────────
+  insufficient:
+    title: "## ⚠️ 参数不足，已暂停完整分析"
+    default_message: "参数不足，暂不输出仪表盘。"
+    gaps_header: "## 还差这些参数"
+    coverage: "参数覆盖率：**{pct}%**"
+    framework_header: "## 当前模型框架（仅基于已知输入）"
+    revenue: "- 收入：{v}"
+    cost: "- 成本：{v}"
+    cash: "- 现金：{v}"
+    next_step_default: "补充上述参数后重新分析。"
+
+  # ── 精确推算层 ────────────────────────────────────────────────────────
+  derived:
+    title: "## 📐 精确推算（由你输入按公式推出，非猜测）"
+    table_header: "| 参数 | 推算值 | 公式 |"
+    cannot_derive: "**暂不能推算**（缺输入）："
+    missing_item: "- {label}：缺 **{missing}**{fx}"
+
+  # ── quick_scan ────────────────────────────────────────────────────────
+  scan:
+    error: "## ⚠️ 计算失败\n\n{error}\n\n请检查参数是否正确（如月租、客流、单价等）。"
+    title: "## 📊 {project_type}分析{suffix}"
+    conflict_header: "## ⚠️ 数据冲突（请确认口径）"
+    core_header: "## 核心指标"
+    core_table_header: "| 指标 | 数值 | 状态 |"
+    vc_gap_note1: "> 📌 **变动成本率未提供，利润与保本结论还不能定。**"
+    vc_gap_note2: "> 补一句「变动成本率 55%」或「每份成本 X 元」即可算出硬结论。"
+    profit_unknown: "⚪ 未知（需变动成本率）"
+    profit_up: "🟢 盈利"
+    profit_down: "🔴 亏损"
+    profit_row: "| 月利润 | {value} | {status} |"
+    revenue_row: "| 月营收 | {value} | — |"
+    breakeven_row: "| 盈亏平衡客流 | {value} {unit} | — |"
+    margin_row: "| 毛利率 | {value}% | — |"
+    runway_unknown_vc: "| 跑道 | 未知（需变动成本率） | {status} |"
+    runway_months: "| 跑道 | {value} 月 | {status} |"
+    runway_unknown_invest: "| 跑道 | 未知（需总投资） | {status} |"
+    narrative_header: "## 🎯 风险聚焦"
+    params_header: "## 参数（来源）"
+    params_table_header: "| 参数 | 值 | 来源 |"
+    scenarios_header: "## 📊 情景分析（乐观 / 中性 / 保守）"
+    scenarios_note: "> 不是给你一个死数字，而是「取决于哪些假设」的区间。"
+    scenarios_table_header: "| 指标 | 保守 | 中性 | 乐观 |"
+    scenarios_profit_row: "| 月利润 | {worst} | {base} | {best} |"
+    scenarios_runway_row: "| 跑道(月) | {worst} | {base} | {best} |"
+    scenarios_drivers: "区间由这些**未确认假设**驱动：{items}"
+    sensitivity_header: "## 敏感性分析"
+    sensitivity_table_header: "| 场景 | 营收 | 成本 | 月利润 |"
+    risk_header: "## 风险"
+    risk_table_header: "| 级别 | 风险 |"
+    benchmark_header: "## 行业参考"
+    ops_hint: "操作: 改参数 | 趋势预测 | 对比方案 | 参数建议 | 生成PDF"
+
+  # ── trend_projection ──────────────────────────────────────────────────
+  trend:
+    error: "## ⚠️ 趋势预测失败\n\n{error}"
+    title: "## 📈 12个月趋势预测"
+    seasonal_source: "> 季节系数来源：{source}"
+    summary_header: "## 摘要"
+    summary_table_header: "| 指标 | 数值 |"
+    monthly_header: "## 月度明细"
+    monthly_table_header: "| 月 | 营收 | 固定成本 | 变动成本 | 利润 | 累计 |"
+    ops_hint: "操作: 改参数 | 重新算 | 对比方案 | 参数建议"
+
+  # ── compare_scenarios ─────────────────────────────────────────────────
+  compare:
+    error: "## ⚠️ 对比失败\n\n{error}"
+    title: "## 🔀 方案对比"
+    table_header: "| 指标 | 方案A | 方案B | 差异 |"
+    profit_row: "| 月利润 | {base} | {alt} | {diff} |"
+    revenue_row: "| 月营收 | {base} | {alt} | {diff} |"
+    fixed_row: "| 月固定成本 | {base} | {alt} | {diff} |"
+    verdict: "## 结论: {verdict}"
+    profit_diff: "\n利润差异: {value} 元/月"
+    revenue_diff: "营收差异: {value} 元/月"
+    ops_hint: "操作: 改参数 | 趋势预测 | 参数建议 | 生成PDF"
+
+  # ── suggest_params ────────────────────────────────────────────────────
+  suggest:
+    error: "## ⚠️ 参数建议失败\n\n{error}"
+    title: "## 💡 参数调整建议"
+    expectation_header: "## 调整后预期"
+    current_profit: "- 当前月利润: **{value} 元**"
+    projected_profit: "- 调整后月利润: **{value} 元**"
+    total_improvement: "- 总改善: **{value} 元/月**"
+    verdict: "- 结论: {verdict}"
+    issues_header: "## 检测到的问题"
+    issues_table_header: "| 严重度 | 问题 |"
+    suggestions_header: "## 调整建议"
+    suggestions_table_header: "| 参数 | 当前 | 建议 | 方向 | 理由 | 预估利润改善 |"
+    ops_hint: "操作: 改参数试试 | 对比方案 | 趋势预测 | 生成PDF"
+    ops_tip: "> 💡 建议从「影响最大 + 改动最小」的方向开始。"
+
+  # ── report ────────────────────────────────────────────────────────────
+  report:
+    error: "## ⚠️ 报告生成失败\n\n{error}"
+    title: "## 📄 报告生成"
+    generated_with_path: "报告已生成: `{path}`"
+    generated: "报告已生成。"
+
+  # ── benchmark ─────────────────────────────────────────────────────────
+  benchmark:
+    error: "## ⚠️ 数据查询失败\n\n{error}"
+    title: "## 📚 行业基准数据"
+
+  # ── 成本归因 ──────────────────────────────────────────────────────────
+  attribution:
+    error: "## ⚠️ 归因分析失败\n\n{error}"
+    cannot_title: "## 💰 成本归因还不能定"
+    cannot_message: "成本数据不足，无法进行归因分析。"
+    title: "## 💰 成本结构归因"
+    total_cost: "**月度总成本**：{total} 元（固定 {fixed} + 变动 {variable}）"
+    ratio: "**固定/变动比**：{fixed:.0%} / {variable:.0%}"
+    components_header: "### 各分量明细"
+    components_table_header: "| 分项 | 金额 | 占比 | 来源 |"
+    component_row: "| {name} | {amount} 元 | {pct} | {source} |"
+    chart_header: "### 成本占比图"
+    top_component: "**最大成本项**：{name}（{amount} 元，占 {pct}）"
+    warnings_header: "### 风险提示"
+    ops_hint: "操作: 改参数 | 敏感度分析 | 对比方案 | 趋势预测"
+
+  # ── 敏感度 / 弹性 ─────────────────────────────────────────────────────
+  sensitivity:
+    error: "## ⚠️ 敏感度分析失败\n\n{error}"
+    cannot_title: "## 📐 敏感度分析还不能定"
+    cannot_message: "数据不足，无法做弹性分析。"
+    title: "## 📐 弹性分析"
+    variable: "**分析变量**：{label}"
+    current: "**当前值**：{value}"
+    no_breakeven: "无法计算盈亏平衡点。"
+    breakeven: "**盈亏平衡点**：{value}"
+    margin: "**安全边际**：{value}（{pct}）· 方向：{direction}"
+    curve_header: "### 利润随变量变化"
+    curve_table_header: "| {label} | 月利润 | 状态 |"
+    curve_row: "| {value} | {profit} 元 | {status} |"
+    ops_hint: "操作: 改参数 | 成本归因 | 对比方案 | 趋势预测"
+
+  # ── 现金流 ────────────────────────────────────────────────────────────
+  cashflow:
+    error: "## ⚠️ 现金流计算失败\n\n{error}\n\n请检查期初现金（总投资）与月营收是否提供。"
+    cannot_title: "## 💧 现金流还不能定"
+    cannot_message: "期初现金或月营收未提供，无法给出确定性现金流明细。"
+    title: "## 💧 现金流明细（12 个月）"
+    opening: "**{project_type}** · 期初现金 = {value}（总投资推导）"
+    table_header: "| 月 | 收入到账 | 支出 | 净额 | 月末现金 |"
+    zero_cash: "📉 **现金归零**：无外部注资下，现金约在第 **{month} 个月**耗尽。"
+    no_zero_cash: "🟢 **12 个月内现金未耗尽**（基于当前输入；假设若变结论动）。"
+    max_shortfall: "💰 **累计最大缺口**：约 **{value} 元**（在归零月之后的缺口）。"
+    note: "> 现金流只关注「实际到账/支出」（含一次性大额、到账延迟、季度支付），与利润（P&L）解耦。"

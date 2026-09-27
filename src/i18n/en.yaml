@@ -1,8 +1,172 @@
 # English copy resources — single source of truth for output-layer text
 # (loaded by src/i18n/__init__.py)
-# Convention: nested structure is flattened to dotted keys (fmt.traffic_unit.per_day).
+# Convention: nested structure is flattened to dotted keys (fmt.scan.title).
 # Key set MUST stay in sync with zh.yaml — enforced by tests/test_i18n_guard.py.
+
 fmt:
+  # ── Shared fragments ──────────────────────────────────────────────────
+  common:
+    project_type_default: "Project"
+    money: "{v} CNY"
+    delta_money: "+{v} CNY"
+    unknown: "Unknown"
+    unknown_pending: "Unknown / to be filled"
+    assumptions_header: "## Current assumptions (fill in to take effect)"
+    assumptions_table_header: "| Parameter | Current value | Source |"
+    supplement: "- Add: {item}"
+
+  # ── Traffic unit ──────────────────────────────────────────────────────
   traffic_unit:
     fallback: "units/day"
     per_day: "/day"
+
+  # ── Insufficient-parameters skeleton ──────────────────────────────────
+  insufficient:
+    title: "## ⚠️ Insufficient parameters — full analysis paused"
+    default_message: "Parameters are insufficient; no dashboard is produced yet."
+    gaps_header: "## Parameters still missing"
+    coverage: "Parameter coverage: **{pct}%**"
+    framework_header: "## Current model framework (known inputs only)"
+    revenue: "- Revenue: {v}"
+    cost: "- Cost: {v}"
+    cash: "- Cash: {v}"
+    next_step_default: "Fill in the parameters above and run the analysis again."
+
+  # ── Exact derivation layer ────────────────────────────────────────────
+  derived:
+    title: "## 📐 Exact derivation (derived from your inputs by formula, not guessed)"
+    table_header: "| Parameter | Derived value | Formula |"
+    cannot_derive: "**Cannot derive yet** (missing inputs):"
+    missing_item: "- {label}: missing **{missing}**{fx}"
+
+  # ── quick_scan ────────────────────────────────────────────────────────
+  scan:
+    error: "## ⚠️ Calculation failed\n\n{error}\n\nPlease check your inputs (rent, traffic, unit price, etc.)."
+    title: "## 📊 {project_type} analysis{suffix}"
+    conflict_header: "## ⚠️ Data conflicts (please confirm the definitions)"
+    core_header: "## Core metrics"
+    core_table_header: "| Metric | Value | Status |"
+    vc_gap_note1: "> 📌 **Variable cost ratio not provided — profit and break-even are not settled yet.**"
+    vc_gap_note2: "> Add one line such as \"variable cost ratio 55%\" or \"cost per unit X CNY\" to get a hard conclusion."
+    profit_unknown: "⚪ Unknown (needs variable cost ratio)"
+    profit_up: "🟢 Profitable"
+    profit_down: "🔴 Loss-making"
+    profit_row: "| Monthly profit | {value} | {status} |"
+    revenue_row: "| Monthly revenue | {value} | — |"
+    breakeven_row: "| Break-even traffic | {value} {unit} | — |"
+    margin_row: "| Gross margin | {value}% | — |"
+    runway_unknown_vc: "| Runway | Unknown (needs variable cost ratio) | {status} |"
+    runway_months: "| Runway | {value} months | {status} |"
+    runway_unknown_invest: "| Runway | Unknown (needs total investment) | {status} |"
+    narrative_header: "## 🎯 Risk focus"
+    params_header: "## Parameters (source)"
+    params_table_header: "| Parameter | Value | Source |"
+    scenarios_header: "## 📊 Scenario analysis (optimistic / base / conservative)"
+    scenarios_note: "> This is not one dead number but a range — it depends on which assumptions hold."
+    scenarios_table_header: "| Metric | Conservative | Base | Optimistic |"
+    scenarios_profit_row: "| Monthly profit | {worst} | {base} | {best} |"
+    scenarios_runway_row: "| Runway (months) | {worst} | {base} | {best} |"
+    scenarios_drivers: "The range is driven by these **unconfirmed assumptions**: {items}"
+    sensitivity_header: "## Sensitivity analysis"
+    sensitivity_table_header: "| Scenario | Revenue | Cost | Monthly profit |"
+    risk_header: "## Risks"
+    risk_table_header: "| Level | Risk |"
+    benchmark_header: "## Industry reference"
+    ops_hint: "Actions: change parameters | trend forecast | compare scenarios | parameter suggestions | export PDF"
+
+  # ── trend_projection ──────────────────────────────────────────────────
+  trend:
+    error: "## ⚠️ Trend forecast failed\n\n{error}"
+    title: "## 📈 12-month trend forecast"
+    seasonal_source: "> Seasonality source: {source}"
+    summary_header: "## Summary"
+    summary_table_header: "| Metric | Value |"
+    monthly_header: "## Monthly detail"
+    monthly_table_header: "| Month | Revenue | Fixed cost | Variable cost | Profit | Cumulative |"
+    ops_hint: "Actions: change parameters | recalculate | compare scenarios | parameter suggestions"
+
+  # ── compare_scenarios ─────────────────────────────────────────────────
+  compare:
+    error: "## ⚠️ Comparison failed\n\n{error}"
+    title: "## 🔀 Scenario comparison"
+    table_header: "| Metric | Scenario A | Scenario B | Difference |"
+    profit_row: "| Monthly profit | {base} | {alt} | {diff} |"
+    revenue_row: "| Monthly revenue | {base} | {alt} | {diff} |"
+    fixed_row: "| Monthly fixed cost | {base} | {alt} | {diff} |"
+    verdict: "## Verdict: {verdict}"
+    profit_diff: "\nProfit difference: {value} CNY/month"
+    revenue_diff: "Revenue difference: {value} CNY/month"
+    ops_hint: "Actions: change parameters | trend forecast | parameter suggestions | export PDF"
+
+  # ── suggest_params ────────────────────────────────────────────────────
+  suggest:
+    error: "## ⚠️ Parameter suggestions failed\n\n{error}"
+    title: "## 💡 Parameter tuning suggestions"
+    expectation_header: "## Expected after adjustment"
+    current_profit: "- Current monthly profit: **{value} CNY**"
+    projected_profit: "- Monthly profit after adjustment: **{value} CNY**"
+    total_improvement: "- Total improvement: **{value} CNY/month**"
+    verdict: "- Verdict: {verdict}"
+    issues_header: "## Issues detected"
+    issues_table_header: "| Severity | Issue |"
+    suggestions_header: "## Suggested adjustments"
+    suggestions_table_header: "| Parameter | Current | Suggested | Direction | Rationale | Est. profit gain |"
+    ops_hint: "Actions: try changing parameters | compare scenarios | trend forecast | export PDF"
+    ops_tip: "> 💡 Start with the direction that has the biggest impact for the smallest change."
+
+  # ── report ────────────────────────────────────────────────────────────
+  report:
+    error: "## ⚠️ Report generation failed\n\n{error}"
+    title: "## 📄 Report generation"
+    generated_with_path: "Report generated: `{path}`"
+    generated: "Report generated."
+
+  # ── benchmark ─────────────────────────────────────────────────────────
+  benchmark:
+    error: "## ⚠️ Data lookup failed\n\n{error}"
+    title: "## 📚 Industry benchmark data"
+
+  # ── Cost attribution ──────────────────────────────────────────────────
+  attribution:
+    error: "## ⚠️ Attribution analysis failed\n\n{error}"
+    cannot_title: "## 💰 Cost attribution not settled yet"
+    cannot_message: "Cost data is insufficient for attribution analysis."
+    title: "## 💰 Cost structure attribution"
+    total_cost: "**Total monthly cost**: {total} CNY (fixed {fixed} + variable {variable})"
+    ratio: "**Fixed / variable ratio**: {fixed:.0%} / {variable:.0%}"
+    components_header: "### Component breakdown"
+    components_table_header: "| Item | Amount | Share | Source |"
+    component_row: "| {name} | {amount} CNY | {pct} | {source} |"
+    chart_header: "### Cost share chart"
+    top_component: "**Largest cost item**: {name} ({amount} CNY, {pct} of total)"
+    warnings_header: "### Risk notes"
+    ops_hint: "Actions: change parameters | sensitivity analysis | compare scenarios | trend forecast"
+
+  # ── Sensitivity / elasticity ──────────────────────────────────────────
+  sensitivity:
+    error: "## ⚠️ Sensitivity analysis failed\n\n{error}"
+    cannot_title: "## 📐 Sensitivity analysis not settled yet"
+    cannot_message: "Data is insufficient for elasticity analysis."
+    title: "## 📐 Elasticity analysis"
+    variable: "**Variable analysed**: {label}"
+    current: "**Current value**: {value}"
+    no_breakeven: "The break-even point cannot be calculated."
+    breakeven: "**Break-even point**: {value}"
+    margin: "**Safety margin**: {value} ({pct}) · direction: {direction}"
+    curve_header: "### Profit as the variable changes"
+    curve_table_header: "| {label} | Monthly profit | Status |"
+    curve_row: "| {value} | {profit} CNY | {status} |"
+    ops_hint: "Actions: change parameters | cost attribution | compare scenarios | trend forecast"
+
+  # ── Cash flow ─────────────────────────────────────────────────────────
+  cashflow:
+    error: "## ⚠️ Cash flow calculation failed\n\n{error}\n\nPlease check that opening cash (total investment) and monthly revenue are provided."
+    cannot_title: "## 💧 Cash flow not settled yet"
+    cannot_message: "Opening cash or monthly revenue was not provided, so no deterministic cash flow detail can be given."
+    title: "## 💧 Cash flow detail (12 months)"
+    opening: "**{project_type}** · opening cash = {value} (derived from total investment)"
+    table_header: "| Month | Cash in | Cash out | Net | Closing cash |"
+    zero_cash: "📉 **Cash hits zero**: with no external funding, cash runs out around month **{month}**."
+    no_zero_cash: "🟢 **Cash is not exhausted within 12 months** (based on current inputs; the conclusion moves if assumptions do)."
+    max_shortfall: "💰 **Largest cumulative shortfall**: about **{value} CNY** (the gap after the zero-cash month)."
+    note: "> Cash flow tracks actual receipts and payments only (one-off large items, collection delays, quarterly payments) and is decoupled from profit (P&L)."

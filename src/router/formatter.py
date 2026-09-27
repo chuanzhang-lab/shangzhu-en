@@ -1,11 +1,27 @@
 """模板格式化器 — 工具结果→人类可读 Markdown
 
 每个工具一种模板。LLM 拿到这个后能润色但不能改关键数字。
+
+文案外置：所有展示文案统一走 `src/i18n` 的 `t()`，本文件不再硬编码中文
+（护栏：tests/test_i18n_guard.py 断言本文件无残留中文字面量）。
+
+⚠️ 已知耦合（M4 改造 workflow_engine 时必须一并处理，见 docs/PLAN_I18N_EN.md）：
+- `cash_status` / `param_sources` 里带 `[缺失]` 标记与「变动成本」字样，是**引擎产出的
+  数据**，本层用中文字符串去匹配它们。等引擎侧文案也外置后，这里必须改为状态码匹配，
+  否则英文环境下判定会静默失效。
 """
 
 import json
 import re
 from typing import Any, Dict, List, Optional
+
+from i18n import t
+
+# 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
+# 这三个是 formatter.py 里仅有的中文字面量，护栏测试按白名单放行。
+_ENGINE_MISSING_MARK = "[缺失]"
+_ENGINE_VC_HINT = "变动成本"
+_ENGINE_INFINITE_MARK = "无限"
 
 
 def _traffic_unit(benchmark: Optional[Dict] = None, params: Optional[Dict] = None) -> str:
@@ -20,39 +36,41 @@ def _traffic_unit(benchmark: Optional[Dict] = None, params: Optional[Dict] = Non
     """
     user_unit = (params or {}).get("_traffic_unit")
     if user_unit:
-        return f"{user_unit}/天"
+        return f"{user_unit}{t('fmt.traffic_unit.per_day')}"
     rng = (benchmark or {}).get("daily_traffic_range") or ""
     m = re.search(r"\d+\s*[-~－—]\s*\d+\s*([\u4e00-\u9fa5]{1,2})\s*$", rng)
-    return f"{m.group(1)}/天" if m else "单/天"
+    if m:
+        return f"{m.group(1)}{t('fmt.traffic_unit.per_day')}"
+    return t("fmt.traffic_unit.fallback")
 
 
 # ─── 工具: quick_scan ─────────────────────────────────────────────────────
 def _fmt_insufficient(data: Dict) -> str:
     """参数不足骨架的渲染：展示缺口 + 模型框架 + 当前假设，不输出误报结论。"""
     lines = []
-    lines.append("## ⚠️ 参数不足，已暂停完整分析")
+    lines.append(t("fmt.insufficient.title"))
     lines.append("")
-    lines.append(data.get("message", "参数不足，暂不输出仪表盘。"))
+    lines.append(data.get("message", t("fmt.insufficient.default_message")))
     lines.append("")
 
     gaps = data.get("gaps", [])
     if gaps:
-        lines.append("## 还差这些参数")
+        lines.append(t("fmt.insufficient.gaps_header"))
         for g in gaps:
             lines.append(f"- ❓ {g}")
         lines.append("")
 
     cov = data.get("coverage")
     if cov is not None:
-        lines.append(f"参数覆盖率：**{int(cov * 100)}%**")
+        lines.append(t("fmt.insufficient.coverage", pct=int(cov * 100)))
         lines.append("")
 
     fw = data.get("framework", {})
     if fw:
-        lines.append("## 当前模型框架（仅基于已知输入）")
-        lines.append(f"- 收入：{fw.get('revenue_model', '')}")
-        lines.append(f"- 成本：{fw.get('cost_model', '')}")
-        lines.append(f"- 现金：{fw.get('cash_model', '')}")
+        lines.append(t("fmt.insufficient.framework_header"))
+        lines.append(t("fmt.insufficient.revenue", v=fw.get("revenue_model", "")))
+        lines.append(t("fmt.insufficient.cost", v=fw.get("cost_model", "")))
+        lines.append(t("fmt.insufficient.cash", v=fw.get("cash_model", "")))
         lines.append("")
 
     # 精确推算层（骨架也展示：能算的照算 + 缺什么）
@@ -62,13 +80,13 @@ def _fmt_insufficient(data: Dict) -> str:
 
     assumptions = data.get("assumptions", [])
     if assumptions:
-        lines.append("## 当前假设（补充即可生效）")
-        lines.append("| 参数 | 当前值 | 来源 |")
+        lines.append(t("fmt.common.assumptions_header"))
+        lines.append(t("fmt.common.assumptions_table_header"))
         lines.append("|------|--------|------|")
         for a in assumptions:
             v = a.get("value")
             if v is None:
-                v_str = "未知/待填"
+                v_str = t("fmt.common.unknown_pending")
             elif isinstance(v, (int, float)) and abs(v) >= 1000:
                 v_str = f"{v:,.0f}"
             else:
@@ -77,7 +95,7 @@ def _fmt_insufficient(data: Dict) -> str:
         lines.append("")
 
     lines.append("---")
-    lines.append(data.get("next_step", "补充上述参数后重新分析。"))
+    lines.append(data.get("next_step", t("fmt.insufficient.next_step_default")))
     return "\n".join(lines)
 
 
@@ -92,9 +110,9 @@ def _fmt_derived(derived) -> list:
         return []
     ok_items = [d for d in derived if d.get("status") == "ok"]
     miss_items = [d for d in derived if d.get("status") == "missing"]
-    out = ["## 📐 精确推算（由你输入按公式推出，非猜测）", ""]
+    out = [t("fmt.derived.title"), ""]
     if ok_items:
-        out.append("| 参数 | 推算值 | 公式 |")
+        out.append(t("fmt.derived.table_header"))
         out.append("|------|--------|------|")
         for d in ok_items:
             val = d["value"]
@@ -102,19 +120,26 @@ def _fmt_derived(derived) -> list:
             out.append(f"| {d['label']} | {vs} | `{d['formula']}` |")
         out.append("")
     if miss_items:
-        out.append("**暂不能推算**（缺输入）：")
+        out.append(t("fmt.derived.cannot_derive"))
         out.append("")
         for d in miss_items:
             # missing 项的 formula 为空串 —— 不要渲染成一对空反引号「``」
             fx = f"（`{d['formula']}`）" if d.get("formula") else ""
-            out.append(f"- {d['label']}：缺 **{d.get('missing', '未知')}**{fx}")
+            out.append(
+                t(
+                    "fmt.derived.missing_item",
+                    label=d["label"],
+                    missing=d.get("missing") or t("fmt.common.unknown"),
+                    fx=fx,
+                )
+            )
         out.append("")
     return out
 
 
 def _fmt_scan(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 计算失败\n\n{data['error']}\n\n请检查参数是否正确（如月租、客流、单价等）。"
+        return t("fmt.scan.error", error=data["error"])
 
     # 参数不足骨架（决策B：门禁拦下时的呈现）
     if data.get("insufficient"):
@@ -131,60 +156,66 @@ def _fmt_scan(data: Dict) -> str:
 
     # 标题 + 项目类型
     # 括号内只呈现**已知**信息：stage/template_mode 缺失时不得渲染成字面量「None」
-    project_type = data.get("project_type") or "项目"
+    project_type = data.get("project_type") or t("fmt.common.project_type_default")
     _quals = [s for s in (data.get("stage"), data.get("template_mode")) if s]
     _suffix = f"（{' · '.join(str(q) for q in _quals)}）" if _quals else ""
-    lines.append(f"## 📊 {project_type}分析{_suffix}")
+    lines.append(t("fmt.scan.title", project_type=project_type, suffix=_suffix))
     lines.append("")
 
     # 数据冲突（派生一致性）：规则层先发现，前置高亮，不依赖 LLM
     derived_issues = data.get("derived_issues") or []
     if derived_issues:
-        lines.append("## ⚠️ 数据冲突（请确认口径）")
+        lines.append(t("fmt.scan.conflict_header"))
         for i in derived_issues:
             lines.append(f"> {i.get('message', '')}")
         lines.append("")
 
     # 核心指标
-    lines.append("## 核心指标")
-    lines.append("| 指标 | 数值 | 状态 |")
+    lines.append(t("fmt.scan.core_header"))
+    lines.append(t("fmt.scan.core_table_header"))
     lines.append("|------|------|------|")
 
     # D2：变动成本率缺失 → 利润/毛利率「还不能定」，先给出缺什么再展示其余
     vc_gap = core.get("monthly_profit") is None
     if vc_gap:
-        lines.append("> 📌 **变动成本率未提供，利润与保本结论还不能定。**")
-        lines.append("> 补一句「变动成本率 55%」或「每份成本 X 元」即可算出硬结论。")
+        lines.append(t("fmt.scan.vc_gap_note1"))
+        lines.append(t("fmt.scan.vc_gap_note2"))
         lines.append("")
 
     monthly_profit = core.get("monthly_profit", 0)
     if monthly_profit is None:
-        profit_status = "⚪ 未知（需变动成本率）"
+        profit_status = t("fmt.scan.profit_unknown")
     else:
-        profit_status = "🟢 盈利" if monthly_profit > 0 else "🔴 亏损"
-    lines.append(f"| 月利润 | {'—' if monthly_profit is None else f'{monthly_profit:,.0f} 元'} | {profit_status} |")
+        profit_status = t("fmt.scan.profit_up") if monthly_profit > 0 else t("fmt.scan.profit_down")
+    profit_value = "—" if monthly_profit is None else t("fmt.common.money", v=f"{monthly_profit:,.0f}")
+    lines.append(t("fmt.scan.profit_row", value=profit_value, status=profit_status))
 
     monthly_revenue = core.get("monthly_revenue")
-    rev_str = f"{monthly_revenue:,.0f} 元" if isinstance(monthly_revenue, (int, float)) else "—"
-    lines.append(f"| 月营收 | {rev_str} | — |")
+    rev_str = t("fmt.common.money", v=f"{monthly_revenue:,.0f}") if isinstance(monthly_revenue, (int, float)) else "—"
+    lines.append(t("fmt.scan.revenue_row", value=rev_str))
 
     daily_breakeven = core.get("daily_breakeven")
     if daily_breakeven:
-        lines.append(f"| 盈亏平衡客流 | {daily_breakeven:.0f} "
-                     f"{_traffic_unit(data.get('benchmark'), data.get('params'))} | — |")
+        lines.append(
+            t(
+                "fmt.scan.breakeven_row",
+                value=f"{daily_breakeven:.0f}",
+                unit=_traffic_unit(data.get("benchmark"), data.get("params")),
+            )
+        )
 
     gross_margin = core.get("gross_margin_percent")
     if gross_margin:
-        lines.append(f"| 毛利率 | {gross_margin}% | — |")
+        lines.append(t("fmt.scan.margin_row", value=gross_margin))
 
     runway = core.get("runway_months")
     cash_status = status.get("cash", "")
-    if "变动成本" in str(cash_status):
-        lines.append(f"| 跑道 | 未知（需变动成本率） | {cash_status} |")
-    elif runway is not None and runway != "无限":
-        lines.append(f"| 跑道 | {runway} 月 | {cash_status or '—'} |")
+    if _ENGINE_VC_HINT in str(cash_status):
+        lines.append(t("fmt.scan.runway_unknown_vc", status=cash_status))
+    elif runway is not None and runway != _ENGINE_INFINITE_MARK:
+        lines.append(t("fmt.scan.runway_months", value=runway, status=cash_status or "—"))
     elif runway is None:
-        lines.append(f"| 跑道 | 未知（需总投资） | {cash_status or '—'} |")
+        lines.append(t("fmt.scan.runway_unknown_invest", status=cash_status or "—"))
 
     lines.append("")
 
@@ -196,22 +227,22 @@ def _fmt_scan(data: Dict) -> str:
     # 风险聚焦（⑤ 叙事>判决：把杠杆点交还用户，而非只给一个 🔴危险）
     narrative = data.get("narrative")
     if narrative:
-        lines.append("## 🎯 风险聚焦")
+        lines.append(t("fmt.scan.narrative_header"))
         lines.append(f"> {narrative}")
         lines.append("")
 
     # 参数来源
     params_data = data.get("params", {})
     if params_src:
-        lines.append("## 参数（来源）")
-        lines.append("| 参数 | 值 | 来源 |")
+        lines.append(t("fmt.scan.params_header"))
+        lines.append(t("fmt.scan.params_table_header"))
         lines.append("|------|-----|------|")
         for k, src in params_src.items():
             if src and not k.startswith("_"):
                 val = params_data.get(k, "")
                 if val == "" or val is None:
-                    if src.startswith("[缺失]"):
-                        val_str = "未知/待填"   # [缺失] 字段明确标出，而非静默跳过
+                    if src.startswith(_ENGINE_MISSING_MARK):
+                        val_str = t("fmt.common.unknown_pending")  # [缺失] 字段明确标出，而非静默跳过
                     else:
                         continue
                 elif isinstance(val, (int, float)):
@@ -224,13 +255,13 @@ def _fmt_scan(data: Dict) -> str:
     # 当前假设清单（决策A③：把默认/缺失假设前置可见）
     assumptions = data.get("assumptions")
     if assumptions:
-        lines.append("## 当前假设（补充即可生效）")
-        lines.append("| 参数 | 当前值 | 来源 |")
+        lines.append(t("fmt.common.assumptions_header"))
+        lines.append(t("fmt.common.assumptions_table_header"))
         lines.append("|------|--------|------|")
         for a in assumptions:
             v = a.get("value")
             if v is None:
-                v_str = "未知/待填"
+                v_str = t("fmt.common.unknown_pending")
             elif isinstance(v, (int, float)) and abs(v) >= 1000:
                 v_str = f"{v:,.0f}"
             else:
@@ -243,29 +274,47 @@ def _fmt_scan(data: Dict) -> str:
     if scenarios and scenarios.get("has_uncertainty"):
         sp = scenarios.get("monthly_profit", {})
         rw = scenarios.get("runway", {})
+
         def _fmt_num(v):
             if v is None:
-                return "未知"
+                return t("fmt.common.unknown")
             if isinstance(v, (int, float)):
                 return f"{v:,.0f}"
             return str(v)
-        lines.append("## 📊 情景分析（乐观 / 中性 / 保守）")
-        lines.append("> 不是给你一个死数字，而是「取决于哪些假设」的区间。")
+
+        lines.append(t("fmt.scan.scenarios_header"))
+        lines.append(t("fmt.scan.scenarios_note"))
         lines.append("")
-        lines.append("| 指标 | 保守 | 中性 | 乐观 |")
+        lines.append(t("fmt.scan.scenarios_table_header"))
         lines.append("|------|------|------|------|")
-        lines.append(f"| 月利润 | {_fmt_num(sp.get('worst'))} | {_fmt_num(sp.get('base'))} | {_fmt_num(sp.get('best'))} |")
-        lines.append(f"| 跑道(月) | {_fmt_num(rw.get('worst'))} | {_fmt_num(rw.get('base'))} | {_fmt_num(rw.get('best'))} |")
+        lines.append(
+            t(
+                "fmt.scan.scenarios_profit_row",
+                worst=_fmt_num(sp.get("worst")),
+                base=_fmt_num(sp.get("base")),
+                best=_fmt_num(sp.get("best")),
+            )
+        )
+        lines.append(
+            t(
+                "fmt.scan.scenarios_runway_row",
+                worst=_fmt_num(rw.get("worst")),
+                base=_fmt_num(rw.get("base")),
+                best=_fmt_num(rw.get("best")),
+            )
+        )
         drivers = scenarios.get("drivers", [])
         if drivers:
             lines.append("")
-            lines.append("区间由这些**未确认假设**驱动：" + "、".join(f"「{d}」" for d in drivers))
+            lines.append(
+                t("fmt.scan.scenarios_drivers", items="、".join(f"「{d}」" for d in drivers))
+            )
         lines.append("")
 
     # 敏感性分析
     if sensitivity:
-        lines.append("## 敏感性分析")
-        lines.append("| 场景 | 营收 | 成本 | 月利润 |")
+        lines.append(t("fmt.scan.sensitivity_header"))
+        lines.append(t("fmt.scan.sensitivity_table_header"))
         lines.append("|------|------|------|--------|")
         for s in sensitivity[:3]:
             rev = s.get("revenue_change", "0%")
@@ -276,8 +325,8 @@ def _fmt_scan(data: Dict) -> str:
 
     # 风险
     if pitfalls:
-        lines.append("## 风险")
-        lines.append("| 级别 | 风险 |")
+        lines.append(t("fmt.scan.risk_header"))
+        lines.append(t("fmt.scan.risk_table_header"))
         lines.append("|------|------|")
         severity_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}
         for p in pitfalls[:5]:
@@ -289,7 +338,7 @@ def _fmt_scan(data: Dict) -> str:
 
     # Benchmark
     if bench and isinstance(bench, dict) and bench:
-        lines.append("## 行业参考")
+        lines.append(t("fmt.scan.benchmark_header"))
         for k, v in bench.items():
             if isinstance(v, (int, float)):
                 lines.append(f"- {k}: {v}")
@@ -299,7 +348,7 @@ def _fmt_scan(data: Dict) -> str:
 
     # 操作提示
     lines.append("---")
-    lines.append("操作: 改参数 | 趋势预测 | 对比方案 | 参数建议 | 生成PDF")
+    lines.append(t("fmt.scan.ops_hint"))
 
     return "\n".join(lines)
 
@@ -307,7 +356,7 @@ def _fmt_scan(data: Dict) -> str:
 # ─── 工具: trend_projection ──────────────────────────────────────────────
 def _fmt_trend(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 趋势预测失败\n\n{data['error']}"
+        return t("fmt.trend.error", error=data["error"])
 
     # ④：稀疏输入（无月营收）下走骨架渲染，不静默展示全负值误报趋势
     if data.get("insufficient"):
@@ -317,19 +366,19 @@ def _fmt_trend(data: Dict) -> str:
     summary = data.get("summary", {})
 
     lines = []
-    lines.append("## 📈 12个月趋势预测")
+    lines.append(t("fmt.trend.title"))
     lines.append("")
 
     # 季节系数来源
     seasonal_source = data.get("seasonal_source", "")
     if seasonal_source:
-        lines.append(f"> 季节系数来源：{seasonal_source}")
+        lines.append(t("fmt.trend.seasonal_source", source=seasonal_source))
         lines.append("")
 
     # 摘要
     if summary:
-        lines.append("## 摘要")
-        lines.append("| 指标 | 数值 |")
+        lines.append(t("fmt.trend.summary_header"))
+        lines.append(t("fmt.trend.summary_table_header"))
         lines.append("|------|------|")
         for k, v in summary.items():
             v_str = f"{v:,.0f}" if isinstance(v, (int, float)) else str(v)
@@ -338,8 +387,8 @@ def _fmt_trend(data: Dict) -> str:
 
     # 月度数据
     if months:
-        lines.append("## 月度明细")
-        lines.append("| 月 | 营收 | 固定成本 | 变动成本 | 利润 | 累计 |")
+        lines.append(t("fmt.trend.monthly_header"))
+        lines.append(t("fmt.trend.monthly_table_header"))
         lines.append("|----|------|----------|----------|------|------|")
         for m in months:
             lines.append(
@@ -353,7 +402,7 @@ def _fmt_trend(data: Dict) -> str:
         lines.append("")
 
     lines.append("---")
-    lines.append("操作: 改参数 | 重新算 | 对比方案 | 参数建议")
+    lines.append(t("fmt.trend.ops_hint"))
 
     return "\n".join(lines)
 
@@ -361,7 +410,7 @@ def _fmt_trend(data: Dict) -> str:
 # ─── 工具: compare_scenarios ─────────────────────────────────────────────
 def _fmt_compare(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 对比失败\n\n{data['error']}"
+        return t("fmt.compare.error", error=data["error"])
 
     # ④：任一方方案缺月营收时走骨架渲染
     if data.get("insufficient"):
@@ -372,41 +421,41 @@ def _fmt_compare(data: Dict) -> str:
     diff = data.get("diff", {})
 
     lines = []
-    lines.append("## 🔀 方案对比")
+    lines.append(t("fmt.compare.title"))
     lines.append("")
 
     # 并排
-    lines.append("| 指标 | 方案A | 方案B | 差异 |")
+    lines.append(t("fmt.compare.table_header"))
     lines.append("|------|-------|-------|------|")
 
     # 利润
     base_profit = base.get("monthly_profit", 0)
     alt_profit = alt.get("monthly_profit", 0)
-    lines.append(f"| 月利润 | {base_profit:,.0f} | {alt_profit:,.0f} | {alt_profit - base_profit:+,.0f} |")
+    lines.append(t("fmt.compare.profit_row", base=f"{base_profit:,.0f}", alt=f"{alt_profit:,.0f}", diff=f"{alt_profit - base_profit:+,.0f}"))
 
     # 营收
     base_rev = base.get("monthly_revenue", 0)
     alt_rev = alt.get("monthly_revenue", 0)
-    lines.append(f"| 月营收 | {base_rev:,.0f} | {alt_rev:,.0f} | {alt_rev - base_rev:+,.0f} |")
+    lines.append(t("fmt.compare.revenue_row", base=f"{base_rev:,.0f}", alt=f"{alt_rev:,.0f}", diff=f"{alt_rev - base_rev:+,.0f}"))
 
     # 固定成本
     base_fix = base.get("monthly_fixed_cost", 0)
     alt_fix = alt.get("monthly_fixed_cost", 0)
-    lines.append(f"| 月固定成本 | {base_fix:,.0f} | {alt_fix:,.0f} | {alt_fix - base_fix:+,.0f} |")
+    lines.append(t("fmt.compare.fixed_row", base=f"{base_fix:,.0f}", alt=f"{alt_fix:,.0f}", diff=f"{alt_fix - base_fix:+,.0f}"))
 
     lines.append("")
 
     # 结论
     if diff.get("verdict"):
-        lines.append(f"## 结论: {diff['verdict']}")
+        lines.append(t("fmt.compare.verdict", verdict=diff["verdict"]))
         if "profit" in diff:
-            lines.append(f"\n利润差异: {diff['profit']:+,.0f} 元/月")
+            lines.append(t("fmt.compare.profit_diff", value=f"{diff['profit']:+,.0f}"))
         if "revenue" in diff:
-            lines.append(f"营收差异: {diff['revenue']:+,.0f} 元/月")
+            lines.append(t("fmt.compare.revenue_diff", value=f"{diff['revenue']:+,.0f}"))
         lines.append("")
 
     lines.append("---")
-    lines.append("操作: 改参数 | 趋势预测 | 参数建议 | 生成PDF")
+    lines.append(t("fmt.compare.ops_hint"))
 
     return "\n".join(lines)
 
@@ -414,14 +463,14 @@ def _fmt_compare(data: Dict) -> str:
 # ─── 工具: suggest_params ────────────────────────────────────────────────
 def _fmt_suggest(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 参数建议失败\n\n{data['error']}"
+        return t("fmt.suggest.error", error=data["error"])
 
     issues = data.get("issues", [])
     suggestions = data.get("suggestions", [])
     summary = data.get("summary", {})
 
     lines = []
-    lines.append("## 💡 参数调整建议")
+    lines.append(t("fmt.suggest.title"))
     lines.append("")
 
     # 核心指标
@@ -431,18 +480,18 @@ def _fmt_suggest(data: Dict) -> str:
         improvement = summary.get("total_expected_improvement", 0)
         verdict = summary.get("verdict", "")
 
-        lines.append("## 调整后预期")
-        lines.append(f"- 当前月利润: **{cur:,.0f} 元**")
-        lines.append(f"- 调整后月利润: **{new:,.0f} 元**")
-        lines.append(f"- 总改善: **{improvement:,.0f} 元/月**")
+        lines.append(t("fmt.suggest.expectation_header"))
+        lines.append(t("fmt.suggest.current_profit", value=f"{cur:,.0f}"))
+        lines.append(t("fmt.suggest.projected_profit", value=f"{new:,.0f}"))
+        lines.append(t("fmt.suggest.total_improvement", value=f"{improvement:,.0f}"))
         if verdict:
-            lines.append(f"- 结论: {verdict}")
+            lines.append(t("fmt.suggest.verdict", verdict=verdict))
         lines.append("")
 
     # 问题
     if issues:
-        lines.append("## 检测到的问题")
-        lines.append("| 严重度 | 问题 |")
+        lines.append(t("fmt.suggest.issues_header"))
+        lines.append(t("fmt.suggest.issues_table_header"))
         lines.append("|--------|------|")
         severity_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}
         for issue in issues:
@@ -453,8 +502,8 @@ def _fmt_suggest(data: Dict) -> str:
 
     # 建议
     if suggestions:
-        lines.append("## 调整建议")
-        lines.append("| 参数 | 当前 | 建议 | 方向 | 理由 | 预估利润改善 |")
+        lines.append(t("fmt.suggest.suggestions_header"))
+        lines.append(t("fmt.suggest.suggestions_table_header"))
         lines.append("|------|------|------|------|------|------------|")
         for s in suggestions:
             target = s.get("target_param", "")
@@ -463,7 +512,7 @@ def _fmt_suggest(data: Dict) -> str:
             direction = s.get("direction", "")
             rationale = s.get("rationale", "")
             delta = s.get("expected_profit_delta", 0)
-            delta_str = f"+{delta:,.0f} 元" if delta > 0 else "—"
+            delta_str = t("fmt.common.delta_money", v=f"{delta:,.0f}") if delta > 0 else "—"
             # 转 int 显示更整洁
             if isinstance(current, float) and current.is_integer():
                 current = int(current)
@@ -473,9 +522,9 @@ def _fmt_suggest(data: Dict) -> str:
         lines.append("")
 
     lines.append("---")
-    lines.append("操作: 改参数试试 | 对比方案 | 趋势预测 | 生成PDF")
+    lines.append(t("fmt.suggest.ops_hint"))
     lines.append("")
-    lines.append("> 💡 建议从「影响最大 + 改动最小」的方向开始。")
+    lines.append(t("fmt.suggest.ops_tip"))
 
     return "\n".join(lines)
 
@@ -483,17 +532,17 @@ def _fmt_suggest(data: Dict) -> str:
 # ─── 工具: report ─────────────────────────────────────────────────────────
 def _fmt_report(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 报告生成失败\n\n{data['error']}"
+        return t("fmt.report.error", error=data["error"])
 
     lines = []
-    lines.append("## 📄 报告生成")
+    lines.append(t("fmt.report.title"))
     lines.append("")
 
     file_path = data.get("file_path") or data.get("url") or data.get("path")
     if file_path:
-        lines.append(f"报告已生成: `{file_path}`")
+        lines.append(t("fmt.report.generated_with_path", path=file_path))
     else:
-        lines.append("报告已生成。")
+        lines.append(t("fmt.report.generated"))
 
     # 摘要
     if data.get("summary"):
@@ -506,10 +555,10 @@ def _fmt_report(data: Dict) -> str:
 # ─── 工具: benchmark ──────────────────────────────────────────────────────
 def _fmt_benchmark(data: Dict) -> str:
     if "error" in data:
-        return f"## ⚠️ 数据查询失败\n\n{data['error']}"
+        return t("fmt.benchmark.error", error=data["error"])
 
     lines = []
-    lines.append("## 📚 行业基准数据")
+    lines.append(t("fmt.benchmark.title"))
     lines.append("")
     lines.append("```json")
     lines.append(json.dumps(data, ensure_ascii=False, indent=2))
@@ -523,39 +572,39 @@ def _fmt_benchmark(data: Dict) -> str:
 def _fmt_attribution(data: Dict) -> str:
     """成本归因拆解渲染：各分量金额+占比+风险提示。"""
     if "error" in data:
-        return f"## ⚠️ 归因分析失败\n\n{data['error']}"
+        return t("fmt.attribution.error", error=data["error"])
     if data.get("insufficient"):
-        md = ["## 💰 成本归因还不能定", ""]
-        md.append(data.get("message", "成本数据不足，无法进行归因分析。"))
+        md = [t("fmt.attribution.cannot_title"), ""]
+        md.append(data.get("message", t("fmt.attribution.cannot_message")))
         for g in data.get("gaps", []):
-            md.append(f"- 补充：{g}")
+            md.append(t("fmt.common.supplement", item=g))
         return "\n".join(md)
 
     lines = []
-    lines.append("## 💰 成本结构归因")
+    lines.append(t("fmt.attribution.title"))
     lines.append("")
 
     total = data.get("total_monthly_cost", 0)
     fixed = data.get("fixed_cost", 0)
     variable = data.get("variable_cost", 0)
-    lines.append(f"**月度总成本**：{total:,.0f} 元（固定 {fixed:,.0f} + 变动 {variable:,.0f}）")
-    lines.append(f"**固定/变动比**：{data.get('fixed_ratio', 0):.0%} / {data.get('variable_ratio', 0):.0%}")
+    lines.append(t("fmt.attribution.total_cost", total=f"{total:,.0f}", fixed=f"{fixed:,.0f}", variable=f"{variable:,.0f}"))
+    lines.append(t("fmt.attribution.ratio", fixed=data.get("fixed_ratio", 0), variable=data.get("variable_ratio", 0)))
     lines.append("")
 
     components = data.get("components", [])
     if components:
-        lines.append("### 各分量明细")
+        lines.append(t("fmt.attribution.components_header"))
         lines.append("")
-        lines.append("| 分项 | 金额 | 占比 | 来源 |")
+        lines.append(t("fmt.attribution.components_table_header"))
         lines.append("|------|------|------|------|")
         for c in components:
             pct = f"{c['percent']:.0%}"
-            lines.append(f"| {c['name']} | {c['amount']:,.0f} 元 | {pct} | {c.get('source', '')} |")
+            lines.append(t("fmt.attribution.component_row", name=c["name"], amount=f"{c['amount']:,.0f}", pct=pct, source=c.get("source", "")))
         lines.append("")
 
     # 可视化条形（文本版）
     if components:
-        lines.append("### 成本占比图")
+        lines.append(t("fmt.attribution.chart_header"))
         lines.append("")
         for c in components[:5]:
             bar_len = int(c["percent"] * 30)
@@ -565,19 +614,19 @@ def _fmt_attribution(data: Dict) -> str:
 
     top = data.get("top_component", {})
     if top.get("name"):
-        lines.append(f"**最大成本项**：{top['name']}（{top['amount']:,.0f} 元，占 {top['percent']:.0%}）")
+        lines.append(t("fmt.attribution.top_component", name=top["name"], amount=f"{top['amount']:,.0f}", pct=f"{top['percent']:.0%}"))
         lines.append("")
 
     warnings = data.get("warnings", [])
     if warnings:
-        lines.append("### 风险提示")
+        lines.append(t("fmt.attribution.warnings_header"))
         lines.append("")
         for w in warnings:
             lines.append(f"- {w}")
         lines.append("")
 
     lines.append("---")
-    lines.append("操作: 改参数 | 敏感度分析 | 对比方案 | 趋势预测")
+    lines.append(t("fmt.attribution.ops_hint"))
 
     return "\n".join(lines)
 
@@ -587,16 +636,16 @@ def _fmt_attribution(data: Dict) -> str:
 def _fmt_sensitivity(data: Dict) -> str:
     """单一变量弹性分析渲染：盈亏平衡点 + 安全边际 + 曲线。"""
     if "error" in data:
-        return f"## ⚠️ 敏感度分析失败\n\n{data['error']}"
+        return t("fmt.sensitivity.error", error=data["error"])
     if data.get("insufficient"):
-        md = ["## 📐 敏感度分析还不能定", ""]
-        md.append(data.get("message", "数据不足，无法做弹性分析。"))
+        md = [t("fmt.sensitivity.cannot_title"), ""]
+        md.append(data.get("message", t("fmt.sensitivity.cannot_message")))
         for g in data.get("gaps", []):
-            md.append(f"- 补充：{g}")
+            md.append(t("fmt.common.supplement", item=g))
         return "\n".join(md)
 
     lines = []
-    lines.append("## 📐 弹性分析")
+    lines.append(t("fmt.sensitivity.title"))
     lines.append("")
 
     label = data.get("variable_label", "")
@@ -604,20 +653,20 @@ def _fmt_sensitivity(data: Dict) -> str:
     breakeven = data.get("breakeven_value")
 
     if breakeven is None:
-        lines.append(f"**分析变量**：{label}")
-        lines.append(f"**当前值**：{current:g}")
+        lines.append(t("fmt.sensitivity.variable", label=label))
+        lines.append(t("fmt.sensitivity.current", value=f"{current:g}"))
         lines.append("")
-        lines.append(data.get("interpretation", "无法计算盈亏平衡点。"))
+        lines.append(data.get("interpretation", t("fmt.sensitivity.no_breakeven")))
         return "\n".join(lines)
 
     margin = data.get("margin", 0)
     margin_pct = data.get("margin_pct", 0)
     direction = data.get("direction", "")
 
-    lines.append(f"**分析变量**：{label}")
-    lines.append(f"**当前值**：{current:g}")
-    lines.append(f"**盈亏平衡点**：{breakeven:g}")
-    lines.append(f"**安全边际**：{margin:g}（{margin_pct:.0%}）· 方向：{direction}")
+    lines.append(t("fmt.sensitivity.variable", label=label))
+    lines.append(t("fmt.sensitivity.current", value=f"{current:g}"))
+    lines.append(t("fmt.sensitivity.breakeven", value=f"{breakeven:g}"))
+    lines.append(t("fmt.sensitivity.margin", value=f"{margin:g}", pct=f"{margin_pct:.0%}", direction=direction))
     lines.append("")
 
     # 解读
@@ -627,19 +676,19 @@ def _fmt_sensitivity(data: Dict) -> str:
     # 敏感度曲线
     curve = data.get("sensitivity_curve", [])
     if curve:
-        lines.append("### 利润随变量变化")
+        lines.append(t("fmt.sensitivity.curve_header"))
         lines.append("")
-        lines.append(f"| {label} | 月利润 | 状态 |")
+        lines.append(t("fmt.sensitivity.curve_table_header", label=label))
         lines.append("|------|--------|------|")
         for point in curve:
             v = point["value"]
             p = point["profit"]
             status = "🟢" if p > 0 else ("🔴" if p < 0 else "⚪")
-            lines.append(f"| {v:g} | {p:,.0f} 元 | {status} |")
+            lines.append(t("fmt.sensitivity.curve_row", value=f"{v:g}", profit=f"{p:,.0f}", status=status))
         lines.append("")
 
     lines.append("---")
-    lines.append("操作: 改参数 | 成本归因 | 对比方案 | 趋势预测")
+    lines.append(t("fmt.sensitivity.ops_hint"))
 
     return "\n".join(lines)
 
@@ -660,22 +709,22 @@ def _fmt_cashflow(data: Dict) -> str:
     缺期初现金/营收 → 「还不能定」+ 补什么；否则 12 行明细 + 归零月/累计缺口。
     """
     if "error" in data:
-        return f"## ⚠️ 现金流计算失败\n\n{data['error']}\n\n请检查期初现金（总投资）与月营收是否提供。"
+        return t("fmt.cashflow.error", error=data["error"])
     if data.get("insufficient"):
-        md = ["## 💧 现金流还不能定", ""]
-        md.append("期初现金或月营收未提供，无法给出确定性现金流明细。")
+        md = [t("fmt.cashflow.cannot_title"), ""]
+        md.append(t("fmt.cashflow.cannot_message"))
         for g in data.get("gaps", []):
-            md.append(f"- 补充：{g}")
+            md.append(t("fmt.common.supplement", item=g))
         return "\n".join(md)
 
-    md = ["## 💧 现金流明细（12 个月）", ""]
-    project_type = data.get("project_type") or "项目"
-    md.append(f"**{project_type}** · 期初现金 = {_fmt_num_cf(data.get('opening_now'))}（总投资推导）")
+    md = [t("fmt.cashflow.title"), ""]
+    project_type = data.get("project_type") or t("fmt.common.project_type_default")
+    md.append(t("fmt.cashflow.opening", project_type=project_type, value=_fmt_num_cf(data.get("opening_now"))))
     if data.get("notes"):
         md.append("")
         md.extend(f"- {n}" for n in data["notes"])
     md.append("")
-    md.append("| 月 | 收入到账 | 支出 | 净额 | 月末现金 |")
+    md.append(t("fmt.cashflow.table_header"))
     md.append("|----|---------|------|------|---------|")
     schedule = data.get("schedule", [])
     for row in schedule:
@@ -687,14 +736,14 @@ def _fmt_cashflow(data: Dict) -> str:
 
     zc = data.get("zero_cash_month")
     if zc is not None:
-        md.append(f"📉 **现金归零**：无外部注资下，现金约在第 **{zc} 个月**耗尽。")
+        md.append(t("fmt.cashflow.zero_cash", month=zc))
     else:
-        md.append("🟢 **12 个月内现金未耗尽**（基于当前输入；假设若变结论动）。")
+        md.append(t("fmt.cashflow.no_zero_cash"))
     ms = data.get("max_shortfall")
     if ms is not None:
-        md.append(f"💰 **累计最大缺口**：约 **{ms:,.0f} 元**（在归零月之后的缺口）。")
+        md.append(t("fmt.cashflow.max_shortfall", value=f"{ms:,.0f}"))
     md.append("")
-    md.append("> 现金流只关注「实际到账/支出」（含一次性大额、到账延迟、季度支付），与利润（P&L）解耦。")
+    md.append(t("fmt.cashflow.note"))
     return "\n".join(md)
 
 
