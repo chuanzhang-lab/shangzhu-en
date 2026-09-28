@@ -339,7 +339,11 @@ def _has_number_with_unit(text: str, units) -> bool:
     """
     if not text:
         return False
-    return re.search(r"\d+(?:\.\d+)?\s*(?:" + "|".join(units) + r")",
+    # ⚠️ 单位必须转义：英文单位 "$" 是正则的**行尾锚点**，不转义时
+    # " 100" 会被判成「数字 + $（行尾）」→ 误触发量纲护栏 → 字段整个抽不到。
+    # 中文单位（元/块/万/千）非元字符，转义后行为不变。
+    _NUM = r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)"
+    return re.search(_NUM + r"\s*(?:" + "|".join(re.escape(u) for u in units) + r")",
                      text) is not None
 
 
