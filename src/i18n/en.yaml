@@ -591,8 +591,8 @@ ss:
     runway: Investment & runway
     positioning: Industry & positioning
   fmt:
-    yes: Yes
-    no: No
+    "yes": "Yes"
+    "no": "No"
     yuan: CNY
   ctx:
     industry: "Industry: "

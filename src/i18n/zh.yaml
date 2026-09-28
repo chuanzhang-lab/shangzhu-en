@@ -589,8 +589,8 @@ ss:
     runway: 投资与跑道
     positioning: 行业与定位
   fmt:
-    yes: 是
-    no: 否
+    "yes": 是
+    "no": 否
     yuan: 元
   ctx:
     industry: 行业：
