@@ -15,6 +15,8 @@ import hashlib
 import json
 import re
 from typing import Any, Optional
+from i18n import t
+from source_tags import CANDIDATE, DERIVED, code_of, mark
 
 
 def validate_no_computed_numbers(text: str, clean_view: dict) -> str:
@@ -43,7 +45,7 @@ def validate_no_computed_numbers(text: str, clean_view: dict) -> str:
 
     def replace_unknown(m):
         matched = m.group(0)
-        return matched if matched in known_numbers else "[数字已过滤]"
+        return matched if matched in known_numbers else t("af.filtered_number")
 
     return number_re.sub(replace_unknown, text)
 
@@ -59,8 +61,9 @@ def _filter_citations(citations: list, param_sources: Optional[dict] = None) -> 
     filtered = []
     for c in citations:
         field = c.get("field", "")
-        source = param_sources.get(field, "")
-        if isinstance(source, str) and source.startswith("[候选]"):
+        # 用**状态码**判断，不拿展示文案做语义判断：
+        # 英文下展示串变成 "[Candidate]"，startswith("[候选]") 会静默失效（M4 同类事故）。
+        if code_of(param_sources, field) == CANDIDATE:
             continue
         filtered.append(c)
     return filtered
@@ -78,13 +81,20 @@ def _build_citations_from_text(text: str, clean_view: dict,
         return citations
 
     # 参数名 → 中文标签的反向映射（用于在文本中匹配）
+    # 标签跟随 locale：英文面板要在英文 LLM 文本里匹配到对应说法。
     field_labels = {
-        "monthly_rent": "月租金", "daily_traffic": "日均客流",
-        "price_per_unit": "客单价", "employee_count": "员工人数",
-        "avg_salary": "人均薪资", "variable_cost_ratio": "变动成本率",
-        "total_investment": "总投资", "monthly_revenue": "月营收",
-        "monthly_profit": "月利润", "gross_margin": "毛利率",
-        "monthly_fixed_cost": "月固定成本", "runway_months": "跑道",
+        "monthly_rent": t("af.label.monthly_rent"),
+        "daily_traffic": t("af.label.daily_traffic"),
+        "price_per_unit": t("af.label.price_per_unit"),
+        "employee_count": t("af.label.employee_count"),
+        "avg_salary": t("af.label.avg_salary"),
+        "variable_cost_ratio": t("af.label.variable_cost_ratio"),
+        "total_investment": t("af.label.total_investment"),
+        "monthly_revenue": t("af.label.monthly_revenue"),
+        "monthly_profit": t("af.label.monthly_profit"),
+        "gross_margin": t("af.label.gross_margin"),
+        "monthly_fixed_cost": t("af.label.monthly_fixed_cost"),
+        "runway_months": t("af.label.runway_months"),
     }
 
     for field, value in params.items():
@@ -93,7 +103,7 @@ def _build_citations_from_text(text: str, clean_view: dict,
         label = field_labels.get(field, field)
         # 检查文本中是否引用了该参数的中文标签或字段名
         if label in text or field in text:
-            source = (param_sources or {}).get(field, "[推算]")
+            source = (param_sources or {}).get(field, mark(DERIVED))
             citations.append({
                 "field": field,
                 "value": value,

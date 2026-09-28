@@ -747,3 +747,43 @@ ca:
 mr:
   search_disabled: '联网搜索功能未启用（本地工作台未内置搜索服务）'
   use_benchmark_hint: '请使用引擎内置的行业模板基准数据，或手动补充市场信息。'
+
+# ─── op_executor（候选方案 / 应用命令）──────────────────────────────────────
+# op.cmd.apply 是**输入命令词**（用户敲「应用 / apply」），必须跟随 locale：
+# 英文用户敲的是 apply，硬编码「应用」会让英文版这个命令永远触发不了。
+op:
+  candidates_header: '🛠 **候选方案（回复「应用X」生效，LLM 不直接改）**'
+  cmd:
+    apply: '应用'
+  option:
+    a: '方案A'
+    b: '方案B'
+    c: '方案C'
+    d: '方案D'
+  err:
+    unknown_propose: '未知 propose 类型 {propose}'
+    missing_changes: 'op 缺 changes/field+value'
+    derived_field: '{field} 是派生字段（靠引擎重算），不可直接改'
+    not_whitelisted: '{field} 不在可改白名单内'
+    impossible: '{field}={value} 物理不可能: {message}'
+    engine_failed: '引擎计算失败: {err}'
+    session_write_failed: '会话写入失败: {err}'
+  log:
+    preview_failed: 'ops 预览 quick_scan 失败: {err}'
+
+# ─── advisor_formatter（顾问面板）──────────────────────────────────────────
+af:
+  filtered_number: '[数字已过滤]'
+  label:
+    monthly_rent: '月租金'
+    daily_traffic: '日均客流'
+    price_per_unit: '客单价'
+    employee_count: '员工人数'
+    avg_salary: '人均薪资'
+    variable_cost_ratio: '变动成本率'
+    total_investment: '总投资'
+    monthly_revenue: '月营收'
+    monthly_profit: '月利润'
+    gross_margin: '毛利率'
+    monthly_fixed_cost: '月固定成本'
+    runway_months: '跑道'

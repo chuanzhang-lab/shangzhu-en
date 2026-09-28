@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Optional
 
 from param_guard import guard_extracted, validate_field, LEVEL_CRITICAL
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -61,22 +62,23 @@ def validate_op(op: dict) -> Tuple[bool, str]:
     changes = op.get("changes") or {}
 
     if propose not in ("set", "try"):
-        return False, f"未知 propose 类型 {propose!r}"
+        return False, t("op.err.unknown_propose", propose=repr(propose))
 
     if not changes:
-        return False, "op 缺 changes/field+value"
+        return False, t("op.err.missing_changes")
 
     for k in changes:
         if k in DERIVED_FIELDS:
-            return False, f"{k} 是派生字段（靠引擎重算），不可直接改"
+            return False, t("op.err.derived_field", field=k)
         if k not in BASE_FIELDS:
-            return False, f"{k} 不在可改白名单内"
+            return False, t("op.err.not_whitelisted", field=k)
 
         v = changes[k]
         # param_guard 合理性（数值字段硬边界检查）
         check = validate_field(k, v)
         if check["level"] == LEVEL_CRITICAL and check["auto_fix"] is None:
-            return False, f"{k}={v} 物理不可能: {check['message']}"
+            return False, t("op.err.impossible", field=k, value=v,
+                            message=check["message"])
 
     return True, ""
 
@@ -107,10 +109,10 @@ def preview_op(op: dict, base_params: dict, scanner) -> Optional[dict]:
     try:
         scan = json.loads(scanner.invoke({"params_json": params_json}))
     except Exception as e:
-        logger.warning(f"ops 预览 quick_scan 失败: {e}")
+        logger.warning(t("op.log.preview_failed", err=e))
         return {
             "label": op.get("label", op.get("propose", "")),
-            "changes": changes, "ok": False, "reason": f"引擎计算失败: {e}",
+            "changes": changes, "ok": False, "reason": t("op.err.engine_failed", err=e),
         }
     profit = None
     fixed = None
@@ -153,7 +155,7 @@ def apply_op(op: dict, thread_id: str, session_apply_fn,
                 if record is not None:
                     record(thread_id, fld, cleaned[fld], hypothesis)
     except Exception as e:
-        return False, f"会话写入失败: {e}", {}
+        return False, t("op.err.session_write_failed", err=e), {}
     return True, "", merged
 
 
@@ -173,18 +175,20 @@ def parse_apply_command(text: str) -> Optional[int]:
     """
     if not text:
         return None
-    t = text.strip()
-    if not t:
+    # ⚠️ 变量名不能叫 t：会遮蔽 i18n.t()（M5 在 decision_engine 踩过同一个坑）
+    raw = text.strip()
+    if not raw:
         return None
-    # 简化匹配：必须以"应用"开头
-    if not t.startswith("应用"):
+    # 简化匹配：必须以「应用 / apply」开头（命令词跟随 locale）
+    apply_cmd = t("op.cmd.apply")
+    if not raw.startswith(apply_cmd):
         return None
-    rest = t[2:].strip()
+    rest = raw[len(apply_cmd):].strip()
     if not rest:
         return 0  # 「应用」→ 取第一个候选
     # 「应用A」「应用方案A」「应用1」「应用第1个」
-    for tag, idx in (("A", 1), ("B", 2), ("C", 3), ("D", 4), ("方案A", 1), ("方案B", 2),
-                      ("方案C", 3), ("方案D", 4)):
+    for tag, idx in (("A", 1), ("B", 2), ("C", 3), ("D", 4), (t("op.option.a"), 1),
+                      (t("op.option.b"), 2), (t("op.option.c"), 3), (t("op.option.d"), 4)):
         if rest.startswith(tag):
             return idx
     # 纯数字
@@ -197,4 +201,6 @@ def parse_apply_command(text: str) -> Optional[int]:
     return 0  # 兜底：「应用...」模糊命中，取第一个
 
 
-OP_CONFIRMATION_PREFIX = "🛠 **候选方案（回复「应用X」生效，LLM 不直接改）**"
+# locale 是部署级（进程内不变），故模块级取一次即可；若将来支持会话级切换，
+# 需改为函数（与 M4 _LEVER_NAME 只存键、展示时解析同一原则）。
+OP_CONFIRMATION_PREFIX = t("op.candidates_header")

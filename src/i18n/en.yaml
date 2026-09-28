@@ -747,3 +747,41 @@ ca:
 mr:
   search_disabled: 'Web search is not enabled (the local workbench ships no search service)'
   use_benchmark_hint: 'Use the engine built-in industry template benchmarks, or add market data manually.'
+
+# ─── op executor (candidate options / apply command) ───────────────────────
+op:
+  candidates_header: '🛠 **Candidate options (reply "apply X" to take effect — the LLM does not edit directly)**'
+  cmd:
+    apply: 'apply'
+  option:
+    a: 'Option A'
+    b: 'Option B'
+    c: 'Option C'
+    d: 'Option D'
+  err:
+    unknown_propose: 'Unknown propose type {propose}'
+    missing_changes: 'op missing changes/field+value'
+    derived_field: '{field} is a derived field (recomputed by the engine), cannot be set directly'
+    not_whitelisted: '{field} is not in the editable whitelist'
+    impossible: '{field}={value} is physically impossible: {message}'
+    engine_failed: 'Engine calculation failed: {err}'
+    session_write_failed: 'Session write failed: {err}'
+  log:
+    preview_failed: 'ops preview failed in quick_scan: {err}'
+
+# ─── advisor formatter ─────────────────────────────────────────────────────
+af:
+  filtered_number: '[number filtered]'
+  label:
+    monthly_rent: 'Monthly rent'
+    daily_traffic: 'Daily traffic'
+    price_per_unit: 'Average ticket'
+    employee_count: 'Employees'
+    avg_salary: 'Average salary'
+    variable_cost_ratio: 'Variable cost ratio'
+    total_investment: 'Total investment'
+    monthly_revenue: 'Monthly revenue'
+    monthly_profit: 'Monthly profit'
+    gross_margin: 'Gross margin'
+    monthly_fixed_cost: 'Monthly fixed cost'
+    runway_months: 'Runway'
