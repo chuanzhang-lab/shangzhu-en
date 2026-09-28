@@ -598,3 +598,30 @@ ss:
     other_summary: 其他已知参数（本轮未涉及）：
     other_group: _其他
 
+
+ui:
+  cat:
+    all: 全部
+    analyze: 分析
+    params: 改参
+    decide: 决策
+    compare: 对比
+  field:
+    total_investment: 总投资
+    monthly_rent: 月租金
+    daily_traffic: 日均客流
+    price_per_unit: 客单价
+    employee_count: 员工人数
+    avg_salary: 人均薪资
+    variable_cost_ratio: 变动成本率
+    labor_burden: 劳动负担率
+    utilities: 水电
+    packaging: 包装
+    commission: 提成
+    other_fixed: 其他固定
+  toast:
+    no_param_change: 未检测到参数改动
+    current_params: 当前参数：
+    params_loaded: 参数已加载
+    connecting: 连接中...
+    connect_failed: 连接失败

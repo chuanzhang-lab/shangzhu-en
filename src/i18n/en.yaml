@@ -600,3 +600,30 @@ ss:
     other_summary: "Other known parameters (not touched this round): "
     other_group: _Other
 
+
+ui:
+  cat:
+    all: All
+    analyze: Analyze
+    params: Params
+    decide: Decide
+    compare: Compare
+  field:
+    total_investment: Total investment
+    monthly_rent: Monthly rent
+    daily_traffic: Daily traffic
+    price_per_unit: Unit price
+    employee_count: Headcount
+    avg_salary: Average salary
+    variable_cost_ratio: Variable cost ratio
+    labor_burden: Labor burden
+    utilities: Utilities
+    packaging: Packaging
+    commission: Commission
+    other_fixed: Other fixed
+  toast:
+    no_param_change: No parameter changes detected
+    current_params: "Current params: "
+    params_loaded: Params loaded
+    connecting: Connecting...
+    connect_failed: Connection failed

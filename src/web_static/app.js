@@ -1,3 +1,14 @@
+// ── i18n：文案字典由后端 /i18n.js 下发（window.__I18N__），与 src/i18n 同源 ──
+// t(key) 只读后端字典，前端不维护第二份文案；缺失键显式暴露，不静默返回空串。
+function t(key) {
+  const v = (window.__I18N__ || {})[key];
+  return v === undefined ? ('[i18n:missing:' + key + ']') : v;
+}
+function tOr(key, fallback) {
+  const v = (window.__I18N__ || {})[key];
+  return v === undefined ? fallback : v;
+}
+
 // ── DOM refs ──
 const chat = document.getElementById('chat');
 const input = document.getElementById('input');
@@ -26,7 +37,7 @@ const modelNameEl = document.getElementById('model-name');
 
 // ── 分类系统状态 ──
 const CATS = ['all', 'analyze', 'params', 'decide', 'compare'];
-const CAT_LABELS = { all: '全部', analyze: '分析', params: '改参', decide: '决策', compare: '对比' };
+const CAT_LABELS = { all: 'ui.cat.all', analyze: 'ui.cat.analyze', params: 'ui.cat.params', decide: 'ui.cat.decide', compare: 'ui.cat.compare' };
 
 // Module 1: 确定性 intent → 分类映射（权威来源是后端 intent，不再依赖 params diff 消歧）
 const INTENT_TO_CAT = {
@@ -580,11 +591,11 @@ function tagMessage(el, cat) {
   if (cat && cat !== 'all') {
     if (tagEl) {
       tagEl.className = 'msg-cat-tag ' + cat;
-      tagEl.textContent = CAT_LABELS[cat];
+      tagEl.textContent = t(CAT_LABELS[cat]);
     } else {
       tagEl = document.createElement('span');
       tagEl.className = 'msg-cat-tag ' + cat;
-      tagEl.textContent = CAT_LABELS[cat];
+      tagEl.textContent = t(CAT_LABELS[cat]);
       tagEl.addEventListener('click', () => switchCat(cat, true));
       // 优先插到 wrapper 内最前（保持 div>wrapper>(tag)+body 结构）；
       // 若 firstChild 不是元素（文本节点等），直接插到消息最前作为兜底。
@@ -678,7 +689,7 @@ function addMessage(role, content, isHtml, cat) {
   const msgCat = cat || 'all';
   if (msgCat !== 'all' && role === 'assistant') {
     const tag = document.createElement('span');
-    tag.className = 'msg-cat-tag ' + msgCat; tag.textContent = CAT_LABELS[msgCat];
+    tag.className = 'msg-cat-tag ' + msgCat; tag.textContent = t(CAT_LABELS[msgCat]);
     tag.addEventListener('click', () => switchCat(msgCat, true));
     wrapper.appendChild(tag);
   }
@@ -844,8 +855,7 @@ function updateParamsPanel(params, paramSources, derived) {
 }
 
 function fieldLabel(f) {
-  const labels = { total_investment:'总投资', monthly_rent:'月租金', daily_traffic:'日均客流', price_per_unit:'客单价', employee_count:'员工人数', avg_salary:'人均薪资', variable_cost_ratio:'变动成本率', labor_burden:'劳动负担率', utilities:'水电', packaging:'包装', commission:'提成', other_fixed:'其他固定' };
-  return labels[f] || f; }
+  return tOr('ui.field.' + f, f); }
 function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'number' && Number.isFinite(v)) return (v * 100).toFixed(0) + '%'; return formatNum(v); }
 function formatNum(v) { if (v === null || v === undefined) return '—'; if (typeof v === 'number' && Number.isFinite(v)) return v.toLocaleString(); if (typeof v === 'number' && !Number.isFinite(v)) return '—'; if (String(v).trim() === '') return '—'; return String(v); }
 

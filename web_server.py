@@ -48,7 +48,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -880,6 +880,7 @@ CHAT_HTML = """<!DOCTYPE html>
     <div id="advisor-list" style="display:none;"></div>
   </aside>
 </div>
+<script src="/i18n.js"></script>
 <script src="/static/app.js?v=20260413a"></script>
 </body>
 </html>
@@ -911,6 +912,24 @@ async def index():
     # 配置单源：模型名运行时注入（占位符替换，避免 f-string 与 CSS 花括号冲突）
     # 动态读取，保证用户通过 /settings/llm 保存后刷新页面即看到新名，无需重启
     return CHAT_HTML.replace("__MODEL_NAME__", get_model_name())
+
+
+@app.get("/i18n.js", response_class=Response)
+async def i18n_js():
+    """下发前端文案字典：locale（部署级）+ 摊平后的键值表，挂到 window.__I18N__。
+
+    语言与后端同源（src/i18n/{locale}.yaml），前端 app.js 的 t() 只读这张表，
+    不做自己的文案维护——避免前后端文案两套真相源漂移。
+    """
+    import i18n as _i18n
+    import json as _json
+    locale = _i18n.get_locale()
+    table = _i18n._load(locale)
+    return Response(
+        "window.__SHANGZHU_LOCALE__ = " + _json.dumps(locale, ensure_ascii=False) + ";\n"
+        "window.__I18N__ = " + _json.dumps(table, ensure_ascii=False) + ";",
+        media_type="application/javascript",
+    )
 
 
 @app.get("/health")
