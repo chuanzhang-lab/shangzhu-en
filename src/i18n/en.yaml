@@ -719,3 +719,31 @@ ui:
   no_response: (no response)
   req_timeout: Request timed out (60s); retry
   net_error: Network error; retry
+
+# ─── cost attribution ──────────────────────────────────────────────────────
+ca:
+  gap:
+    monthly_revenue: 'Monthly revenue (cannot compute variable cost or total cost)'
+    fixed_cost: 'Fixed cost (no component provided)'
+    variable_cost_ratio: 'Variable cost ratio (cannot compute variable cost)'
+  need_full_data: 'Cost attribution needs complete cost data. Please supply:'
+  zero_total: 'Total cost is 0, cannot run attribution.'
+  zero_total_reason: 'Total cost is 0 (all cost components are 0 or negative)'
+  comp:
+    rent: 'Rent'
+    labor: 'Labor'
+    variable: 'Variable cost'
+    utilities: 'Utilities'
+    packaging: 'Packaging'
+    commission: 'Commission'
+    other: 'Other fixed'
+    none: 'None'
+  warn:
+    top_component: '⚠️ {name} is {pct} of total cost — over half, the biggest lever.'
+    variable_ratio: '⚠️ Variable cost is {pct} of total: each 1% revenue drop cuts total cost by only {delta}%.'
+    labor_ratio: '⚠️ Labor is {pct} of total cost — staff efficiency is the key metric.'
+
+# ─── market research ───────────────────────────────────────────────────────
+mr:
+  search_disabled: 'Web search is not enabled (the local workbench ships no search service)'
+  use_benchmark_hint: 'Use the engine built-in industry template benchmarks, or add market data manually.'

@@ -10,6 +10,8 @@
 - 各分量：租金、人工、变动成本、水电、包装、提成、其他固定
 """
 
+from i18n import t
+
 
 def _build_cost_attribution(params: dict) -> dict:
     """从已填充的 params 中拆解成本结构分量。
@@ -40,15 +42,15 @@ def _build_cost_attribution(params: dict) -> dict:
 
     gaps = []
     if monthly_revenue is None:
-        gaps.append("月营收（无法计算变动成本与总成本）")
+        gaps.append(t("ca.gap.monthly_revenue"))
     if fixed_cost is None:
-        gaps.append("固定成本（各分量均未提供）")
+        gaps.append(t("ca.gap.fixed_cost"))
     if vc_ratio is None:
-        gaps.append("变动成本率（无法计算变动成本）")
+        gaps.append(t("ca.gap.variable_cost_ratio"))
     if gaps:
         return {
             "insufficient": True,
-            "message": "成本归因需要完整的成本数据。请补充以下参数：",
+            "message": t("ca.need_full_data"),
             "gaps": gaps,
         }
 
@@ -67,8 +69,8 @@ def _build_cost_attribution(params: dict) -> dict:
     if total_cost <= 0:
         return {
             "insufficient": True,
-            "message": "总成本为 0，无法进行归因分析。",
-            "gaps": ["总成本为 0（所有成本分量均为 0 或负数）"],
+            "message": t("ca.zero_total"),
+            "gaps": [t("ca.zero_total_reason")],
         }
 
     # ── 构建分量列表（只含非零分量）──
@@ -76,13 +78,13 @@ def _build_cost_attribution(params: dict) -> dict:
     src = params.get("_param_sources") or {}
 
     _COMPONENT_MAP = [
-        ("租金", monthly_rent, src.get("monthly_rent", "")),
-        ("人工", monthly_labor, src.get("monthly_labor", "")),
-        ("变动成本", variable_cost, src.get("variable_cost_ratio", "")),
-        ("水电", utilities, src.get("utilities", "")),
-        ("包装", packaging, src.get("packaging", "")),
-        ("提成", commission, src.get("commission", "")),
-        ("其他固定", other_fixed, src.get("other_fixed", "")),
+        (t("ca.comp.rent"), monthly_rent, src.get("monthly_rent", "")),
+        (t("ca.comp.labor"), monthly_labor, src.get("monthly_labor", "")),
+        (t("ca.comp.variable"), variable_cost, src.get("variable_cost_ratio", "")),
+        (t("ca.comp.utilities"), utilities, src.get("utilities", "")),
+        (t("ca.comp.packaging"), packaging, src.get("packaging", "")),
+        (t("ca.comp.commission"), commission, src.get("commission", "")),
+        (t("ca.comp.other"), other_fixed, src.get("other_fixed", "")),
     ]
 
     components = []
@@ -99,7 +101,7 @@ def _build_cost_attribution(params: dict) -> dict:
     components.sort(key=lambda c: -c["amount"])
 
     # ── 顶级分量 ──
-    top = components[0] if components else {"name": "无", "amount": 0, "percent": 0}
+    top = components[0] if components else {"name": t("ca.comp.none"), "amount": 0, "percent": 0}
 
     # ── 固定/变动比例 ──
     fixed_ratio = round(fixed_cost / total_cost, 4) if total_cost > 0 else 0
@@ -108,11 +110,11 @@ def _build_cost_attribution(params: dict) -> dict:
     # ── 风险提示 ──
     warnings = []
     if top["percent"] > 0.5:
-        warnings.append(f"⚠️ {top['name']}占总成本 {top['percent']:.0%}，超过一半，是最大杠杆点。")
+        warnings.append(t("ca.warn.top_component", name=top["name"], pct=f"{top['percent']:.0%}"))
     if variable_ratio > 0.6:
-        warnings.append(f"⚠️ 变动成本占比 {variable_ratio:.0%}，营收每下降 1%，总成本下降 {variable_ratio:.1f}%。")
+        warnings.append(t("ca.warn.variable_ratio", pct=f"{variable_ratio:.0%}", delta=f"{variable_ratio:.1f}"))
     if monthly_labor > 0 and monthly_labor / total_cost > 0.4:
-        warnings.append(f"⚠️ 人工占比 {monthly_labor / total_cost:.0%}，人员效率是关键指标。")
+        warnings.append(t("ca.warn.labor_ratio", pct=f"{monthly_labor / total_cost:.0%}"))
 
     return {
         "total_monthly_cost": round(total_cost, 0),

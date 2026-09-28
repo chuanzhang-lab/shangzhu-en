@@ -717,3 +717,33 @@ ui:
   no_response: （无响应）
   req_timeout: 请求超时（60s），请重试
   net_error: 网络错误，可重试
+
+# ─── cost_attribution（成本归因）────────────────────────────────────────────
+# 分量名（ca.comp.*）必须翻译：formatter 把它作为参数塞进英文句子 component_row，
+# 留中文就会在英文输出里嵌中文（混血输出）。
+ca:
+  gap:
+    monthly_revenue: '月营收（无法计算变动成本与总成本）'
+    fixed_cost: '固定成本（各分量均未提供）'
+    variable_cost_ratio: '变动成本率（无法计算变动成本）'
+  need_full_data: '成本归因需要完整的成本数据。请补充以下参数：'
+  zero_total: '总成本为 0，无法进行归因分析。'
+  zero_total_reason: '总成本为 0（所有成本分量均为 0 或负数）'
+  comp:
+    rent: '租金'
+    labor: '人工'
+    variable: '变动成本'
+    utilities: '水电'
+    packaging: '包装'
+    commission: '提成'
+    other: '其他固定'
+    none: '无'
+  warn:
+    top_component: '⚠️ {name}占总成本 {pct}，超过一半，是最大杠杆点。'
+    variable_ratio: '⚠️ 变动成本占比 {pct}，营收每下降 1%，总成本下降 {delta}%。'
+    labor_ratio: '⚠️ 人工占比 {pct}，人员效率是关键指标。'
+
+# ─── market_research（联网搜索未启用）──────────────────────────────────────
+mr:
+  search_disabled: '联网搜索功能未启用（本地工作台未内置搜索服务）'
+  use_benchmark_hint: '请使用引擎内置的行业模板基准数据，或手动补充市场信息。'

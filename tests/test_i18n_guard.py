@@ -118,6 +118,8 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "financial_calculator.py"),
     os.path.join("src", "decision_engine.py"),
     os.path.join("src", "session_state.py"),
+    os.path.join("src", "tools", "cost_attribution.py"),
+    os.path.join("src", "tools", "market_research.py"),
 ]
 
 # 白名单：**非展示文案**，展示层/语义层必须按原样匹配，因此不能外置。

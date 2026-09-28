@@ -19,6 +19,18 @@ fi
 LOG="$SCRIPT_DIR/logs/shangzhu.log"
 PORT="${PORT:-8081}"
 
+# ── 本分支是**英文版**：部署级默认语言 = en ──────────────────────────────────
+# 语言是部署级 profile（不在运行时切，见 docs/PLAN_I18N_EN.md §5.3）。
+# 为什么设在这里、而不是写在 web_server.py 或改 i18n.DEFAULT_LOCALE：
+# - 写进 web_server.py 会污染测试——多个测试（test_task_api / test_real_dialogs /
+#   test_phase4_workbench 等）会 import web_server，一旦它在 import 时把
+#   SHANGZHU_LOCALE 设成 en，整个 pytest 进程的中文断言全部跑成英文。
+# - 改代码里的 DEFAULT_LOCALE 会同时改掉 t() 的回退目标与上千条中文回归断言
+#   （那些断言正是"引擎行为未变"的 oracle，不能顺手废掉）。
+# start.sh 只由人工启动执行、测试从不运行它，是唯一干净的位置。
+# 想跑中文版：SHANGZHU_LOCALE=zh ./start.sh
+export SHANGZHU_LOCALE="${SHANGZHU_LOCALE:-en}"
+
 mkdir -p logs output
 
 if [ ! -x "$VENV_PY" ]; then

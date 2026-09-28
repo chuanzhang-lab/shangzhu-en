@@ -8,15 +8,16 @@
 
 import json
 from langchain.tools import tool
+from i18n import t
 
 
 def _unavailable_response(query: str, tool_name: str) -> str:
     """联网搜索未启用时的统一返回"""
     return json.dumps({
-        "error": "联网搜索功能未启用（本地工作台未内置搜索服务）",
+        "error": t("mr.search_disabled"),
         "query": query,
         "tool": tool_name,
-        "suggestion": "请使用引擎内置的行业模板基准数据，或手动补充市场信息。"
+        "suggestion": t("mr.use_benchmark_hint")
     }, ensure_ascii=False, indent=2)
 
 
