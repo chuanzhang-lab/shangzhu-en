@@ -625,3 +625,95 @@ ui:
     params_loaded: 参数已加载
     connecting: 连接中...
     connect_failed: 连接失败
+
+ui:
+  connected: 已连接
+  connect_failed: 连接失败
+  toast:
+    saved_ok: "✅ 已保存且连通性测试通过（{0}ms）"
+    saved_test_fail: ⚠️ 已保存，但连通性测试未通过：
+    saved_req_fail: ⚠️ 已保存，但连通性测试请求失败
+    model_empty: ⚠️ 模型名称不能为空
+    key_short: ⚠️ API Key 过短（至少 8 位），请检查是否输入完整
+    save_fail: ⚠️ 保存失败
+    saved: ✅ 已保存：
+    save_req_fail: ⚠️ 保存请求失败
+    load_cfg_fail: ⚠️ 读取配置失败
+    task_deleted: ⚠️ 当前任务已被删除，已切换到最近任务
+    tasks_load_fail: ⚠️ 任务列表加载失败，请刷新重试
+    new_task_fail: ⚠️ 新建任务失败，请重试
+    renamed: ✅ 已改名：
+    rename_fail: ⚠️ 改名失败，请重试
+    deleted: 🗑️ 已删除：
+    delete_fail: "⚠️ 删除失败: "
+    retry: 请重试
+    preview_ok: "✅ 预览: "
+    preview_req_fail: ⚠️ 预览请求失败
+    applied: ✅ 已应用
+    apply_req_fail: ⚠️ 应用请求失败
+    export_incomplete: "⚠️ 参数不全（缺 {0}），导出的模型不完整。先在对话里补齐。"
+    updated: "✅ {0} 已更新为 {1}"
+    not_adopted: "⚠️ {0} 未采纳（当前 {1}），请用「{0} {2}%」重试"
+  unknown_error: 未知错误
+  unnamed_task: 未命名任务
+  confirm_delete: 确认?
+  decide_need_params: 先有一版参数
+  decide_prompt: 该不该继续？先验证什么？还能撑多久？
+  percent_hint: 百分比，如 40
+  number: 数值
+  no_params_to_change: 暂无可改参数
+  preview_fail: 预览失败
+  apply_fail: 应用失败
+  advisor_unavailable: 顾问暂时不可用
+  missing:
+    revenue: 营收/客流
+    vc: 变动成本率
+    fixed: 固定成本
+  gen_pdf: 生成PDF报告
+  gen_excel: 生成Excel模型
+  gen_advice: 生成 AI 解读
+  interpreting: 解读中…
+  interpreting_hint: 正在生成解读，大约需要十几秒
+  generated: 已生成
+  no_advice: 暂无解读内容
+  stale_advice: 参数已更新，请对最新结果重新生成解读
+  input_params_section: 输入参数
+  derived_section: 精确推算
+  missing_section: 缺失（补充即可算）
+  src_user: 用户
+  src_missing: 缺失
+  src_derived: 推算
+  apply: 应用
+  preview: 预览
+  modal_title: 大模型设置
+  modal_model: 模型名称
+  modal_url: 接口 URL
+  modal_key: API Key（当前已配置，留空则保持不变）
+  cancel: 取消
+  save: 保存
+  empty_title: 商业建模助手
+  empty_desc: 输入你的项目参数，AI 会调用工具给出分析
+  advisor_none: 暂无顾问建议，请先完善参数
+  advisor_tag: AI 建议 · 非计算引擎
+  advisor_current: 当前判断
+  advisor_risk: 风险提示
+  advisor_actions: 建议动作
+  advisor_basis: 依据
+
+ui:
+  example_coffee: 📊 餐饮项目分析
+  example_saas: 💻 SaaS 模式评估
+  example_quick: ⚡ 快速扫描
+  example_benchmark: 🔍 行业基准
+  rename_title: 改名
+  params_placeholder: 输入项目参数后这里会显示
+  expired: 已过期
+  retry: 重试
+  advice_fail_retry: 解读失败，可重试
+  advice_timeout: 解读超时，可重试
+  net_error_retry: 网络错误，可重试
+  thinking: 思考中
+  req_fail_prefix: "请求失败: "
+  no_response: （无响应）
+  req_timeout: 请求超时（60s），请重试
+  net_error: 网络错误，可重试

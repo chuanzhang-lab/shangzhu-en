@@ -1,8 +1,12 @@
 // ── i18n：文案字典由后端 /i18n.js 下发（window.__I18N__），与 src/i18n 同源 ──
 // t(key) 只读后端字典，前端不维护第二份文案；缺失键显式暴露，不静默返回空串。
 function t(key) {
-  const v = (window.__I18N__ || {})[key];
-  return v === undefined ? ('[i18n:missing:' + key + ']') : v;
+  let s = (window.__I18N__ || {})[key];
+  if (s === undefined) return '[i18n:missing:' + key + ']';
+  for (let i = 1; i < arguments.length; i++) {
+    s = s.replace(new RegExp('\\{' + (i - 1) + '\\}', 'g'), arguments[i]);
+  }
+  return s;
 }
 function tOr(key, fallback) {
   const v = (window.__I18N__ || {})[key];
@@ -69,14 +73,14 @@ let _loadTasksInFlight = null;  // loadTasks 并发锁：防止多次调用导�
 
 // ── 健康检查 ──
 function applyModelName(name) {
-  const n = name || '已连接';
+  const n = name || t('ui.connected');
   status.textContent = n;
   status.style.color = '#4ade80';
   if (modelNameEl) modelNameEl.textContent = '· ' + n;
 }
 fetch('/health').then(r => r.json()).then(d => {
   applyModelName(d.model);
-}).catch(() => { status.textContent = '连接失败'; status.style.color = '#f87171'; });
+}).catch(() => { status.textContent = t('ui.connect_failed'); status.style.color = '#f87171'; });
 
 // ── 模型设置弹窗（点击右上角模型名打开）──
 function testLlmConfig(body) {
@@ -88,13 +92,13 @@ function testLlmConfig(body) {
   })
   .then(r => r.json()).then(d => {
     if (d.ok) {
-      setToast('✅ 已保存且连通性测试通过（' + d.latency_ms + 'ms）', '#059669');
+      setToast(t('ui.toast.saved_ok', d.latency_ms), '#059669');
     } else {
-      const err = d.error || '未知错误';
-      setToast('⚠️ 已保存，但连通性测试未通过：' + err, '#d97706');
+      const err = d.error || t('ui.unknown_error');
+      setToast(t('ui.toast.saved_test_fail') + err, '#d97706');
     }
   })
-  .catch(() => setToast('⚠️ 已保存，但连通性测试请求失败', '#d97706'));
+  .catch(() => setToast(t('ui.toast.saved_req_fail'), '#d97706'));
 }
 
 function openModelSettings() {
@@ -105,16 +109,16 @@ function openModelSettings() {
     overlay.className = 'modal-overlay';
     overlay.innerHTML =
       '<div class="modal-box">' +
-        '<div class="modal-title">大模型设置</div>' +
-        '<label class="modal-label">模型名称</label>' +
+        '<div class="modal-title">' + t('ui.modal_title') + '</div>' +
+        '<label class="modal-label">' + t('ui.modal_model') + '</label>' +
         '<input class="modal-input" id="ms-model" placeholder="如 deepseek-v4-flash">' +
-        '<label class="modal-label">接口 URL</label>' +
+        '<label class="modal-label">' + t('ui.modal_url') + '</label>' +
         '<input class="modal-input" id="ms-url" placeholder="如 https://api.deepseek.com/v1">' +
-        '<label class="modal-label">API Key（当前已配置，留空则保持不变）</label>' +
+        '<label class="modal-label">' + t('ui.modal_key') + '</label>' +
         '<input class="modal-input" id="ms-key" type="password" placeholder="sk-... 或 ak-... 格式，至少 8 位">' +
         '<div class="modal-actions">' +
-          '<button class="modal-btn cancel" id="ms-cancel">取消</button>' +
-          '<button class="modal-btn save" id="ms-save">保存</button>' +
+          '<button class="modal-btn cancel" id="ms-cancel">' + t('ui.cancel') + '</button>' +
+          '<button class="modal-btn save" id="ms-save">' + t('ui.save') + '</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -130,23 +134,23 @@ function openModelSettings() {
     overlay.querySelector('#ms-cancel').addEventListener('click', close);
     overlay.querySelector('#ms-save').addEventListener('click', () => {
       const body = { model: m.value.trim(), base_url: u.value.trim(), api_key: k.value.trim() };
-      if (!body.model) { setToast('⚠️ 模型名称不能为空', '#d97706'); return; }
-      if (body.api_key && body.api_key.length < 8) { setToast('⚠️ API Key 过短（至少 8 位），请检查是否输入完整', '#d97706'); return; }
+      if (!body.model) { setToast(t('ui.toast.model_empty'), '#d97706'); return; }
+      if (body.api_key && body.api_key.length < 8) { setToast(t('ui.toast.key_short'), '#d97706'); return; }
       fetch('/settings/llm', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(body) })
         .then(r => r.json()).then(d => {
-          if (d.ok !== undefined && d.ok === false) { setToast('⚠️ 保存失败', '#d97706'); return; }
+          if (d.ok !== undefined && d.ok === false) { setToast(t('ui.toast.save_fail'), '#d97706'); return; }
           if (d.error) { setToast('⚠️ ' + d.error, '#d97706'); return; }
           const saved = (d && d.config) || d || {};
           applyModelName(saved.model);
-          setToast('✅ 已保存：' + saved.model, '#059669');
+          setToast(t('ui.toast.saved') + saved.model, '#059669');
           close();
           // 保存后自动连通性探测
           testLlmConfig(body);
         })
-        .catch(() => setToast('⚠️ 保存请求失败', '#d97706'));
+        .catch(() => setToast(t('ui.toast.save_req_fail'), '#d97706'));
     });
     m.focus();
-  }).catch(() => setToast('⚠️ 读取配置失败', '#d97706'));
+  }).catch(() => setToast(t('ui.toast.load_cfg_fail'), '#d97706'));
 }
 status.addEventListener('click', openModelSettings);
 const settingsBtn = document.getElementById('settings-btn');
@@ -164,8 +168,8 @@ async function _loadTasksInner() {
     tasks.forEach(t => {
       tasksCache[t.id] = t;  // 缓存含 params 的完整任务对象
       const div = document.createElement('div'); div.className = 'task-item' + (t.id === currentTaskId ? ' active' : ''); div.dataset.id = t.id;
-      div.innerHTML = '<span class="tname"></span><span class="tmenu" title="改名">⋯</span><span class="tdel" title="删除任务">×</span>';
-      div.querySelector('.tname').textContent = t.name || '未命名任务';
+      div.innerHTML = '<span class="tname"></span><span class="tmenu" title="' + t('ui.rename_title') + '">⋯</span><span class="tdel" title="删除任务">×</span>';
+      div.querySelector('.tname').textContent = t.name || t('ui.unnamed_task');
       div.querySelector('.tname').addEventListener('click', () => switchTask(t.id));
       div.querySelector('.tmenu').addEventListener('click', e => { e.stopPropagation(); taskMenu(t, div); });
       div.querySelector('.tdel').addEventListener('click', e => { e.stopPropagation(); deleteTask(t, div); });
@@ -177,7 +181,7 @@ async function _loadTasksInner() {
       // F6：检查当前任务是否已被删除（不在最新列表中）
       const stillExists = tasks.some(t => t.id === currentTaskId);
       if (!stillExists && tasks.length > 0) {
-        setToast('⚠️ 当前任务已被删除，已切换到最近任务', '#d97706');
+        setToast(t('ui.toast.task_deleted'), '#d97706');
         switchTask(tasks[0].id);
       } else if (!stillExists) {
         // 当前任务被删且无其他任务 → 重置状态
@@ -194,14 +198,14 @@ async function _loadTasksInner() {
     } else {
       updateCatDisabled(); updateBadges(); updateControls();
     }
-  } catch (e) { console.error('[loadTasks] 失败:', e); setToast('⚠️ 任务列表加载失败，请刷新重试', '#d97706'); } }
+  } catch (e) { console.error('[loadTasks] 失败:', e); setToast(t('ui.toast.tasks_load_fail'), '#d97706'); } }
 
 // 空项目引导示例卡（新建任务/切到空任务时复用，保持与首屏一致）
-const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>商业建模助手</h2><p>输入你的项目参数，AI 会调用工具给出分析</p><div class="examples">' +
-  '<button class="example" data-q="开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析">📊 餐饮项目分析</button>' +
-  '<button class="example" data-q="做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析">💻 SaaS 模式评估</button>' +
-  '<button class="example" data-q="快速：奶茶店总投资50万，月租2万">⚡ 快速扫描</button>' +
-  '<button class="example" data-q="查一下 2024 年中国咖啡行业的毛利率和获客成本基准">🔍 行业基准</button>' +
+const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>' + t('ui.empty_title') + '</h2><p>' + t('ui.empty_desc') + '</p><div class="examples">' +
+  '<button class="example" data-q="开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析">' + t('ui.example_coffee') + '</button>' +
+  '<button class="example" data-q="做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析">' + t('ui.example_saas') + '</button>' +
+  '<button class="example" data-q="快速：奶茶店总投资50万，月租2万">' + t('ui.example_quick') + '</button>' +
+  '<button class="example" data-q="查一下 2024 年中国咖啡行业的毛利率和获客成本基准">' + t('ui.example_benchmark') + '</button>' +
   '</div></div>';
 
 function clearChat() {
@@ -218,7 +222,7 @@ async function newTask() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const t = await r.json(); currentTaskId = t.id; ok = true;
   } catch (e) { console.error('[newTask] 新建任务失败:', e); currentTaskId = null; }
-  if (!ok) { setToast('⚠️ 新建任务失败，请重试', '#d97706'); }
+  if (!ok) { setToast(t('ui.toast.new_task_fail'), '#d97706'); }
   clearChat(); activeTaskUi(); loadTasks(); input.focus();
 }
 
@@ -265,7 +269,7 @@ async function restoreTaskParams(id) {
 
 function taskMenu(t, div) {
   const tnameEl = div.querySelector('.tname');
-  const originalName = t.name || '未命名任务';
+  const originalName = t.name || t('ui.unnamed_task');
   // 创建行内输入框替换任务名显示
   const input = document.createElement('input');
   input.type = 'text';
@@ -309,9 +313,9 @@ function taskMenu(t, div) {
         restore();                                             // 先把 tnameEl 放回 DOM
         if (tnameEl.parentNode) tnameEl.textContent = clean;  // 立即更新显示，杜绝二次 loadTasks 竞态下的旧名闪烁
         loadTasks();
-        setToast('✅ 已改名：' + clean, '#059669');
+        setToast(t('ui.toast.renamed') + clean, '#059669');
       })
-      .catch(() => { restore(); setToast('⚠️ 改名失败，请重试', '#d97706'); });
+      .catch(() => { restore(); setToast(t('ui.toast.rename_fail'), '#d97706'); });
   };
 
   input.addEventListener('keydown', onKey);
@@ -328,7 +332,7 @@ async function deleteTask(t, div) {
   }
   // 首次点击 → 进入确认状态
   tdel.classList.add('confirming');
-  tdel.textContent = '确认?';
+  tdel.textContent = t('ui.confirm_delete');
   // 3 秒后自动取消确认状态
   tdel._cancelTimeout = setTimeout(() => resetDeleteButton(tdel), 3000);
 }
@@ -347,11 +351,11 @@ async function executeDelete(t, div) {
     delete tasksCache[t.id];
     // 统一调用 loadTasks 刷新列表（无论是否当前任务，保证 UI 与服务端一致）
     await loadTasks();
-    setToast('🗑️ 已删除：' + (t.name || '未命名'), '#666');
+    setToast(t('ui.toast.deleted') + (t.name || t('ui.unnamed_task')), '#666');
   } catch (e) {
     console.error('[executeDelete] 删除失败:', e);
     resetDeleteButton(tdel);
-    setToast('⚠️ 删除失败: ' + (e.message || '请重试'), '#d97706');
+    setToast(t('ui.toast.delete_fail') + (e.message || t('ui.toast.retry')), '#d97706');
   }
 }
 
@@ -444,8 +448,8 @@ function updateControls() {
   if (currentCat === 'decide') {
     decidePrompt.style.display = 'block';
     decideControls.style.display = 'flex';
-    if (!hasParams) decidePrompt.textContent = '先有一版参数';
-    else decidePrompt.textContent = '该不该继续？先验证什么？还能撑多久？';
+    if (!hasParams) decidePrompt.textContent = t('ui.decide_need_params');
+    else decidePrompt.textContent = t('ui.decide_prompt');
   }
   if (currentCat === 'compare' && hasParams) {
     compareControls.style.display = 'block';
@@ -472,7 +476,7 @@ function prefillCompare() {
     }
   }
   // 占位提示：vc 填百分比，其余填数值
-  ccValue.placeholder = (f === 'variable_cost_ratio') ? '百分比，如 40' : '数值';
+  ccValue.placeholder = (f === 'variable_cost_ratio') ? t('ui.percent_hint') : t('ui.number');
 }
 
 // F6：对比框输入变化时按字段保存草稿；字段切换即时刷新预填
@@ -487,11 +491,11 @@ function updateAnalyzeStatus() {
   const keys = ['monthly_rent', 'daily_traffic', 'price_per_unit'];
   const parts = [];
   keys.forEach(k => { if (lastParams[k] != null) parts.push(fieldLabel(k) + ' ' + formatVal(k, lastParams[k])); });
-  analyzeStatus.textContent = parts.length ? '当前参数：' + parts.join(' · ') : '参数已加载';
+  analyzeStatus.textContent = parts.length ? t('ui.toast.current_params') + parts.join(' · ') : t('ui.toast.params_loaded');
 }
 
 function renderParamFields() {
-  if (!lastParams) { pcFields.innerHTML = '<span class="empty-hint">先有一版参数</span>'; return; }
+  if (!lastParams) { pcFields.innerHTML = '<span class="empty-hint">' + t('ui.decide_need_params') + '</span>'; return; }
   const fields = ['total_investment', 'monthly_rent', 'daily_traffic', 'price_per_unit', 'employee_count', 'avg_salary', 'variable_cost_ratio'];
   let html = '';
   fields.forEach(f => {
@@ -502,7 +506,7 @@ function renderParamFields() {
       html += '<span class="pc-field"><label>' + fieldLabel(f) + '</label><input data-field="' + f + '" value="' + v + '"></span>';
     }
   });
-  if (!html) html = '<span class="empty-hint">暂无可改参数</span>';
+  if (!html) html = '<span class="empty-hint">' + t('ui.no_params_to_change') + '</span>';
   pcFields.innerHTML = html;
 }
 
@@ -523,7 +527,7 @@ pcRecalc.addEventListener('click', () => {
     const changed = origShown === null || v !== origShown;
     if (changed) { parts.push(fieldLabel(f) + '改为' + v); lastChanged = { field: f, value: v }; }
   });
-  if (parts.length === 0) { setToast('未检测到参数改动'); return; }
+  if (parts.length === 0) { setToast(t('ui.toast.no_param_change')); return; }
   pendingParamChange = lastChanged;   // F3：记录本次改参意图，响应后校验采纳
   input.value = parts.join('，'); drafts[currentCat] = input.value; send();
 });
@@ -710,7 +714,7 @@ function parseOpsFromContent(content) {
   return ops; }
 
 // ── 参数面板（只读化）──
-function clearParamsPanel() { paramsList.innerHTML = '<p style="color:#999;font-size:13px;padding:12px 0;">输入项目参数后这里会显示</p>'; }
+function clearParamsPanel() { paramsList.innerHTML = '<p style="color:#999;font-size:13px;padding:12px 0;">' + t('ui.params_placeholder') + '</p>'; }
 
 // ── 顾问面板 ──
 let _advisorVersion = null;
@@ -720,32 +724,32 @@ const advisorList = document.getElementById('advisor-list');
 function renderAdvisorPanel(data) {
   if (!advisorList) return;
   if (!data || !data.judgment) {
-    advisorList.innerHTML = '<div class="advisor-empty">暂无顾问建议，请先完善参数</div>';
+    advisorList.innerHTML = '<div class="advisor-empty">' + t('ui.advisor_none') + '</div>';
     return;
   }
-  let html = '<span class="advisor-tag">AI 建议 · 非计算引擎</span>';
+  let html = '<span class="advisor-tag">' + t('ui.advisor_tag') + '</span>';
   // 判断
   if (data.judgment) {
-    html += '<div class="advisor-section">当前判断</div>';
+    html += '<div class="advisor-section">' + t('ui.advisor_current') + '</div>';
     html += '<div class="advisor-judgment">' + escape(data.judgment) + '</div>';
   }
   // 风险
   if (data.risks && data.risks.length > 0) {
-    html += '<div class="advisor-section">风险提示</div>';
+    html += '<div class="advisor-section">' + t('ui.advisor_risk') + '</div>';
     data.risks.forEach(r => { html += '<div class="advisor-risk">' + escape(r.text || r) + '</div>'; });
   }
   // 建议动作
   if (data.actions && data.actions.length > 0) {
-    html += '<div class="advisor-section">建议动作</div>';
+    html += '<div class="advisor-section">' + t('ui.advisor_actions') + '</div>';
     data.actions.forEach((a, i) => {
       html += '<div class="advisor-action"><div class="advisor-action-text">' + escape(a.preview || '') + '</div>';
       html += '<div class="advisor-action-btns"><button class="advisor-preview" data-idx="' + i + '">预览</button>';
-      html += '<button class="advisor-apply act-btn apply" data-idx="' + i + '">应用</button></div></div>';
+      html += '<button class="advisor-apply act-btn apply" data-idx="' + i + '">' + t('ui.apply') + '</button></div></div>';
     });
   }
   // 依据
   if (data.judgment_citations && data.judgment_citations.length > 0) {
-    html += '<div class="advisor-section">依据</div>';
+    html += '<div class="advisor-section">' + t('ui.advisor_basis') + '</div>';
     data.judgment_citations.forEach(c => {
       html += '<div class="advisor-citation">' + escape(c.field) + ' = ' + c.value + ' ' + (c.source || '') + '</div>';
     });
@@ -766,10 +770,10 @@ function previewAdvisorAction(idx) {
   if (!op) return;
   fetch('/advisor/preview?tid=' + currentTaskId + '&op=' + encodeURIComponent(JSON.stringify(op)))
     .then(r => r.json()).then(d => {
-      if (d.ok) setToast('✅ 预览: ' + (d.preview || ''), '#059669');
-      else setToast('⚠️ ' + (d.reason || '预览失败'), '#d97706');
+      if (d.ok) setToast(t('ui.toast.preview_ok') + (d.preview || ''), '#059669');
+      else setToast('⚠️ ' + (d.reason || t('ui.preview_fail')), '#d97706');
     })
-    .catch(() => setToast('⚠️ 预览请求失败', '#d97706'));
+    .catch(() => setToast(t('ui.toast.preview_req_fail'), '#d97706'));
 }
 
 function applyAdvisorAction(idx) {
@@ -781,12 +785,12 @@ function applyAdvisorAction(idx) {
     body: JSON.stringify({ op: op }),
   }).then(r => r.json()).then(d => {
     if (d.ok && d.applied) {
-      setToast('✅ 已应用', '#059669');
+      setToast(t('ui.toast.applied'), '#059669');
       refreshAdvisor();
     } else {
-      setToast('⚠️ ' + (d.reason || '应用失败'), '#d97706');
+      setToast('⚠️ ' + (d.reason || t('ui.apply_fail')), '#d97706');
     }
-  }).catch(() => setToast('⚠️ 应用请求失败', '#d97706'));
+  }).catch(() => setToast(t('ui.toast.apply_req_fail'), '#d97706'));
 }
 
 let _advisorData = null;
@@ -803,7 +807,7 @@ function refreshAdvisor() {
       renderAdvisorPanel(d);
     })
     .catch(() => {
-      if (advisorList) advisorList.innerHTML = '<div class="advisor-empty">顾问暂时不可用</div>';
+      if (advisorList) advisorList.innerHTML = '<div class="advisor-empty">' + t('ui.advisor_unavailable') + '</div>';
     });
 }
 
@@ -828,7 +832,7 @@ function updateParamsPanel(params, paramSources, derived) {
   if (!params || Object.keys(params).length === 0) { clearParamsPanel(); return; }
   const inputFields = ['total_investment','monthly_rent','daily_traffic','price_per_unit','employee_count','avg_salary','variable_cost_ratio','labor_burden','utilities','packaging','commission','other_fixed'];
   let html = '';
-  html += '<div class="param-section">输入参数</div>';
+  html += '<div class="param-section">' + t('ui.input_params_section') + '</div>';
   inputFields.forEach(f => {
     if (params[f] !== undefined && params[f] !== null) {
       const src = (paramSources || {})[f] || '';
@@ -836,7 +840,7 @@ function updateParamsPanel(params, paramSources, derived) {
       let srcHtml = '';
       if (src) {
         const srcClass = src.startsWith('[用户]') ? 'psrc-user' : src.startsWith('[缺失]') ? 'psrc-missing' : 'psrc-derived';
-        const srcLabel = src.startsWith('[用户]') ? '用户' : src.startsWith('[缺失]') ? '缺失' : '推算';
+        const srcLabel = src.startsWith('[用户]') ? t('ui.src_user') : src.startsWith('[缺失]') ? t('ui.src_missing') : t('ui.src_derived');
         srcHtml = '<span class="psrc ' + srcClass + '">' + srcLabel + '</span>';
       }
       const hl = (f === recentlyUpdatedField) ? ' just-updated' : '';   // F3 变更高亮
@@ -846,9 +850,9 @@ function updateParamsPanel(params, paramSources, derived) {
   if (derived && derived.length > 0) {
     const okDerived = derived.filter(d => d.status === 'ok');
     const missDerived = derived.filter(d => d.status === 'missing');
-    if (okDerived.length > 0) { html += '<div class="param-section">精确推算</div>';
+    if (okDerived.length > 0) { html += '<div class="param-section">' + t('ui.derived_section') + '</div>';
       okDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span style="display:flex;align-items:center;gap:6px;"><span class="psrc psrc-derived">推算</span><span class="pval" style="color:#666;cursor:default;">' + formatNum(d.value) + ' ' + (d.unit||'') + '</span></span></div>'; }); }
-    if (missDerived.length > 0) { html += '<div class="param-section">缺失（补充即可算）</div>';
+    if (missDerived.length > 0) { html += '<div class="param-section">' + t('ui.missing_section') + '</div>';
       missDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span class="psrc psrc-missing">缺 ' + (d.missing||'') + '</span></div>'; }); }
   }
   paramsList.innerHTML = html;
@@ -870,16 +874,16 @@ function exportGuard() {
   const hasFixed = comps.some(k => p[k] != null);
   if (!hasRevenue || !hasVc || !hasFixed) {
     const missing = [];
-    if (!hasRevenue) missing.push('营收/客流');
-    if (!hasVc) missing.push('变动成本率');
-    if (!hasFixed) missing.push('固定成本');
-    setToast('⚠️ 参数不全（缺 ' + missing.join('、') + '），导出的模型不完整。先在对话里补齐。', '#d97706');
+    if (!hasRevenue) missing.push(t('ui.missing.revenue'));
+    if (!hasVc) missing.push(t('ui.missing.vc'));
+    if (!hasFixed) missing.push(t('ui.missing.fixed'));
+    setToast(t('ui.toast.export_incomplete', missing.join('、')), '#d97706');
     return true; // blocked
   }
   return false;
 }
-exportPdf.addEventListener('click', () => { if (exportGuard()) return; input.value = '生成PDF报告'; drafts[currentCat] = input.value; send(); });
-exportExcel.addEventListener('click', () => { if (exportGuard()) return; input.value = '生成Excel模型'; drafts[currentCat] = input.value; send(); });
+exportPdf.addEventListener('click', () => { if (exportGuard()) return; input.value = t('ui.gen_pdf'); drafts[currentCat] = input.value; send(); });
+exportExcel.addEventListener('click', () => { if (exportGuard()) return; input.value = t('ui.gen_excel'); drafts[currentCat] = input.value; send(); });
 
 // Module 5: 辅助函数 — validateParamAdoption（F3 改参校验）
 function validateParamAdoption(params, pending) {
@@ -898,10 +902,10 @@ function validateParamAdoption(params, pending) {
   const label = fieldLabel(pc.field);
   if (accepted) {
     recentlyUpdatedField = pc.field;
-    setToast('✅ ' + label + ' 已更新为 ' + pc.value, '#059669');
+    setToast(t('ui.toast.updated', label, pc.value), '#059669');
   } else {
     recentlyUpdatedField = null;
-    setToast('⚠️ ' + label + ' 未采纳（当前 ' + formatVal(pc.field, target) + '），请用「' + label + ' ' + pc.value + '%」重试', '#d97706');
+    setToast(t('ui.toast.not_adopted', label, formatVal(pc.field, target), pc.value), '#d97706');
   }
   return accepted;
 }
@@ -928,7 +932,7 @@ function addAdviceButton(el, adviceMeta, tid) {
   wrap.className = 'ai-advice-wrap';
   const btn = document.createElement('button');
   btn.className = 'act-btn advice-btn';
-  btn.textContent = '生成 AI 解读';
+  btn.textContent = t('ui.gen_advice');
   const statusEl = document.createElement('div');
   statusEl.className = 'ai-advice-status';
   wrap.appendChild(btn);
@@ -942,8 +946,8 @@ function addAdviceButton(el, adviceMeta, tid) {
 
   const runAdvice = () => {
     btn.disabled = true;
-    btn.textContent = '解读中…';
-    setStatus('正在生成解读，大约需要十几秒', 'loading');
+    btn.textContent = t('ui.interpreting');
+    setStatus(t('ui.interpreting_hint'), 'loading');
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort(), 45000);
     fetch('/analysis/advice', {
@@ -960,30 +964,30 @@ function addAdviceButton(el, adviceMeta, tid) {
       const st = (d && d.status) || 'error';
       if (st === 'ok' || (st === 'empty' && (d.text || d.ops_block))) {
         let html = '';
-        if (d.text) html += '<div class="ai-advice-text">' + renderMarkdown('💡 **AI 解读**\n\n' + d.text) + '</div>';
+        if (d.text) html += '<div class="ai-advice-text">' + renderMarkdown('💡 **AI Interpretation**\n\n' + d.text) + '</div>';
         if (d.ops_block) html += '<div class="ai-advice-ops">' + renderMarkdown(d.ops_block) + '</div>';
-        if (!html) html = '<em>暂无解读内容</em>';
+        if (!html) html = '<em>' + t('ui.no_advice') + '</em>';
         setStatus(html, 'ok');
-        btn.textContent = '已生成';
+        btn.textContent = t('ui.generated');
         if (d.ops_block) addActionButtons(el, d.ops_block);
         if (d.ops && d.ops.length) opsAvailable = true;
         updateBadges();
         return;
       }
       if (st === 'stale') {
-        setStatus(escape(d.reason || '参数已更新，请对最新结果重新生成解读'), 'stale');
-        btn.textContent = '已过期';
+        setStatus(escape(d.reason || t('ui.stale_advice')), 'stale');
+        btn.textContent = t('ui.expired');
         btn.disabled = true;
         return;
       }
-      setStatus(escape(d.reason || '解读失败，可重试'), st === 'timeout' ? 'timeout' : 'error');
+      setStatus(escape(d.reason || t('ui.advice_fail_retry')), st === 'timeout' ? 'timeout' : 'error');
       btn.disabled = false;
-      btn.textContent = '重试';
+      btn.textContent = t('ui.retry');
     }).catch(e => {
       const isTimeout = e && e.name === 'AbortError';
-      setStatus(isTimeout ? '解读超时，可重试' : '网络错误，可重试', isTimeout ? 'timeout' : 'error');
+      setStatus(isTimeout ? t('ui.advice_timeout') : t('ui.net_error_retry'), isTimeout ? 'timeout' : 'error');
       btn.disabled = false;
-      btn.textContent = '重试';
+      btn.textContent = t('ui.retry');
     }).finally(() => { clearTimeout(timeoutId); });
   };
   btn.addEventListener('click', runAdvice);
@@ -997,7 +1001,7 @@ async function send() {
   busy = true; sendBtn.disabled = true; input.disabled = true; input.value = ''; input.style.height = 'auto';
   drafts[currentCat] = '';  // 清当前分类草稿
   addMessage('user', text, false, 'all');  // 用户消息始终归类为「全部」，切换分类时仍可见
-  const placeholder = addMessage('assistant', '<span class="typing">思考中</span>', true, currentCat);
+  const placeholder = addMessage('assistant', '<span class="typing">' + t('ui.thinking') + '</span>', true, currentCat);
   placeholder.classList.add('streaming');
   // F8：60s 超时兜底——LLM 挂起时不再永久锁死输入框
   const ctrl = new AbortController();
@@ -1012,13 +1016,13 @@ async function send() {
       const err = await resp.text();
       if (sentTaskId !== currentTaskId) { placeholder.remove(); return; }  // 已切任务，丢弃
       placeholder.classList.remove('streaming');
-      setMsgBody(placeholder, '<em style="color:#dc2626">请求失败: ' + escape(err) + '</em>');
+      setMsgBody(placeholder, '<em style="color:#dc2626">' + t('ui.req_fail_prefix') + escape(err) + '</em>');
       input.value = text; drafts[currentCat] = text;   // F7：失败保草稿
       return;
     }
     const data = await resp.json();
     if (sentTaskId !== currentTaskId) { placeholder.remove(); return; }  // 已切任务，丢弃
-    setMsgBody(placeholder, renderMarkdown(data.content || '（无响应）'));
+    setMsgBody(placeholder, renderMarkdown(data.content || t('ui.no_response')));
     placeholder.classList.remove('streaming');
 
     // ── F3 改参采纳校验 ──
@@ -1072,7 +1076,7 @@ async function send() {
     if (sentTaskId !== currentTaskId) { placeholder.remove(); return; }  // 已切任务，丢弃
     placeholder.classList.remove('streaming');
     const isTimeout = (e && e.name === 'AbortError');
-    setMsgBody(placeholder, '<em style="color:#dc2626">' + (isTimeout ? '请求超时（60s），请重试' : '网络错误: ' + escape(e.message)) + '</em>');
+    setMsgBody(placeholder, '<em style="color:#dc2626">' + (isTimeout ? t('ui.req_timeout') : 'Network error: ' + escape(e.message)) + '</em>');
     input.value = text; drafts[currentCat] = text;   // F7：失败保草稿
   }
   finally { clearTimeout(timeoutId); if (activeCtrl === ctrl) activeCtrl = null; busy = false; sendBtn.disabled = false; input.disabled = false; input.focus(); }
