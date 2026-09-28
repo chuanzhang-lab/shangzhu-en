@@ -16,6 +16,8 @@ from typing import Optional
 
 import yaml
 
+from i18n import t
+
 _POLICY_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "config", "decision_policy.yaml",
@@ -90,13 +92,13 @@ def build_evidence(scan: dict, basis: dict = None) -> dict:
 # ── 缺关键事实 → 还不能定（G6 否决）─────────────────────────────────────
 
 _GAP_LABELS = {
-    "variable_cost_ratio": "变动成本率",
-    "daily_traffic": "日均客流",
-    "price_per_unit": "客单价",
-    "avg_salary": "人均薪资",
-    "employee_count": "员工人数",
-    "monthly_rent": "月租金",
-    "total_investment": "总投资",
+    "variable_cost_ratio": "de.gap.variable_cost_ratio",
+    "daily_traffic": "de.gap.daily_traffic",
+    "price_per_unit": "de.gap.price_per_unit",
+    "avg_salary": "de.gap.avg_salary",
+    "employee_count": "de.gap.employee_count",
+    "monthly_rent": "de.gap.monthly_rent",
+    "total_investment": "de.gap.total_investment",
 }
 
 
@@ -120,13 +122,13 @@ def _veto_for_type(ev: dict, decision_type: str, accepted_hypotheses: dict = Non
         gaps.append("variable_cost_ratio")
 
     gaps = list(dict.fromkeys(gaps))
-    labels = [_GAP_LABELS.get(g, g) for g in gaps]
+    labels = [t(_GAP_LABELS.get(g, g)) for g in gaps]
     if gaps:
         return {
             "verdict": "insufficient",
             "conclusion": {
-                "text": "现有数据还不足以给出确定性结论。",
-                "conditions": [f"补充：{lab}" for lab in labels],
+                "text": t("de.insufficient.text"),
+                "conditions": [t("de.insufficient.supplement", lab=lab) for lab in labels],
             },
             "gaps": labels,
             "options": [],
@@ -159,14 +161,14 @@ def _options_from_suggest(suggest_data: dict, current_params: dict, base_conf: d
     suggestions = suggest_data.get("suggestions") or []
     best_by_field: dict = {}
     label_map = {
-        "price_per_unit": "提价",
-        "monthly_fixed_cost": "削减固定成本",
-        "avg_salary": "优化人力成本",
-        "employee_count": "精简团队",
-        "variable_cost_ratio": "优化变动成本",
-        "daily_traffic": "提升客流",
-        "monthly_rent": "谈租金",
-        "other_fixed": "削减杂项",
+        "price_per_unit": "de.opt.price",
+        "monthly_fixed_cost": "de.opt.fixed_cost",
+        "avg_salary": "de.opt.avg_salary",
+        "employee_count": "de.opt.employee_count",
+        "variable_cost_ratio": "de.opt.variable_cost",
+        "daily_traffic": "de.opt.traffic",
+        "monthly_rent": "de.opt.rent",
+        "other_fixed": "de.opt.other_fixed",
     }
     for s in suggestions:
         field = s.get("target_param")
@@ -175,7 +177,7 @@ def _options_from_suggest(suggest_data: dict, current_params: dict, base_conf: d
         op = {
             "propose": "set", "field": field, "value": s.get("suggested"),
             "changes": {field: s.get("suggested")},
-            "label": label_map.get(field, field),
+            "label": t(label_map.get(field, field)),
             "_delta": s.get("expected_profit_delta", 0),
         }
         from op_executor import validate_op
@@ -302,7 +304,7 @@ def recommend_first_validation(ev: dict, accepted: dict = None) -> dict:
     candidates.sort(key=lambda t: t[0], reverse=True)
     if not candidates:
         return {
-            "what": "关键参数均由你提供，暂无明显需优先验证的假设",
+            "what": t("de.first_validation.none"),
             "min_experiment": "",
             "watch_metric": "",
         }
@@ -312,21 +314,21 @@ def recommend_first_validation(ev: dict, accepted: dict = None) -> dict:
 
 def _experiment_for(field: str, cur, kind: str) -> dict:
     exp = {
-        "daily_traffic": ("客流", "连续 7 天记录实际到店客流，对比预估", "日均客流"),
-        "price_per_unit": ("客单价", "限时 3 天小幅度提价（如 0.5 元），观察订单量变化", "降价 0.5 → 订单变动"),
-        "variable_cost_ratio": ("变动成本率", "复盘近一个月进货/食材成本占比", "实际变动成本率"),
-        "avg_salary": ("人工成本", "核对薪资结构与非必要加班", "真实人均薪资"),
-        "monthly_rent": ("租金", "与房东谈 3 个月免租期或降租", "续约租金"),
+        "daily_traffic": ("de.exp.traffic_what", "de.exp.traffic_exp", "de.exp.traffic_watch"),
+        "price_per_unit": ("de.exp.price_what", "de.exp.price_exp", "de.exp.price_watch"),
+        "variable_cost_ratio": ("de.exp.vcr_what", "de.exp.vcr_exp", "de.exp.vcr_watch"),
+        "avg_salary": ("de.exp.labor_what", "de.exp.labor_exp", "de.exp.labor_watch"),
+        "monthly_rent": ("de.exp.rent_what", "de.exp.rent_exp", "de.exp.rent_watch"),
     }.get(field)
     if not exp:
         return {
-            "what": f"核实「{field}」当前假设（{kind}）",
-            "min_experiment": f"记录真实 {field}，与假设对比",
+            "what": t("de.exp.verify_what", field=field, kind=kind),
+            "min_experiment": t("de.exp.verify_exp", field=field),
             "watch_metric": field,
         }
     what, exp_, watch = exp
-    return {"what": f"先验证一件事：{what}（当前为{'假设/缺失' if kind!='用户' else '推算'}）",
-            "min_experiment": exp_, "watch_metric": watch}
+    return {"what": t("de.exp.first", what=t(what), kind=("假设/缺失" if kind != "用户" else "推算")),
+            "min_experiment": t(exp_), "watch_metric": t(watch)}
 
 
 # ── 主入口 ──────────────────────────────────────────────────────────────
@@ -408,44 +410,44 @@ def decide(
         traffic = current_params.get("daily_traffic")
         parts = []
         if profit is not None:
-            parts.append(f"在当前数据下月利润 {profit:,.0f} 元")
+            parts.append(t("de.decide.profit", profit=f"{profit:,.0f}"))
         if dbe is not None and isinstance(traffic, (int, float)):
             gap = dbe - traffic
             # D8：用用户口中的量词（碗/杯/份），不要写死「杯/天」。
             _tu = current_params.get("_traffic_unit") or "杯"
-            state = "高于盈亏平衡客流" if gap <= 0 else f"离盈亏平衡客流还差 {gap:.0f} {_tu}/天"
+            state = t("de.decide.above_be") if gap <= 0 else t("de.decide.be_gap", gap=f"{gap:.0f}", unit=_tu)
             parts.append(state)
         if rw is not None and isinstance(rw, (int, float)):
-            parts.append(f"现金跑道 {rw:.1f} 个月")
+            parts.append(t("de.decide.runway", rw=f"{rw:.1f}"))
         elif rw == "无限":
-            parts.append("现金流已转正（跑道无限）")
+            parts.append(t("de.decide.runway_infinite"))
         conclusion["text"] = "；".join(parts) + "。"
         conclusion["conditions"] = [
-            "这些数字基于上面全部参数；任何一条假设变化都会影响结论"
+            t("de.decide.based_on_params")
         ]
     elif decision_type in ("go_no_go", "continue_stop"):
-        conclusion["text"] = "数据尚不完整，先补充缺口再判断。"
-        conclusion["conditions"] = ["补充上述缺失项"]
+        conclusion["text"] = t("de.decide.incomplete")
+        conclusion["conditions"] = [t("de.decide.fill_gaps")]
     elif decision_type == "runway":
         # 档 C：消费现金流明细（归零月 + 累计缺口）——客观陈述，无倾向
         cf = cashflow_data or {}
         zc = cf.get("zero_cash_month")
         ms = cf.get("max_shortfall")
         if cf.get("insufficient"):
-            conclusion["text"] = "现金流明细尚不能定（期初现金或月营收未提供）。"
-            conclusion["conditions"] = [f"补充：{g}" for g in (cf.get("gaps") or [])]
+            conclusion["text"] = t("de.decide.cf_incomplete")
+            conclusion["conditions"] = [t("de.insufficient.supplement", lab=g) for g in (cf.get("gaps") or [])]
         elif zc is not None:
             conclusion["text"] = (
-                f"在无外部注资下，现金约在第 **{zc} 个月**耗尽"
-                + (f"；届时累计缺口约 **{ms:,.0f} 元**" if ms is not None else "")
+                t("de.decide.cf_exhaust", zc=zc)
+                + (t("de.decide.cf_shortfall", ms=f"{ms:,.0f}") if ms is not None else "")
                 + "。"
             )
             conclusion["conditions"] = [
-                "以上基于期初现金（总投资推导）与逐月收支；一次性大额/到账延迟/支付节奏已计入",
+                t("de.decide.cf_basis"),
             ]
         else:
-            conclusion["text"] = "按当前输入，12 个月内现金未耗尽。"
-            conclusion["conditions"] = ["若营收/支出假设变化，结论会动"]
+            conclusion["text"] = t("de.decide.cf_survives")
+            conclusion["conditions"] = [t("de.decide.cf_changes")]
     return {
         "type": decision_type,
         "confidence": confidence,
@@ -463,9 +465,9 @@ def render_decision(decision_result: dict) -> str:
     """把结构化 decision_result 渲染成 Markdown。LLM 可在此基础上讲人话，规则层保证结构。"""
     from op_executor import parse_apply_command  # noqa: F401 防未使用
     lines = []
-    t = decision_result["type"]
+    dtype = decision_result["type"]
     if decision_result.get("confidence") == "insufficient":
-        lines.append("### 📌 还不能定")
+        lines.append(t("de.render.undecided"))
         lines.append("")
         lines.append(decision_result["conclusion"]["text"])
         for c in decision_result["conclusion"].get("conditions", []):
@@ -475,43 +477,42 @@ def render_decision(decision_result: dict) -> str:
     meta = decision_result.get("_meta") or {}
     conclusion = decision_result.get("conclusion")
     if conclusion and conclusion.get("text"):
-        lines.append("### 📐 客观结论（无倾向，由你拍板）")
+        lines.append(t("de.render.objective"))
         lines.append(conclusion["text"])
         for c in conclusion.get("conditions", []):
             lines.append(f"  - {c}")
         lines.append("")
     fv = decision_result.get("recommended_first_validation") or {}
     # validate_first 类：验证建议是主输出，置顶呈现
-    if t == "validate_first" and fv and fv.get("what"):
-        lines.append("🔬 **先验证一件事**")
+    if dtype == "validate_first" and fv and fv.get("what"):
+        lines.append(t("de.render.validate_first"))
         lines.append(f"- {fv.get('what')}")
         if fv.get("min_experiment"):
-            lines.append(f"- 最小实验：{fv.get('min_experiment')}")
+            lines.append(t("de.render.min_exp", exp=fv.get("min_experiment")))
         if fv.get("watch_metric"):
-            lines.append(f"- 看什么指标：{fv.get('watch_metric')}")
+            lines.append(t("de.render.watch", metric=fv.get("watch_metric")))
         lines.append("")
-    if decision_result["options"] and t != "validate_first":
-        lines.append(f"### 🛠 候选调整（引擎回算口径）")
-        lines.append("每项都可独立执行，改动互斥；回复「**应用A/B/C**」执行其一（LLM 不直接改）。")
+    if decision_result["options"] and dtype != "validate_first":
+        lines.append(t("de.render.candidates"))
+        lines.append(t("de.render.mutually_exclusive"))
         lines.append("")
         for i, o in enumerate(decision_result["options"]):
             tag = "ABCD"[i]
             chg = "、".join(f"{k}={v}" for k, v in o["changes"].items())
-            rev = "可逆" if o.get("reversible") else "需谨慎（难回退）"
+            rev = t("de.render.reversible") if o.get("reversible") else t("de.render.hard_to_revert")
             lines.append(
-                f"- **{tag}** {o['label']}（{chg}）"
-                f" ｜ 预估月利润变化 **{o.get('_delta', 0):+,g} 元**"
-                f" ｜ {rev}")
+                t("de.render.option_line", tag=tag, label=o['label'], chg=chg,
+                  delta=f"{o.get('_delta', 0):+,g}", rev=rev))
         lines.append("")
     fv = decision_result.get("recommended_first_validation") or {}
     # validate_first 已是主输出（置顶🔬），底部不重复
-    if fv and fv.get("what") and t != "validate_first":
-        lines.append("🔬 **一次性建议**（非自动跟踪）")
-        lines.append(f"- 先验证：{fv.get('what')}")
+    if fv and fv.get("what") and dtype != "validate_first":
+        lines.append(t("de.render.one_shot"))
+        lines.append(t("de.render.validate_line", what=fv.get("what")))
         if fv.get("min_experiment"):
-            lines.append(f"- 最小实验：{fv.get('min_experiment')}")
+            lines.append(t("de.render.min_exp", exp=fv.get("min_experiment")))
         if fv.get("watch_metric"):
-            lines.append(f"- 看什么指标：{fv.get('watch_metric')}")
+            lines.append(t("de.render.watch", metric=fv.get("watch_metric")))
     return "\n".join(lines)
 
 

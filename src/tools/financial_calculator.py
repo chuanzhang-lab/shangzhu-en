@@ -9,6 +9,8 @@ import json
 from typing import Optional
 from langchain.tools import tool
 
+from i18n import t
+
 
 # ─── 公共计算函数（非 tool，可被多个 tool 复用）─────────────────────────────
 
@@ -62,7 +64,7 @@ def calculate_npv(
     try:
         cashflows: list[float] = json.loads(cashflows_json)
         if not cashflows:
-            return json.dumps({"error": "现金流数组不能为空"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.common.empty_cashflows")}, ensure_ascii=False)
 
         rate = rate_percent / 100.0
 
@@ -74,7 +76,7 @@ def calculate_npv(
         npv_val = round(_npv_raw(rate, flows), 2)
         pv_details = [round(cf * _discount(rate, t), 2) for t, cf in enumerate(flows)]
 
-        interpretation = "项目值得投资" if npv_val > 0 else ("项目不创造价值" if npv_val < 0 else "项目刚好保本")
+        interpretation = t("fc.npv.worth") if npv_val > 0 else (t("fc.npv.no_value") if npv_val < 0 else t("fc.npv.breakeven"))
 
         return json.dumps({
             "npv": npv_val,
@@ -83,13 +85,13 @@ def calculate_npv(
             "present_values": pv_details,
             "cashflows": flows,
             "interpretation": interpretation,
-            "note": "NPV > 0 表示项目创造价值；NPV < 0 表示项目可能亏损；NPV = 0 表示刚好保本"
+            "note": t("fc.npv.note")
         }, ensure_ascii=False, indent=2)
 
     except json.JSONDecodeError:
-        return json.dumps({"error": "cashflows_json 格式错误，需要合法的 JSON 数组"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.bad_cashflows_json")}, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 # ─── 公共纯函数（供 Workflow Engine 调用，非 @tool）────────────────────────
@@ -101,7 +103,7 @@ def _calc_breakeven(
 ) -> dict:
     """返回纯 dict 的盈亏平衡计算"""
     if price_per_unit <= variable_cost_per_unit:
-        return {"error": "售价必须大于变动成本"}
+        return {"error": t("fc.be.must_gt")}
     cm = price_per_unit - variable_cost_per_unit
     bu = fixed_costs / cm
     br = bu * price_per_unit
@@ -121,7 +123,7 @@ def _calc_runway(
     """返回纯 dict 的跑道计算"""
     if current_cash is None:
         return {"runway_months": None, "net_monthly_burn": None,
-                "note": "现金缺失，跑道无法计算"}
+                "note": t("fc.runway.cash_missing")}
     net_burn = monthly_burn_rate - monthly_revenue
     if net_burn <= 0:
         return {"runway_months": "无限", "net_monthly_burn": net_burn, "congratulations": True}
@@ -134,7 +136,7 @@ def _calc_unit_economics(
 ) -> dict:
     """返回纯 dict 的单位经济学"""
     if cac <= 0:
-        return {"error": "CAC 必须大于 0"}
+        return {"error": t("fc.ue.cac_gt0")}
     ratio = round(ltv / cac, 2)
     adj_ratio = round((ltv * gross_margin_percent / 100) / cac, 2)
     return {
@@ -142,7 +144,7 @@ def _calc_unit_economics(
         "adjusted_ratio": adj_ratio,
         "ltv": ltv,
         "cac": cac,
-        "health": "健康" if ratio >= 3 else ("可接受" if ratio >= 1 else "危险"),
+        "health": t("fc.ue.healthy") if ratio >= 3 else (t("fc.ue.acceptable") if ratio >= 1 else t("fc.ue.danger")),
     }
 
 
@@ -204,11 +206,11 @@ def _calc_sensitivity(
             p = round(rev - cost, 2)
             # 命名三个关键场景
             if rp == -revenue_range_percent and cp == cost_range_percent:
-                label = "悲观"
+                label = t("fc.sens.pessimistic")
             elif rp == 0 and cp == 0:
-                label = "中性"
+                label = t("fc.sens.neutral")
             elif rp == revenue_range_percent and cp == -cost_range_percent:
-                label = "乐观"
+                label = t("fc.sens.optimistic")
             else:
                 label = None
             scenario = {
@@ -228,7 +230,7 @@ def _calc_sensitivity(
         "worst_profit": min_p,
         "best_profit": max_p,
         "profit_range": round(max_p - min_p, 2),
-        "note": "变动成本随营收同比例变动，固定成本独立波动（边际贡献口径）",
+        "note": t("fc.sens.note"),
     }
 
 
@@ -263,9 +265,9 @@ def _calc_cashflow_schedule(
     """
     gaps = []
     if opening_cash is None:
-        gaps.append("期初现金（总投资未提供则不可算）")
+        gaps.append(t("fc.cashflow.opening_cash"))
     if monthly_revenue is None:
-        gaps.append("月营收")
+        gaps.append(t("fc.cashflow.revenue"))
     if gaps:
         return {
             "schedule": [], "zero_cash_month": None, "max_shortfall": None,
@@ -357,7 +359,7 @@ def calculate_irr(cashflows_json: str, initial_investment: Optional[float] = Non
     try:
         cashflows: list[float] = json.loads(cashflows_json)
         if not cashflows:
-            return json.dumps({"error": "现金流数组不能为空"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.common.empty_cashflows")}, ensure_ascii=False)
 
         flows = cashflows[:]
         if initial_investment is not None and initial_investment > 0:
@@ -365,15 +367,15 @@ def calculate_irr(cashflows_json: str, initial_investment: Optional[float] = Non
 
         irr_val = _irr_raw(flows)
         if irr_val is None:
-            return json.dumps({"error": "无法计算 IRR，请检查现金流是否合理"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.irr.unconverged")}, ensure_ascii=False)
 
         irr_percent = round(irr_val * 100, 2)
 
         interpretation = (
-            "收益率优秀" if irr_percent > 25 else
-            "收益率良好" if irr_percent > 15 else
-            "收益率一般" if irr_percent > 8 else
-            "收益率偏低"
+            t("fc.irr.excellent") if irr_percent > 25 else
+            t("fc.irr.good") if irr_percent > 15 else
+            t("fc.irr.fair") if irr_percent > 8 else
+            t("fc.irr.low")
         )
 
         return json.dumps({
@@ -382,13 +384,13 @@ def calculate_irr(cashflows_json: str, initial_investment: Optional[float] = Non
             "periods": len(flows),
             "cashflows": flows,
             "interpretation": interpretation,
-            "note": "IRR 越高越好；如果 IRR > 折现率（通常 8-12%），项目有投资价值"
+            "note": t("fc.irr.note")
         }, ensure_ascii=False, indent=2)
 
     except json.JSONDecodeError:
-        return json.dumps({"error": "cashflows_json 格式错误，需要合法的 JSON 数组"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.bad_cashflows_json")}, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -404,17 +406,17 @@ def calculate_roi(total_return: float, total_investment: float) -> str:
     """
     try:
         if total_investment <= 0:
-            return json.dumps({"error": "总投资必须大于 0"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.roi.invest_gt0")}, ensure_ascii=False)
 
         roi_val = ((total_return - total_investment) / total_investment) * 100
         roi_val = round(roi_val, 2)
 
         interpretation = (
-            "回报率非常优秀" if roi_val > 100 else
-            "回报率良好" if roi_val > 50 else
-            "回报率尚可" if roi_val > 20 else
-            "回报率一般" if roi_val > 0 else
-            "亏损"
+            t("fc.roi.excellent") if roi_val > 100 else
+            t("fc.roi.good") if roi_val > 50 else
+            t("fc.roi.fair") if roi_val > 20 else
+            t("fc.roi.poor") if roi_val > 0 else
+            t("fc.roi.loss")
         )
 
         return json.dumps({
@@ -426,7 +428,7 @@ def calculate_roi(total_return: float, total_investment: float) -> str:
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -448,8 +450,8 @@ def calculate_breakeven(
     try:
         if price_per_unit <= variable_cost_per_unit:
             return json.dumps({
-                "error": "售价必须大于变动成本，否则永远无法盈利",
-                "suggestion": f"当前售价 {price_per_unit} ≤ 变动成本 {variable_cost_per_unit}，每卖一单都在亏钱。请提高售价或降低变动成本。"
+                "error": t("fc.be.must_gt_full"),
+                "suggestion": t("fc.be.suggestion", price=price_per_unit, vc=variable_cost_per_unit)
             }, ensure_ascii=False)
 
         contribution_margin = price_per_unit - variable_cost_per_unit
@@ -462,12 +464,12 @@ def calculate_breakeven(
             "breakeven_revenue": round(breakeven_revenue, 2),
             "contribution_margin_per_unit": round(contribution_margin, 2),
             "contribution_margin_ratio": f"{round(contribution_margin_ratio, 1)}%",
-            "formula": f"盈亏平衡点 = 固定成本 / (售价 - 变动成本) = {fixed_costs} / ({price_per_unit} - {variable_cost_per_unit})",
-            "interpretation": f"需要卖出约 {round(breakeven_units, 0)} 单位，或实现收入 {round(breakeven_revenue, 2)} 元才能保本。"
+            "formula": t("fc.be.formula", fc=fixed_costs, price=price_per_unit, vc=variable_cost_per_unit),
+            "interpretation": t("fc.be.interpretation", units=round(breakeven_units, 0), revenue=round(breakeven_revenue, 2))
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -488,7 +490,7 @@ def calculate_unit_economics(
     """
     try:
         if customer_acquisition_cost <= 0:
-            return json.dumps({"error": "获客成本必须大于 0"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.ue.acquisition_gt0")}, ensure_ascii=False)
 
         ltv_cac_ratio = round(customer_lifetime_value / customer_acquisition_cost, 2)
         gross_margin_adjusted_ltv = customer_lifetime_value * (gross_margin_percent / 100)
@@ -496,21 +498,21 @@ def calculate_unit_economics(
 
         # 判断
         if ltv_cac_ratio >= 3:
-            health = "健康"
-            detail = "LTV/CAC ≥ 3，获客效率优秀，可以加大投入。"
+            health = t("fc.ue.healthy")
+            detail = t("fc.ue.detail_healthy")
         elif ltv_cac_ratio >= 1:
-            health = "可接受"
-            detail = "LTV/CAC 在 1-3 之间，获客效率尚可但需持续优化。"
+            health = t("fc.ue.acceptable")
+            detail = t("fc.ue.detail_acceptable")
         else:
-            health = "危险"
-            detail = "LTV/CAC < 1，每获取一个客户都在亏损。必须降低 CAC 或提高 LTV。"
+            health = t("fc.ue.danger")
+            detail = t("fc.ue.detail_danger")
 
         # 陷阱预警
         warnings = []
         if customer_acquisition_cost > customer_lifetime_value * 0.5:
-            warnings.append(f"CAC ({customer_acquisition_cost}) 占 LTV ({customer_lifetime_value}) 比例过高，回本周期可能太长。")
+            warnings.append(t("fc.ue.warn_cac_ratio", cac=customer_acquisition_cost, ltv=customer_lifetime_value))
         if gross_margin_percent < 40:
-            warnings.append(f"毛利率仅 {gross_margin_percent}%，留给获客的空间非常有限。")
+            warnings.append(t("fc.ue.warn_gm", gm=gross_margin_percent))
 
         result = {
             "ltv_cac_ratio": ltv_cac_ratio,
@@ -520,7 +522,7 @@ def calculate_unit_economics(
             "gross_margin": f"{gross_margin_percent}%",
             "health": health,
             "detail": detail,
-            "benchmark": "SaaS 行业建议 LTV/CAC ≥ 3；一般行业建议 ≥ 1.5",
+            "benchmark": t("fc.ue.benchmark"),
         }
 
         if warnings:
@@ -529,7 +531,7 @@ def calculate_unit_economics(
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -550,30 +552,30 @@ def calculate_runway(
     """
     try:
         if current_cash is None:
-            return json.dumps({"runway_months": None, "note": "现金缺失，跑道无法计算"},
+            return json.dumps({"runway_months": None, "note": t("fc.runway.cash_missing")},
                                ensure_ascii=False, indent=2)
         net_burn = monthly_burn_rate - monthly_revenue
         if net_burn <= 0:
             return json.dumps({
                 "runway_months": "无限",
                 "net_monthly_burn": net_burn,
-                "interpretation": "公司已实现现金流为正，不需要额外融资。",
+                "interpretation": t("fc.runway.positive"),
                 "congratulations": True
             }, ensure_ascii=False, indent=2)
 
         runway = round(current_cash / net_burn, 1)
 
         if runway > 18:
-            advice = "跑道充足，可以按计划推进。"
+            advice = t("fc.runway.advice_plenty")
             urgency = "low"
         elif runway > 12:
-            advice = "跑道尚可，建议 6 个月后启动下一轮融资。"
+            advice = t("fc.runway.advice_ok")
             urgency = "medium"
         elif runway > 6:
-            advice = "跑道偏紧，建议立即启动融资或削减支出。"
+            advice = t("fc.runway.advice_tight")
             urgency = "high"
         else:
-            advice = "🚨 跑道不足 6 个月！必须立即采取行动：削减成本、加速收入或紧急融资。"
+            advice = t("fc.runway.advice_critical")
             urgency = "critical"
 
         return json.dumps({
@@ -584,11 +586,11 @@ def calculate_runway(
             "net_monthly_burn": round(net_burn, 2),
             "advice": advice,
             "urgency": urgency,
-            "note": f"按当前净消耗 {round(net_burn, 2)} 元/月，现金将在约 {runway} 个月后耗尽。"
+            "note": t("fc.runway.note", burn=round(net_burn, 2), months=runway)
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -611,7 +613,7 @@ def build_revenue_projection(
     """
     try:
         if months <= 0 or months > 60:
-            return json.dumps({"error": "预测月数需在 1-60 之间"}, ensure_ascii=False)
+            return json.dumps({"error": t("fc.proj.months_range")}, ensure_ascii=False)
 
         growth_rate = monthly_growth_rate_percent / 100.0
         churn_rate = churn_rate_percent / 100.0
@@ -642,11 +644,11 @@ def build_revenue_projection(
             "total_revenue": total,
             "growth_multiple": f"{growth_multiple}x",
             "monthly_detail": projections,
-            "note": "此预测基于恒定增长率，实际增长通常会逐渐放缓。建议同时做乐观/中性/悲观三种情景。"
+            "note": t("fc.proj.note")
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -680,11 +682,11 @@ def build_cost_structure(
         # 风险检测
         warnings = []
         if total_fixed > projected_revenue * 0.7:
-            warnings.append(f"固定成本占总成本比例过高 ({round(total_fixed/total_cost*100,1)}%)，收入下降时风险很大。")
+            warnings.append(t("fc.cs.warn_fixed_ratio", ratio=round(total_fixed/total_cost*100, 1)))
         if net_margin < 10:
-            warnings.append(f"净利润率仅 {net_margin}%，抗风险能力较弱。")
+            warnings.append(t("fc.cs.warn_net_margin", nm=net_margin))
         if gross_margin < 30:
-            warnings.append(f"毛利率仅 {gross_margin}%，留给运营和获客的空间非常有限。")
+            warnings.append(t("fc.cs.warn_gross_margin", gm=gross_margin))
 
         result = {
             "total_fixed_cost": total_fixed,
@@ -706,11 +708,11 @@ def build_cost_structure(
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except json.JSONDecodeError:
-        return json.dumps({"error": "JSON 格式错误，请检查 fixed_costs_json 和 variable_costs_json"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.cs.bad_json")}, ensure_ascii=False)
     except KeyError as e:
-        return json.dumps({"error": f"缺少必要字段: {e}，每项需要 name 和 amount"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.cs.missing_field", e=e)}, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
 @tool
@@ -766,10 +768,10 @@ def sensitivity_analysis(
                 })
                 if profit < min_profit:
                     min_profit = profit
-                    worst_case = f"营收{round(rev_pct,1)}% / 固定成本{round(fix_pct,1)}%"
+                    worst_case = t("fc.sens.scenario", rev=round(rev_pct,1), fix=round(fix_pct,1))
                 if profit > max_profit:
                     max_profit = profit
-                    best_case = f"营收{round(rev_pct,1)}% / 固定成本{round(fix_pct,1)}%"
+                    best_case = t("fc.sens.scenario", rev=round(rev_pct,1), fix=round(fix_pct,1))
             matrix.append(row)
 
         return json.dumps({
@@ -782,8 +784,8 @@ def sensitivity_analysis(
             "worst_case": {"profit": min_profit, "scenario": worst_case},
             "best_case": {"profit": max_profit, "scenario": best_case},
             "profit_range": round(max_profit - min_profit, 2),
-            "note": "变动成本随营收同比例变动，固定成本独立波动（边际贡献口径）。利润范围越大风险越高。"
+            "note": t("fc.sens.note_full")
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"计算失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)

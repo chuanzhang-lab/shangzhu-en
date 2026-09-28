@@ -428,3 +428,173 @@ wf:
     one_time: "含 {n} 笔一次性大额支出"
   common:
     unknown: 未知
+
+fc:
+  common:
+    empty_cashflows: 现金流数组不能为空
+    bad_cashflows_json: cashflows_json 格式错误，需要合法的 JSON 数组
+    calc_fail: "计算失败: {e}"
+  npv:
+    worth: 项目值得投资
+    no_value: 项目不创造价值
+    breakeven: 项目刚好保本
+    note: NPV > 0 表示项目创造价值；NPV < 0 表示项目可能亏损；NPV = 0 表示刚好保本
+  be:
+    must_gt: 售价必须大于变动成本
+    must_gt_full: 售价必须大于变动成本，否则永远无法盈利
+    suggestion: "当前售价 {price} ≤ 变动成本 {vc}，每卖一单都在亏钱。请提高售价或降低变动成本。"
+    formula: "盈亏平衡点 = 固定成本 / (售价 - 变动成本) = {fc} / ({price} - {vc})"
+    interpretation: "需要卖出约 {units} 单位，或实现收入 {revenue} 元才能保本。"
+  runway:
+    cash_missing: 现金缺失，跑道无法计算
+    positive: 公司已实现现金流为正，不需要额外融资。
+    advice_plenty: 跑道充足，可以按计划推进。
+    advice_ok: 跑道尚可，建议 6 个月后启动下一轮融资。
+    advice_tight: 跑道偏紧，建议立即启动融资或削减支出。
+    advice_critical: 🚨 跑道不足 6 个月！必须立即采取行动：削减成本、加速收入或紧急融资。
+    note: "按当前净消耗 {burn} 元/月，现金将在约 {months} 个月后耗尽。"
+  ue:
+    cac_gt0: CAC 必须大于 0
+    acquisition_gt0: 获客成本必须大于 0
+    healthy: 健康
+    acceptable: 可接受
+    danger: 危险
+    detail_healthy: LTV/CAC ≥ 3，获客效率优秀，可以加大投入。
+    detail_acceptable: LTV/CAC 在 1-3 之间，获客效率尚可但需持续优化。
+    detail_danger: LTV/CAC < 1，每获取一个客户都在亏损。必须降低 CAC 或提高 LTV。
+    warn_cac_ratio: "CAC ({cac}) 占 LTV ({ltv}) 比例过高，回本周期可能太长。"
+    warn_gm: "毛利率仅 {gm}%，留给获客的空间非常有限。"
+    benchmark: SaaS 行业建议 LTV/CAC ≥ 3；一般行业建议 ≥ 1.5
+  sens:
+    pessimistic: 悲观
+    neutral: 中性
+    optimistic: 乐观
+    note: 变动成本随营收同比例变动，固定成本独立波动（边际贡献口径）
+    note_full: 变动成本随营收同比例变动，固定成本独立波动（边际贡献口径）。利润范围越大风险越高。
+    scenario: "营收{rev}% / 固定成本{fix}%"
+  cashflow:
+    opening_cash: 期初现金（总投资未提供则不可算）
+    revenue: 月营收
+  irr:
+    unconverged: 无法计算 IRR，请检查现金流是否合理
+    excellent: 收益率优秀
+    good: 收益率良好
+    fair: 收益率一般
+    low: 收益率偏低
+    note: IRR 越高越好；如果 IRR > 折现率（通常 8-12%），项目有投资价值
+  roi:
+    invest_gt0: 总投资必须大于 0
+    excellent: 回报率非常优秀
+    good: 回报率良好
+    fair: 回报率尚可
+    poor: 回报率一般
+    loss: 亏损
+  proj:
+    months_range: 预测月数需在 1-60 之间
+    note: 此预测基于恒定增长率，实际增长通常会逐渐放缓。建议同时做乐观/中性/悲观三种情景。
+  cs:
+    warn_fixed_ratio: "固定成本占总成本比例过高 ({ratio}%)，收入下降时风险很大。"
+    warn_net_margin: "净利润率仅 {nm}%，抗风险能力较弱。"
+    warn_gross_margin: "毛利率仅 {gm}%，留给运营和获客的空间非常有限。"
+    bad_json: JSON 格式错误，请检查 fixed_costs_json 和 variable_costs_json
+    missing_field: "缺少必要字段: {e}，每项需要 name 和 amount"
+de:
+  gap:
+    variable_cost_ratio: 变动成本率
+    daily_traffic: 日均客流
+    price_per_unit: 客单价
+    avg_salary: 人均薪资
+    employee_count: 员工人数
+    monthly_rent: 月租金
+    total_investment: 总投资
+  insufficient:
+    text: 现有数据还不足以给出确定性结论。
+    supplement: "补充：{lab}"
+  opt:
+    price: 提价
+    fixed_cost: 削减固定成本
+    avg_salary: 优化人力成本
+    employee_count: 精简团队
+    variable_cost: 优化变动成本
+    traffic: 提升客流
+    rent: 谈租金
+    other_fixed: 削减杂项
+  exp:
+    traffic_what: 客流
+    traffic_exp: 连续 7 天记录实际到店客流，对比预估
+    traffic_watch: 日均客流
+    price_what: 客单价
+    price_exp: 限时 3 天小幅度提价（如 0.5 元），观察订单量变化
+    price_watch: 降价 0.5 → 订单变动
+    vcr_what: 变动成本率
+    vcr_exp: 复盘近一个月进货/食材成本占比
+    vcr_watch: 实际变动成本率
+    labor_what: 人工成本
+    labor_exp: 核对薪资结构与非必要加班
+    labor_watch: 真实人均薪资
+    rent_what: 租金
+    rent_exp: 与房东谈 3 个月免租期或降租
+    rent_watch: 续约租金
+    verify_what: "核实「{field}」当前假设（{kind}）"
+    verify_exp: "记录真实 {field}，与假设对比"
+    first: "先验证一件事：{what}（当前为{kind}）"
+  first_validation:
+    none: 关键参数均由你提供，暂无明显需优先验证的假设
+  decide:
+    profit: "在当前数据下月利润 {profit} 元"
+    above_be: 高于盈亏平衡客流
+    be_gap: "离盈亏平衡客流还差 {gap} {unit}/天"
+    runway: "现金跑道 {rw} 个月"
+    runway_infinite: 现金流已转正（跑道无限）
+    based_on_params: 这些数字基于上面全部参数；任何一条假设变化都会影响结论
+    incomplete: 数据尚不完整，先补充缺口再判断。
+    fill_gaps: 补充上述缺失项
+    cf_incomplete: 现金流明细尚不能定（期初现金或月营收未提供）。
+    cf_exhaust: "在无外部注资下，现金约在第 **{zc} 个月**耗尽"
+    cf_shortfall: "；届时累计缺口约 **{ms} 元**"
+    cf_basis: 以上基于期初现金（总投资推导）与逐月收支；一次性大额/到账延迟/支付节奏已计入
+    cf_survives: 按当前输入，12 个月内现金未耗尽。
+    cf_changes: 若营收/支出假设变化，结论会动
+  render:
+    undecided: "### 📌 还不能定"
+    objective: "### 📐 客观结论（无倾向，由你拍板）"
+    validate_first: 🔬 **先验证一件事**
+    one_shot: 🔬 **一次性建议**（非自动跟踪）
+    candidates: "### 🛠 候选调整（引擎回算口径）"
+    mutually_exclusive: 每项都可独立执行，改动互斥；回复「**应用A/B/C**」执行其一（LLM 不直接改）。
+    reversible: 可逆
+    hard_to_revert: 需谨慎（难回退）
+    option_line: "- **{tag}** {label}（{chg}） ｜ 预估月利润变化 **{delta} 元** ｜ {rev}"
+    min_exp: "- 最小实验：{exp}"
+    watch: "- 看什么指标：{metric}"
+    validate_line: "- 先验证：{what}"
+ss:
+  label:
+    industry: 行业
+    total_investment: 总投资
+    monthly_rent: 月租
+    monthly_revenue: 月营收
+    monthly_expense: 月固定成本
+    price_per_unit: 客单价
+    daily_traffic: 日均客流
+    employee_count: 员工数
+    avg_salary: 人均月薪
+    variable_cost_rate: 变动成本率
+    variable_cost_ratio: 变动成本率
+    founder_count: 创始人人数
+    city: 城市
+  group:
+    revenue: 收入模型
+    cost: 成本结构
+    runway: 投资与跑道
+    positioning: 行业与定位
+  fmt:
+    yes: 是
+    no: 否
+    yuan: 元
+  ctx:
+    industry: 行业：
+  view:
+    other_summary: 其他已知参数（本轮未涉及）：
+    other_group: _其他
+

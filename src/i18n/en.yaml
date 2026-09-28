@@ -430,3 +430,173 @@ wf:
     one_time: "Includes {n} one-time large expenses"
   common:
     unknown: Unknown
+
+fc:
+  common:
+    empty_cashflows: Cash flow array cannot be empty
+    bad_cashflows_json: cashflows_json is malformed; a valid JSON array is required
+    calc_fail: "Calculation failed: {e}"
+  npv:
+    worth: Project is worth investing in
+    no_value: Project creates no value
+    breakeven: Project just breaks even
+    note: NPV > 0 means value creation; NPV < 0 means likely loss; NPV = 0 means break-even
+  be:
+    must_gt: Price must exceed variable cost
+    must_gt_full: Price must exceed variable cost, otherwise it can never be profitable
+    suggestion: "Current price {price} ≤ variable cost {vc}; every sale loses money. Raise the price or lower the variable cost."
+    formula: "Breakeven = fixed cost / (price − variable cost) = {fc} / ({price} − {vc})"
+    interpretation: "Need to sell ~{units} units, or achieve revenue of {revenue} CNY, to break even."
+  runway:
+    cash_missing: Cash missing; runway cannot be computed
+    positive: The company is already cash-flow positive; no additional financing needed.
+    advice_plenty: Runway is ample; proceed as planned.
+    advice_ok: Runway is acceptable; consider starting the next round in ~6 months.
+    advice_tight: Runway is tight; start financing or cut spending immediately.
+    advice_critical: "🚨 Runway under 6 months! Act now: cut costs, accelerate revenue, or raise emergency financing."
+    note: "At a net burn of {burn} CNY/month, cash runs out in ~{months} months."
+  ue:
+    cac_gt0: CAC must be greater than 0
+    acquisition_gt0: Customer acquisition cost must be greater than 0
+    healthy: Healthy
+    acceptable: Acceptable
+    danger: Danger
+    detail_healthy: LTV/CAC ≥ 3; excellent acquisition efficiency, can scale spend.
+    detail_acceptable: LTV/CAC between 1 and 3; acceptable but needs ongoing optimization.
+    detail_danger: LTV/CAC < 1; losing money per acquired customer. Lower CAC or raise LTV.
+    warn_cac_ratio: "CAC ({cac}) is too large a share of LTV ({ltv}); payback may be too long."
+    warn_gm: "Gross margin is only {gm}%; little room left for acquisition."
+    benchmark: "SaaS: LTV/CAC ≥ 3 recommended; general industries: ≥ 1.5"
+  sens:
+    pessimistic: Pessimistic
+    neutral: Neutral
+    optimistic: Optimistic
+    note: Variable cost moves with revenue proportionally; fixed cost fluctuates independently (contribution-margin basis)
+    note_full: Variable cost moves with revenue proportionally; fixed cost fluctuates independently (contribution-margin basis). The wider the profit range, the higher the risk.
+    scenario: "Revenue {rev}% / Fixed cost {fix}%"
+  cashflow:
+    opening_cash: Opening cash (not computable if total investment is not given)
+    revenue: Monthly revenue
+  irr:
+    unconverged: Cannot compute IRR; check whether the cash flows are reasonable
+    excellent: Excellent return
+    good: Good return
+    fair: Fair return
+    low: Low return
+    note: Higher IRR is better; if IRR > discount rate (typically 8–12%), the project has investment value
+  roi:
+    invest_gt0: Total investment must be greater than 0
+    excellent: Excellent return
+    good: Good return
+    fair: Decent return
+    poor: Average return
+    loss: Loss
+  proj:
+    months_range: Projection months must be between 1 and 60
+    note: This projection assumes constant growth; real growth usually slows. Consider optimistic/neutral/pessimistic scenarios.
+  cs:
+    warn_fixed_ratio: "Fixed cost is too large a share of total cost ({ratio}%); high risk if revenue declines."
+    warn_net_margin: "Net margin is only {nm}%; weak resilience."
+    warn_gross_margin: "Gross margin is only {gm}%; very limited room for operations and acquisition."
+    bad_json: Malformed JSON; check fixed_costs_json and variable_costs_json
+    missing_field: "Missing required field: {e}; each item needs name and amount"
+de:
+  gap:
+    variable_cost_ratio: Variable cost ratio
+    daily_traffic: Daily traffic
+    price_per_unit: Unit price
+    avg_salary: Average salary
+    employee_count: Headcount
+    monthly_rent: Monthly rent
+    total_investment: Total investment
+  insufficient:
+    text: Current data is insufficient for a definitive conclusion.
+    supplement: "Add: {lab}"
+  opt:
+    price: Raise price
+    fixed_cost: Cut fixed costs
+    avg_salary: Optimize labor cost
+    employee_count: Downsize team
+    variable_cost: Optimize variable cost
+    traffic: Boost traffic
+    rent: Negotiate rent
+    other_fixed: Cut miscellaneous items
+  exp:
+    traffic_what: Traffic
+    traffic_exp: Record actual foot traffic for 7 consecutive days and compare with the estimate
+    traffic_watch: Daily traffic
+    price_what: Unit price
+    price_exp: Raise price slightly for 3 days (e.g. 0.5 CNY) and observe order-volume change
+    price_watch: Price −0.5 → order change
+    vcr_what: Variable cost ratio
+    vcr_exp: Review the last month's purchasing/ingredient cost share
+    vcr_watch: Actual variable cost ratio
+    labor_what: Labor cost
+    labor_exp: Check the salary structure and non-essential overtime
+    labor_watch: Real average salary
+    rent_what: Rent
+    rent_exp: Negotiate a 3-month rent-free period or rent reduction
+    rent_watch: Renewal rent
+    verify_what: "Verify the current \"{field}\" assumption ({kind})"
+    verify_exp: "Record the real {field} and compare with the assumption"
+    first: "First validate one thing: {what} (currently {kind})"
+  first_validation:
+    none: All key parameters were provided by you; no assumption clearly needs validation first
+  decide:
+    profit: "Under current data, monthly profit is {profit} CNY"
+    above_be: Above breakeven traffic
+    be_gap: "{gap} {unit}/day short of breakeven traffic"
+    runway: "Cash runway {rw} months"
+    runway_infinite: Cash flow has turned positive (runway infinite)
+    based_on_params: These figures are based on all parameters above; any changed assumption will affect the conclusion
+    incomplete: Data is still incomplete; fill the gaps before concluding.
+    fill_gaps: Add the missing items above
+    cf_incomplete: Cash-flow detail is not yet determinable (opening cash or monthly revenue not given).
+    cf_exhaust: "Without external funding, cash runs out around month **{zc}**"
+    cf_shortfall: "; cumulative shortfall then is ~**{ms} CNY**"
+    cf_basis: Based on opening cash (derived from total investment) and monthly flows; one-time items / receipt lag / payment rhythm are included
+    cf_survives: Under current inputs, cash is not exhausted within 12 months.
+    cf_changes: If revenue/expense assumptions change, the conclusion will shift
+  render:
+    undecided: "### 📌 Not yet determinable"
+    objective: "### 📐 Objective conclusion (no leaning; you decide)"
+    validate_first: 🔬 **Validate one thing first**
+    one_shot: 🔬 **One-time suggestion** (not auto-tracked)
+    candidates: "### 🛠 Candidate adjustments (engine-recomputed basis)"
+    mutually_exclusive: "Each is independent and mutually exclusive; reply \"**apply A/B/C**\" to execute one (the LLM does not change directly)."
+    reversible: Reversible
+    hard_to_revert: Proceed with caution (hard to revert)
+    option_line: "- **{tag}** {label} ({chg}) | estimated monthly-profit change **{delta} CNY** | {rev}"
+    min_exp: "- Minimal experiment: {exp}"
+    watch: "- What to watch: {metric}"
+    validate_line: "- Validate first: {what}"
+ss:
+  label:
+    industry: Industry
+    total_investment: Total investment
+    monthly_rent: Monthly rent
+    monthly_revenue: Monthly revenue
+    monthly_expense: Monthly fixed cost
+    price_per_unit: Unit price
+    daily_traffic: Daily traffic
+    employee_count: Headcount
+    avg_salary: Average monthly salary
+    variable_cost_rate: Variable cost ratio
+    variable_cost_ratio: Variable cost ratio
+    founder_count: Founder count
+    city: City
+  group:
+    revenue: Revenue model
+    cost: Cost structure
+    runway: Investment & runway
+    positioning: Industry & positioning
+  fmt:
+    yes: Yes
+    no: No
+    yuan: CNY
+  ctx:
+    industry: "Industry: "
+  view:
+    other_summary: "Other known parameters (not touched this round): "
+    other_group: _Other
+

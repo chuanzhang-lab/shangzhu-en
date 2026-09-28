@@ -16,6 +16,7 @@
 
 import threading
 import time
+from i18n import t
 from typing import Dict, List, Optional
 
 # thread_id -> 会话状态
@@ -57,33 +58,33 @@ def _cleanup_sessions(reserve_one: bool = False) -> None:
 
 # 字段 → 人类可读标签（用于给 LLM 接地的上下文文本）
 _FIELD_LABELS = {
-    "industry": "行业",
-    "total_investment": "总投资",
-    "monthly_rent": "月租",
-    "monthly_revenue": "月营收",
-    "monthly_expense": "月固定成本",
-    "price_per_unit": "客单价",
-    "daily_traffic": "日均客流",
-    "employee_count": "员工数",
-    "avg_salary": "人均月薪",
-    "variable_cost_rate": "变动成本率",
-    "variable_cost_ratio": "变动成本率",
-    "founder_count": "创始人人数",
-    "city": "城市",
+    "industry": "ss.label.industry",
+    "total_investment": "ss.label.total_investment",
+    "monthly_rent": "ss.label.monthly_rent",
+    "monthly_revenue": "ss.label.monthly_revenue",
+    "monthly_expense": "ss.label.monthly_expense",
+    "price_per_unit": "ss.label.price_per_unit",
+    "daily_traffic": "ss.label.daily_traffic",
+    "employee_count": "ss.label.employee_count",
+    "avg_salary": "ss.label.avg_salary",
+    "variable_cost_rate": "ss.label.variable_cost_rate",
+    "variable_cost_ratio": "ss.label.variable_cost_ratio",
+    "founder_count": "ss.label.founder_count",
+    "city": "ss.label.city",
 }
 
 
 # ── 参数语义分组（用户心智模型的代码映射）──────────────────────────────────
 # Direction 1：让 LLM 理解参数之间的维度关系，而非面对一堆散落的 key-value。
 PARAM_GROUPS = {
-    "收入模型": ["monthly_revenue", "daily_traffic", "price_per_unit"],
-    "成本结构": [
+    "ss.group.revenue": ["monthly_revenue", "daily_traffic", "price_per_unit"],
+    "ss.group.cost": [
         "monthly_rent", "employee_count", "avg_salary",
         "variable_cost_ratio", "variable_cost_rate", "unit_variable_cost",
         "monthly_expense", "utilities", "packaging", "commission", "other_fixed",
     ],
-    "投资与跑道": ["total_investment"],
-    "行业与定位": ["industry", "city", "stage"],
+    "ss.group.runway": ["total_investment"],
+    "ss.group.positioning": ["industry", "city", "stage"],
 }
 
 # 反向索引：field → group name（O(1) 查找）
@@ -506,7 +507,7 @@ def to_llm_view(thread_id: str, focus_fields: Optional[List[str]] = None) -> dic
         rest = {k: v for k, v in raw_params.items() if k not in relevant}
         params_for_view = focused
         params_summary = (
-            "其他已知参数（本轮未涉及）：" + "、".join(
+            t("ss.view.other_summary") + "、".join(
                 f"{k}={v}" for k, v in rest.items()
             )
         ) if rest else ""
@@ -517,15 +518,15 @@ def to_llm_view(thread_id: str, focus_fields: Optional[List[str]] = None) -> dic
     # Direction 1：按语义分组
     grouped = {}
     all_grouped_fields = set()
-    for group, fields in PARAM_GROUPS.items():
+    for group_key, fields in PARAM_GROUPS.items():
         gp = {f: params_for_view[f] for f in fields if f in params_for_view}
         if gp:
-            grouped[group] = gp
+            grouped[t(group_key)] = gp
             all_grouped_fields.update(gp.keys())
     orphan = {k: v for k, v in params_for_view.items()
               if k not in all_grouped_fields}
     if orphan:
-        grouped["_其他"] = orphan
+        grouped[t("ss.view.other_group")] = orphan
 
     view = {
         "params": params_for_view,
@@ -593,13 +594,13 @@ def _fmt_value(field: str, value) -> str:
     if value is None or value == "":
         return ""
     if isinstance(value, bool):
-        return "是" if value else "否"
+        return t("ss.fmt.yes") if value else t("ss.fmt.no")
     if isinstance(value, (int, float)):
         # 比率类（0~1 或 0~100）单独处理
         if field in ("variable_cost_rate", "variable_cost_ratio"):
             return f"{float(value) * 100:.0f}%"
         if abs(value) >= 10000:
-            return f"{value:,.0f}元"
+            return f"{value:,.0f}{t('ss.fmt.yuan')}"
         if abs(value) >= 1000:
             return f"{value:,.0f}"
         return str(value)
@@ -622,15 +623,15 @@ def get_session_context(thread_id: str) -> str:
 
     parts: list = []
     if industry:
-        parts.append(f"行业：{industry}")
+        parts.append(f"{t('ss.ctx.industry')}{industry}")
 
-    for field, label in _FIELD_LABELS.items():
+    for field, label_key in _FIELD_LABELS.items():
         if field == "industry":
             continue
         if field in params and params[field] not in (None, "", 0):
             v = _fmt_value(field, params[field])
             if v:
-                parts.append(f"{label}：{v}")
+                parts.append(f"{t(label_key)}：{v}")
 
     if not parts:
         return ""
