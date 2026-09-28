@@ -66,7 +66,9 @@ def _load(locale: str) -> Dict[str, Any]:
             "industry": raw.get("industry") or {},
             "fields": raw.get("fields") or [],
             # 整条正则存储（含 lookahead），不拆词表——拆开即变语义
-            "boundary": re.compile(boundary_pattern) if boundary_pattern else pack["boundary"],
+                        # 英文需大小写不敏感；中文无大小写差异，不受影响。
+            "boundary": (re.compile(boundary_pattern, re.IGNORECASE)
+                         if boundary_pattern else pack["boundary"]),
             "intents": [
                 (
                     item.get("name"),

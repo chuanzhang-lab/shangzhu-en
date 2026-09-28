@@ -1,0 +1,537 @@
+# 英文抽取规则包（输入层规则）
+#
+# 与 zh.yaml **同构同键**：字段名、position、units/reject_units 结构完全一致，
+# 由 tests/test_rules_guard.py 断言两套规则的字段/意图集合相等（防漂移）。
+#
+# ⚠️ 关键边界：**行业的值保持中文**（餐饮 / 零售 / …）。
+# 它不是展示文案，是 config/industry_templates.yaml 的**数据键**——
+# 翻译成 "Food & Beverage" 会让引擎查不到模板、静默拿不到行业默认值。
+# 本文件只把**匹配用的关键词**换成英文，值仍是数据键。
+# （与 M4 source_tags「状态码 vs 展示文案」、以及“数据值不翻译”同一原则。）
+
+version: 1
+
+# ─── 数量级倍率 ────────────────────────────────────────────────────────────
+# 裸 'm' 可以安全收：_parse_number 用**锚定**匹配（数字紧邻单位），
+# "80/month" 的 "/" 会打断匹配，不会被当成 80×1e6。
+number_units:
+  k: 1000
+  K: 1000
+  thousand: 1000
+  m: 1000000
+  million: 1000000
+
+# ─── 行业关键词（值=中文数据键，值不可翻译；顺序即优先级）───────────────────
+industry:
+  餐饮:
+    - 'coffee shop'
+    - 'coffee'
+    - 'bubble tea'
+    - 'milk tea'
+    - 'restaurant'
+    - 'noodle shop'
+    - 'beef noodle'
+    - 'ramen'
+    - 'hot pot'
+    - 'bbq'
+    - 'barbecue'
+    - 'bakery'
+    - 'fast food'
+    - 'takeaway'
+    - 'takeout'
+    - 'food truck'
+    - 'catering'
+    - 'diner'
+    - 'eatery'
+    - 'food and beverage'
+    - 'f&b'
+    - 'soup shop'
+    - 'dumpling'
+    - 'congee'
+    - 'fried chicken'
+    - 'pizza'
+    - 'breakfast shop'
+    - 'pub'
+    - 'dessert'
+    - 'sushi'
+  零售:
+    - 'retail'
+    - 'convenience store'
+    - 'grocery'
+    - 'supermarket'
+    - 'clothing store'
+    - 'shoe store'
+    - 'sell shoes'
+    - 'sell clothes'
+    - 'sell cosmetics'
+    - 'bookstore'
+    - 'stationery'
+    - 'flower shop'
+    - 'baby products'
+    - 'cosmetics'
+    - 'jewelry'
+    - 'accessories'
+  SaaS:
+    - 'saas'
+    - 'software'
+    - 'cloud service'
+    - 'api'
+    - 'paas'
+    - 'subscription'
+    - 'b2b software'
+    - 'cloud platform'
+  教育:
+    - 'education'
+    - 'training'
+    - 'tutoring'
+    - 'school'
+    - 'course'
+    - 'online course'
+    - 'e-learning'
+    - 'private tutor'
+    - 'early education'
+    - 'vocational'
+    - 'study abroad'
+    - 'knowledge paid'
+  电商:
+    - 'e-commerce'
+    - 'ecommerce'
+    - 'online store'
+    - 'taobao'
+    - 'shopify'
+    - 'amazon'
+    - 'live commerce'
+    - 'cross-border'
+    - 'dropshipping'
+    - 'online shop'
+  制造:
+    - 'manufacturing'
+    - 'factory'
+    - 'oem'
+    - 'odm'
+    - 'printing'
+    - 'textile'
+    - 'hardware'
+    - 'machining'
+    - 'production line'
+    - 'assembly'
+    - 'mold'
+    - 'injection molding'
+    - 'workshop'
+    - 'garment processing'
+    - 'food processing'
+    - 'parts processing'
+  宠物:
+    - 'pet'
+    - 'cat'
+    - 'dog'
+    - 'pet shop'
+    - 'pet store'
+    - 'pet hospital'
+    - 'vet'
+    - 'veterinary'
+    - 'pet grooming'
+    - 'pet food'
+    - 'cat cafe'
+    - 'pet boarding'
+    - 'pet training'
+  房地产:
+    - 'real estate'
+    - 'property'
+    - 'realty'
+    - 'housing rental'
+    - 'second-hand housing'
+    - 'property management'
+    - 'apartment rental'
+    - 'long-term rental'
+    - 'brokerage'
+    - 'property broker'
+  企业服务:
+    - 'enterprise services'
+    - 'business services'
+    - 'consulting'
+    - 'management consulting'
+    - 'hr services'
+    - 'human resources'
+    - 'headhunting'
+    - 'recruitment Agency'
+    - 'tax service'
+    - 'accounting'
+    - 'bookkeeping'
+    - 'business registration'
+    - 'legal service'
+    - 'law firm'
+    - 'marketing planning'
+    - 'advertising'
+    - 'brand planning'
+    - 'exhibition'
+  医疗:
+    - 'medical'
+    - 'clinic'
+    - 'hospital'
+    - 'dental'
+    - 'dentistry'
+    - 'tcm'
+    - 'rehabilitation'
+    - 'checkup'
+    - 'health check'
+    - 'beauty'
+    - 'medical aesthetics'
+    - 'plastic surgery'
+    - 'maternity'
+    - 'elderly care'
+  金融:
+    - 'finance'
+    - 'financial'
+    - 'loan'
+    - 'wealth management'
+    - 'insurance'
+    - 'securities'
+    - 'fund'
+    - 'payment platform'
+    - 'p2p'
+    - 'credit card'
+    - 'bank'
+  内容:
+    - 'content'
+    - 'media'
+    - 'self-media'
+    - 'short video'
+    - 'mcn'
+    - 'wechat official'
+    - 'bilibili'
+    - 'podcast'
+    - 'influencer'
+    - 'blogger'
+    - 'creator'
+
+# ─── 字段抽取规则（16 个，与 zh.yaml 同键同构）─────────────────────────────
+fields:
+  - field: 'monthly_rent'
+    keywords: ['monthly rent', 'rent per month', 'rent', 'rental', 'lease', 'monthly lease']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
+    reject_units: ['year', 'annual']
+    reject_context: ['deposit', 'security deposit']
+    kw_position: {}
+  - field: 'total_investment'
+    keywords: ['total investment', 'startup capital', 'initial investment', 'investment', 'invest', 'capital', 'budget']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
+    kw_position: {}
+  - field: 'employee_count'
+    keywords: ['employees', 'employee', 'staff', 'headcount', 'team', 'workers', 'people', 'hires']
+    position: 'any'
+    units: ['employees', 'staff', 'people', 'workers', 'persons', 'members', 'hires']
+    max_value: 200
+    kw_position:
+      team: 'after'
+      staff: 'after'
+      workers: 'after'
+  - field: 'avg_salary'
+    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
+    kw_position: {}
+  - field: 'daily_traffic'
+    keywords:
+      - 'daily traffic'
+      - 'daily customers'
+      - 'daily orders'
+      - 'daily sales'
+      - 'customers per day'
+      - 'customers a day'
+      - 'orders per day'
+      - 'orders a day'
+      - 'guests per day'
+      - 'units per day'
+      - 'customers/day'
+      - 'orders/day'
+      - 'sales/day'
+      - 'footfall'
+      - 'traffic'
+      - 'per day'
+      - 'a day'
+      - 'daily'
+      - 'each day'
+      - 'every day'
+    position: 'before'
+    units: ['customers', 'guests', 'orders', 'cups', 'units', 'people', 'visitors', 'sales', 'bowls', 'items', 'covers']
+    reject_units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'million']
+    reject_context: ['revenue', 'income', 'turnover', 'gross', 'profit']
+    kw_position:
+      customers per day: 'after'
+      customers a day: 'after'
+      orders per day: 'after'
+      orders a day: 'after'
+      guests per day: 'after'
+      units per day: 'after'
+      per day: 'after'
+      a day: 'after'
+      customers/day: 'after'
+      orders/day: 'after'
+      sales/day: 'after'
+  - field: 'price_per_unit'
+    keywords:
+      - 'average ticket'
+      - 'avg ticket'
+      - 'ticket price'
+      - 'unit price'
+      - 'price per unit'
+      - 'selling price'
+      - 'price'
+      - 'per unit'
+      - 'per cup'
+      - 'per bowl'
+      - 'per item'
+      - 'per order'
+      - 'each'
+      - 'a cup'
+      - 'a bowl'
+    position: 'after'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
+    reject_context: ['cost']
+    kw_position:
+      price: 'before'
+      ticket price: 'before'
+      unit price: 'before'
+      average ticket: 'before'
+      avg ticket: 'before'
+      selling price: 'before'
+  - field: 'monthly_revenue'
+    keywords: ['monthly revenue', 'monthly sales', 'monthly income', 'monthly turnover', 'revenue', 'turnover', 'sales per month']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
+    kw_position: {}
+  - field: 'monthly_profit'
+    keywords: ['monthly profit', 'monthly net profit', 'net profit', 'net income', 'profit']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
+    kw_position: {}
+  - field: 'gross_margin'
+    keywords: ['gross margin', 'gross profit margin', 'gross profit', 'margin']
+    position: 'before'
+    units: ['%', 'percent', 'pct']
+    reject_units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
+    kw_position: {}
+  - field: 'monthly_expense'
+    keywords: ['fixed costs', 'fixed cost', 'monthly expenses', 'monthly costs', 'operating costs', 'operating cost', 'overhead', 'monthly overhead', 'expenses', 'costs']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
+    strict_units: true
+    kw_position: {}
+  - field: 'variable_cost_rate'
+    keywords: ['variable cost rate', 'variable cost ratio', 'variable costs', 'variable cost']
+    position: 'before'
+    units: ['%', 'percent', 'pct']
+    reject_units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
+    kw_position: {}
+  - field: 'unit_variable_cost'
+    keywords: ['cost per unit', 'unit cost', 'cost per cup', 'cost per bowl', 'cost per item', 'cost per order']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
+    kw_position: {}
+  - field: 'utilities'
+    keywords: ['utilities', 'utility', 'water and electricity', 'electricity', 'water', 'internet', 'property fee', 'property management fee']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
+    kw_position: {}
+  - field: 'packaging'
+    keywords: ['packaging', 'packaging cost', 'packing', 'packaging materials']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
+    kw_position: {}
+  - field: 'commission'
+    keywords: ['commission', 'commissions', 'sales commission', 'referral fee', 'platform fee']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
+    reject_units: ['%', 'percent', 'pct']
+    kw_position: {}
+  - field: 'other_fixed'
+    keywords: ['other fixed costs', 'other costs', 'other expenses', 'miscellaneous', 'misc', 'other']
+    position: 'before'
+    units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
+    kw_position: {}
+
+# ─── 无标点连写的切分边界（英文版）─────────────────────────────────────────
+boundary:
+  pattern: '(total investment|startup capital|initial investment|monthly rent|annual rent|average ticket|ticket price|unit price|variable cost|salary|wage|rent|lease|investment|capital|traffic|customers|employees|staff|price|revenue|profit|margin)'
+
+# ─── 意图规则（13 类，意图名是数据键，不翻译）──────────────────────────────
+intents:
+  - name: 'report_pdf'
+    keywords: ['generate pdf', 'export pdf', 'download pdf', 'pdf report', 'make a pdf', 'give me a pdf', 'create pdf', 'pdf']
+    regexes: ['pdf\s*report', 'export.*pdf', 'export.*PDF', 'generate.*pdf']
+  - name: 'report_excel'
+    keywords: ['generate excel', 'export excel', 'download excel', 'excel model', 'make an excel', 'give me an excel', 'spreadsheet model', 'create excel', 'excel']
+    regexes: ['excel\s*model', 'export.*excel', 'export.*Excel', 'spreadsheet']
+  - name: 'suggest'
+    keywords:
+      - 'how to adjust'
+      - 'how to improve'
+      - 'how to optimize'
+      - 'how to turn profitable'
+      - 'turn a profit'
+      - 'stop losing money'
+      - 'suggestion'
+      - 'recommend'
+      - 'advice'
+      - 'what should i change'
+      - 'what to change'
+      - 'how much to change'
+      - 'optimization'
+      - 'improve'
+      - 'tune'
+      - 'turnaround'
+    regexes: []
+  - name: 'compare'
+    keywords:
+      - 'compare'
+      - 'comparison'
+      - ' vs '
+      - 'vs.'
+      - 'versus'
+      - 'option a'
+      - 'option b'
+      - 'which is better'
+      - 'which one'
+      - 'which should i'
+      - 'better to'
+      - 'a or b'
+      - 'if'
+      - 'what if'
+      - 'suppose'
+    regexes: ['\bvs\.?\b', 'option\s*[abAB]', '\bif\b', 'what\s+if', 'which\s+(?:one|is)\s+better']
+  - name: 'breakeven'
+    keywords: ['break even', 'breakeven', 'break-even', 'not losing money', 'profit and loss balance', 'break even point', 'cover costs']
+    regexes: ['break\s*-?\s*even', 'breakeven']
+  - name: 'trend'
+    keywords:
+      - 'trend'
+      - 'forecast'
+      - 'predict'
+      - 'future'
+      - 'next month'
+      - 'next 12 months'
+      - '12 months'
+      - 'payback time'
+      - 'payback'
+      - 'when will it be profitable'
+      - 'outlook'
+    regexes: ['(?:payback|trend|forecast|future).{0,12}\d+\s*months?', '\d+\s*months?.*(?:payback|trend|forecast)', 'next\s*\d+\s*months?', 'trend', 'forecast']
+  - name: 'decide'
+    keywords:
+      - 'should i open'
+      - 'should i start'
+      - 'worth opening'
+      - 'should i continue'
+      - 'should i keep'
+      - 'should i close'
+      - 'should i quit'
+      - 'how long can i survive'
+      - 'how long can it last'
+      - 'can i survive'
+      - 'worth it'
+      - 'should i do'
+      - 'should i invest'
+    regexes: ['should\s+i', 'worth\s+it', 'how\s+long\s+can']
+  - name: 'cashflow'
+    keywords:
+      - 'cash flow'
+      - 'cashflow'
+      - 'when will the money run out'
+      - 'run out of money'
+      - 'do i have enough money'
+      - 'how much do i spend'
+      - 'monthly spending'
+      - 'cash details'
+      - 'cash situation'
+    regexes: ['cash\s*-?\s*flow', '(?:cash|money|funds).*(?:enough|run out|short)']
+  - name: 'attribution'
+    keywords:
+      - 'why am i losing money'
+      - 'why is it losing'
+      - 'where does the money go'
+      - 'where is the money spent'
+      - 'cost structure'
+      - 'cost breakdown'
+      - 'cost analysis'
+      - 'cost attribution'
+      - 'main cost'
+      - 'biggest cost'
+    regexes: ['why.*(?:los|los)', 'where.*money.*(?:go|spent)', 'cost.*(?:structure|breakdown|analysis|attribution)']
+  - name: 'sensitivity'
+    keywords:
+      - 'sensitivity'
+      - 'sensitivity analysis'
+      - 'elasticity'
+      - 'how much can it drop'
+      - 'how low can traffic go'
+      - 'how high can rent go'
+      - 'break even point'
+      - 'breakeven point'
+    regexes: ['(?:drop|fall|decline|decrease).*how much', '(?:rise|increase|grow).*how much', 'sensitivity', 'elasticity']
+  - name: 'benchmark'
+    keywords:
+      - 'industry benchmark'
+      - 'industry average'
+      - 'industry data'
+      - 'industry standard'
+      - 'benchmark'
+      - 'reference value'
+      - 'reasonable value'
+      - 'industry margin'
+      - 'competitor data'
+    regexes: ['industry\s*(benchmark|average|data|standard)', 'benchmark']
+  - name: 'market'
+    keywords:
+      - 'market research'
+      - 'market analysis'
+      - 'market size'
+      - 'market outlook'
+      - 'user research'
+      - 'target users'
+      - 'user persona'
+      - 'competitor analysis'
+      - 'competitors'
+    regexes: ['market\s*(research|analysis|size|outlook)', 'competitor\s*(analysis|research)']
+  - name: 'quick_scan'
+    keywords:
+      - 'open a'
+      - 'opening a'
+      - 'start a'
+      - 'starting a'
+      - 'i want to open'
+      - 'total investment'
+      - 'monthly rent'
+      - 'employees'
+      - 'traffic'
+      - 'average ticket'
+      - 'adjust parameters'
+      - 'change parameters'
+      - 'update parameters'
+      - 'recalculate'
+      - 'recalculate again'
+      - 'recompute'
+      - 'add'
+      - 'supplement'
+      - 'current'
+      - 'my project'
+    regexes: ['(?:open|start)\s+a\s+[\w-]+\s*(?:shop|store|business|restaurant)?']
+
+# ─── 意图优先级（与 zh.yaml 同值：这是路由权重，不是文案）──────────────────
+intent_priority:
+  report_pdf: 100
+  report_excel: 100
+  decide: 85
+  suggest: 80
+  cashflow: 78
+  compare: 70
+  breakeven: 75
+  attribution: 72
+  sensitivity: 68
+  trend: 60
+  benchmark: 50
+  market: 50
+  quick_scan: 10
+  chitchat: 0

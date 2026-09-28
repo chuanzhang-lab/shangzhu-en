@@ -231,7 +231,10 @@ def _inject_field_boundaries(text: str) -> str:
 
 def _split_segments(text: str) -> List[str]:
     """按分隔符切分文本（保留空格）"""
-    return re.split(r"[,，;。；]+", text)
+    # ⚠️ 英文千分位「300,000」里的逗号**不是**分隔符：原 `[,，;。；]+` 会把
+    # 「Total investment $300,000」切成 "$300" + "000"，抽成 300（静默差 1000 倍）。
+    # 只切「非数字包围」的逗号，数字之间的逗号保留。
+    return re.split(r"(?:[，;。；]|,(?![0-9])|(?<![0-9]),)+", text)
 
 
 def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
@@ -264,16 +267,23 @@ def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
     # 员工数整个丢失（而同一句用逗号分开就正常）。加上限后才会落到正确的「2个」。
     max_value = field_def.get("max_value")
 
+    # 英文必须**大小写不敏感**（"Rent" 要能命中关键词 "rent"）：
+    # 只在**匹配**阶段用小写副本，取数字仍等价（数字无大小写）。
+    # 中文不受影响——汉字没有大小写。
+    hay = segment.lower()
+
     for kw in keywords:
-        idx = segment.find(kw)
+        idx = hay.find(kw.lower())
         if idx == -1:
             continue
 
         # 取该关键词的位置
         position = kw_position.get(kw, default_position)
 
-        before_text = segment[:idx][-_KW_WINDOW:]
-        after_text = segment[idx + len(kw):][:_KW_WINDOW]
+        # 两侧文本也用小写副本：语境护栏/单位护栏/数字查找的单位词表都是小写，
+        # 统一小写才不会出现 "80 USD" 匹配不到单位 "usd" 这类漏抓。
+        before_text = hay[:idx][-_KW_WINDOW:]
+        after_text = hay[idx + len(kw):][:_KW_WINDOW]
 
         # 确定搜索「侧」的顺序（before/after），按 position 决定
         if not before_text and after_text:
@@ -383,6 +393,10 @@ def _find_number(text: str, units, strict: bool = False,
     # (?<!\d)：负号前不得紧跟数字，否则「每天卖100-150碗」的区间分隔符会被当成负号
     #          → 抽成 -150 被 guard 判 critical 剔除，反而丢了正常客流（D1 修复的连带回归）。
     _SIGN = r"(?<!\d)(?:-|－|−|负)\s*"
+    # 数字：优先匹配英文千分位分组「300,000」，再匹配普通小数。
+    # 不加这一支，"$300,000" 只会捕到 "$300"（静默差 1000 倍）。
+    # 中文没有千分位写法，行为不变。
+    _NUM = r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)"
 
     negative = False
     if text.startswith("-") or text.startswith("负"):
@@ -398,7 +412,7 @@ def _find_number(text: str, units, strict: bool = False,
             if u not in units_list:
                 continue
             m = re.search(
-                rf"((?:{_SIGN})?\d+(?:\.\d+)?\s*{u})(\d)"
+                rf"((?:{_SIGN})?{_NUM}\s*{re.escape(u)})(\d)"
                 r"(?!\s*[人个位名杯碗份件瓶只条张袋盒串盘年月天日])",
                 text,
             )
@@ -412,13 +426,13 @@ def _find_number(text: str, units, strict: bool = False,
         units_list = units if isinstance(units, list) else [units]
         for u in units_list:
             # 数字 + 单位
-            m = re.search(rf"((?:{_SIGN})?\d+(?:\.\d+)?\s*{u})", text)
+            m = re.search(rf"((?:{_SIGN})?{_NUM}\s*{re.escape(u)})", text)
             if m:
                 val = _parse_number(m.group(1))
                 if val is not None:
                     return -val if negative else val
             # 单位 + 数字（「一杯25」的「杯」前是「一」，不是客流单位）
-            m = re.search(rf"((?<![一每]){u}\s*(?:{_SIGN})?\d+(?:\.\d+)?)", text)
+            m = re.search(rf"((?<![一每]){re.escape(u)}\s*(?:{_SIGN})?{_NUM})", text)
             if m:
                 val = _parse_number(m.group(1))
                 if val is not None:
@@ -428,7 +442,7 @@ def _find_number(text: str, units, strict: bool = False,
             return None
 
     # 2. 普通数字 + 元/万/千（元可选：覆盖「固定成本2500」无单位阿拉伯数字）
-    m = re.search(rf"((?:{_SIGN})?\d+(?:\.\d+)?(?:\s*[万千]|\s*元?))", text)
+    m = re.search(rf"((?:{_SIGN})?{_NUM}(?:\s*[万千]|\s*元?))", text)
     if m:
         val = _parse_number(m.group(1))
         if val is not None:
