@@ -263,3 +263,170 @@ field:
   msg:
     cycle_dependency: "The field model contains a dependency cycle: {cycle}"
     missing_deps: "dependent inputs"
+
+src:
+  mark:
+    user: "[User]"
+    derived: "[Derived]"
+    candidate: "[Candidate]"
+    missing: "[Missing]"
+    conflict: "[Conflict]"
+  comp:
+    rent: Rent
+    labor: Labor
+    utilities: Utilities
+    packaging: Packaging
+    commission: Commission
+    other: Other fixed
+  user:
+    bare: "[User]"
+    explicit_total: "[User] Explicit total (components not given)"
+    revenue_series: "[User] Multi-period series ({n} periods)"
+  derived:
+    daily_revenue: "[Derived] {src}"
+    revenue_from_traffic: "[Derived] From traffic × unit price × {days} days"
+    cash_from_invest: "[Derived] Total investment × (1 − equipment ratio [User])"
+    cash_no_equip_ratio: "[Derived] Total investment (equipment ratio not given, not deducted)"
+    from_profit: "[Derived] Back-derived from user monthly profit"
+    profit: "[Derived] Revenue − fixed − variable"
+    variable_cost: "[Derived] Monthly revenue × variable cost ratio"
+    unit_var_cost: "[Derived] Unit price × variable cost ratio"
+    annual_fixed: "[Derived] Monthly fixed cost × 12"
+    gross_margin: "[Derived] 1 − variable cost ratio"
+    vcr_from_unit_cost: "[Derived] Unit variable cost ÷ unit price"
+    vcr_from_gm: "[Derived] Back-derived from user gross margin"
+    vcr_formula: "[Derived] Formula-derived"
+  missing:
+    revenue_none: "[Missing] Monthly revenue not given (and no traffic or unit price)"
+    labor_abnormal: "[Missing] Headcount abnormal; labor excluded from calculation"
+    not_provided: "[Missing] Not provided"
+    not_invented: "[Missing] Not provided (not invented)"
+    investment_none: "[Missing] Total investment not given"
+    variable_cost: "[Missing] Variable cost ratio or monthly revenue not given"
+    unit_var_cost: "[Missing] Unit price or variable cost ratio not given"
+    annual_fixed: "[Missing] Monthly fixed cost not given"
+    profit_incomplete: "[Missing] Insufficient inputs to compute profit"
+    profit_no_fixed: "[Missing] Fixed cost not given; cannot compute profit"
+    vcr_unknown: "[Missing] Not provided (treated as unknown)"
+    labor_burden_zero: "[Missing] Not provided (treated as 0; employer burden not included)"
+  conflict:
+    staff_out_of_range: "[Conflict] Headcount {n} exceeds reasonable range (≤200); likely salary×count mis-parse → to clarify"
+  labor_cash: "{mark} {n} people × {salary}"
+  labor_burdened: "{mark} Base pay {cash} × (1 + {burden} burden)"
+  fixed_cost_sum: "{mark} Component sum ({comp})"
+  fixed_cost_sum_conflict: "{mark} Component sum ({comp}) conflicts with explicit total {total} → to clarify"
+wf:
+  mode:
+    custom: Custom (sufficient user parameters; industry template skipped)
+    industry: "Industry template \"{industry}\""
+  mixed:
+    prefix: "Mixed-business characteristics detected; computed with the \"{industry}\" template. Specify an industry to switch."
+  gap:
+    revenue: Monthly revenue (or daily traffic + unit price)
+    investment: Total investment (needed for runway/risk)
+    labor: Labor cost (headcount + salary; treated as 0 if not given)
+    variable_cost: Variable cost ratio (needed for profit/breakeven)
+  kind:
+    missing: Missing
+    candidate: Candidate
+    derived: Derived
+  framework:
+    revenue_known: "Monthly revenue = {rev} CNY (known)"
+    revenue_unknown: "Monthly revenue: unknown (needs monthly revenue or daily traffic × unit price)"
+    cost: "Monthly fixed cost ≈ rent {rent} CNY"
+    labor_part: " + labor {labor} CNY"
+    labor_none: " (labor not given, treated as 0)"
+    cash_known: "Available cash = {cash} CNY"
+    cash_unknown: "Available cash: unknown (needs total investment)"
+  readiness:
+    no_vcr: Variable cost ratio not given (or not derivable); cannot compute monthly profit and trend
+    no_revenue: Monthly revenue not given; cannot compute monthly profit and trend
+    no_fixed: Fixed cost not given; cannot compute monthly profit and trend
+  bench:
+    margin_low: "Net margin {nm}% is below the industry-typical {lo}%–{hi}%; review pricing or whether variable costs are omitted."
+    margin_high: "Net margin {nm}% is above the industry-typical {lo}%–{hi}%; confirm variable/hidden costs are not underestimated."
+    payback_exceed: "Estimated payback ~{months} months, exceeding the industry-typical range{hint}; cash flow pressure is high."
+    breakeven_hint: " ({bmin}–{bmax} months)"
+    traffic_low: "Daily traffic {dt} is below the industry-typical {tmin}–{tmax}; watch ramp-up and customer acquisition."
+    traffic_high: "Daily traffic {dt} is above the industry-typical {tmin}–{tmax}; confirm sustainability."
+  trend:
+    dir_up: 📈 Up
+    dir_down: 📉 Down
+    dir_flat: ➡️ Flat
+    irr_percent: "{pct}%"
+    irr_unconverged: Not converged
+    runway_months: "{n} months"
+    runway_beyond: ">{n} months (not exhausted)"
+    seasonal_industry: "Industry template ({industry})"
+    seasonal_generic: Generic coefficients (for reference only)
+  skeleton:
+    message: Insufficient parameters — full analysis paused; only the model framework and missing fields are shown. Fill them in and re-run for a full dashboard.
+    next_step: "Suggested to add: monthly revenue (or daily traffic + unit price), total investment, and labor cost (headcount + salary)."
+  narrative:
+    confident: All key parameters were provided by you; confidence is high. The figures below are safe to use as decision references.
+    profit_unknown: "Monthly profit: not yet computable (needs variable cost ratio)"
+    profit_range: "Under current assumptions, monthly profit ≈ {base} CNY (optimistic {best} / conservative {worst})"
+    profit_approx: "Monthly profit ≈ {v} CNY"
+    risk_focus: "Risk focus: the elasticity of the conclusion mainly comes from the \"{lead}\" assumption. {rng}. It is what you should verify/fill in first — once it changes, the figures above will move with it."
+    extra_risks: " There are also {n} structured risks to watch (see \"Risks\" below)."
+  scenario:
+    driver_vc_guess: Variable cost ratio (industry candidate/derived)
+    driver_vc_missing: Variable cost ratio (not given; profit not computable)
+    driver_rev_guess: Monthly revenue (derived from traffic, which fluctuates)
+    driver_labor_missing: Labor cost (not given, treated as 0)
+    driver_cash_missing: Total investment (runway unknown)
+  lever:
+    employee_count: Labor cost (currently treated as 0; most likely underestimates real cost)
+    monthly_revenue: Monthly revenue (derived from traffic × unit price; traffic still fluctuates)
+    variable_cost_ratio: Variable cost ratio (industry default; may deviate from your actual)
+    total_investment: Total investment (not given; runway unknown)
+  status:
+    profit_unknown: ⚪ Unknown (needs variable cost ratio)
+    profit_up: 🟢 Profitable
+    profit_down: 🔴 Loss-making
+    cash_unknown_vc: ⚪ Unknown (needs variable cost ratio)
+    cash_unknown_invest: ⚪ Unknown (needs total investment)
+    cash_positive: 🟢 Positive cash flow
+    cash_danger: 🔴 Danger
+    cash_tight: 🟡 Tight
+    cash_safe: 🟢 Safe
+    cash_unknown: ⚪ Unknown
+    be_traffic_short: 🔴 Traffic insufficient
+    be_reachable: 🟢 Breakeven reachable
+    be_below: 🔴 Below breakeven
+    be_partial: ⚪ Partially unknown (unit price/traffic/revenue not given; breakeven incomplete)
+    margin_healthy: 🟢 Healthy
+    margin_fair: 🟡 Fair
+    margin_low: 🔴 Low
+  error:
+    breakeven_incomplete: Unit price / variable cost / fixed cost not fully given; cannot compute breakeven
+    rev_based_note: "No unit price given; used \"revenue-based\" breakeven (monthly revenue required) instead"
+    runway_vc_missing: Variable cost ratio not given; runway cannot be computed
+    runway_invest_missing: Total investment not given; runway cannot be computed
+    runway_fixed_missing: Fixed cost not given; runway cannot be computed
+    sens_incomplete: Insufficient inputs; cannot compute sensitivity
+    quick_scan_fail: "quick_scan failed: {e}"
+    trend_fail: "trend_projection failed: {e}"
+    compare_fail: "compare_scenarios failed: {e}"
+    cashflow_fail: "cashflow_projection failed: {e}"
+    compare_rev_insufficient: "Comparison requires both scenarios to provide monthly revenue (or daily traffic + unit price). The following scenarios are insufficient:"
+    compare_profit_insufficient: "Comparison requires both scenarios to compute monthly profit. Add a variable cost ratio (e.g. \"variable cost ratio 40%\") and retry."
+    trend_insufficient: "Trend projection requires a complete cost model. {reason}. Fill in and re-run."
+  compare:
+    scenario_a: Plan A
+    scenario_b: Plan B
+    label_a: Plan A
+    label_b: Plan B
+    verdict_b_better: Plan B is better
+    verdict_a_better: Plan A is better
+    verdict_tie: Equivalent
+    annual_b_higher: Plan B has higher annual profit
+    annual_a_higher: Plan A has higher annual profit
+    annual_tie: Annual profit equivalent
+  cashflow:
+    receivable_lag: "Revenue recorded with a {lag}-month receipt lag"
+    rent_quarterly: Rent paid quarterly
+    rent_monthly: Rent paid monthly
+    one_time: "Includes {n} one-time large expenses"
+  common:
+    unknown: Unknown

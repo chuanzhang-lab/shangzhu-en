@@ -209,3 +209,33 @@ i18n 基础设施、pyyaml 声明、7 项护栏。全量回归 456 passed。
 
 **处置**：M2 阶段保留原样（改了会破坏现有行为），已在代码注释与白名单中显式标注；
 **M4 改造 `workflow_engine` 时必须同步改为状态码匹配**，否则英文环境下这些分支会静默走错。
+
+### M3 已完成（ae7e282）— field_model.py（128 条）
+- **设计**：`label` / `unit` 改为只存**键**（`label_key` / `unit_key`），展示时经 `t()` 解析，
+  因此切换 locale **无需重建模型**（模型是模块级常量，若直接存文案会在 import 时冻结语言）。
+  新增 `field_unit()` 与 `field_label()` 配套。
+- **边界**：`aliases` 是抽取器中文别名，属输入层（P2），**未改动**——改它会直接破坏参数抽取。
+- 全量回归 **458 passed**。原文幸存 126/128（另 2 条：`[用户]` 引擎数据标记已提为常量；
+  `（按客流×单价×30）` 是把硬编码 `30` 换成 `{days}` 占位符，中文渲染结果与原来逐字相同）。
+- **契约迁移**（重要）：FM9「0~1 口径」原断言 `DERIVED_SPECS[...]["unit"] == "0~1"`，
+  现改为断言 `unit_key == "ratio"`（语言无关的口径标识）+ 中文下 `field_unit() == "0~1"`。
+  口径契约不能靠展示文案来断言，否则一换语言就失效。
+- **新增护栏**：`test_rendered_copy_has_no_unfilled_placeholders` —— 渲染文案不得残留 `{xxx}`。
+  立竿见影：M3 自查时抓到 `t("field.op.set_revenue", ...)` 漏传 `days` 参数，
+  而 `t()` 按设计会静默返回未填充模板（不崩），若无此护栏就会把 `{days}` 直接显示给用户。
+
+### M4 已完成 — workflow_engine.py（104 条非注释中文 + 状态码拆分）
+- **状态码拆分（M2 审计发现的落实）**：新增 `src/source_tags.py`，把「来源标注」拆成
+  两条通道 —— `src[字段]`=展示文案（人读，走 `t()`），`src["_codes"][字段]`=状态码
+  （`user/derived/candidate/missing/conflict`，机器读，语言无关）。语义判断一律走
+  `st.code_of()`，不再 `startswith("[用户]")`（英文下会静默走错分支）。
+- **文案外置**：`src.*`（来源标注，~46 键）与 `wf.*`（引擎展示，~95 键）共 **141 键**
+  写入 zh/en.yaml，占位符奇偶由 `test_placeholder_parity_between_zh_and_en` 兜底。
+- **模块级文案改为键**：`_LEVER_NAME` 从「值」改为「键」，展示时经 `t()` 解析（避免
+  import 时冻结语言——与 M3 `label_key` 同因）。
+- **数据值白名单**：行业关键词（咖啡/宠物/…/软件/自定义/其他）与 `无限` 是输入层匹配
+  数据/引擎数据值，非文案，已加入 `ENGINE_DATA_LITERALS` 放行（改它会破坏行业模板解析）。
+- 全量回归 **458 passed**（基线一致）。zh 输出无 `[i18n:missing]`。
+- **en 冒烟**：`workflow_engine.py` 自身文案已无中文残片；payload 中剩余残片来自
+  `financial_calculator.py`（敏感性/陷阱/跑道）与 `config/industry_templates.yaml`
+  （benchmark 文案），属 M5/M7 范围。

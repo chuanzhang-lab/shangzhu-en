@@ -261,3 +261,170 @@ field:
   msg:
     cycle_dependency: "字段模型存在循环依赖: {cycle}"
     missing_deps: "依赖输入"
+
+src:
+  mark:
+    user: "[用户]"
+    derived: "[推算]"
+    candidate: "[候选]"
+    missing: "[缺失]"
+    conflict: "[矛盾]"
+  comp:
+    rent: 租金
+    labor: 人工
+    utilities: 水电
+    packaging: 包装
+    commission: 提成
+    other: 其他固定
+  user:
+    bare: "[用户]"
+    explicit_total: "[用户] 显式总数(组件未给出)"
+    revenue_series: "[用户] 多期序列({n}期)"
+  derived:
+    daily_revenue: "[推算] {src}"
+    revenue_from_traffic: "[推算] 从客流×单价×{days}天"
+    cash_from_invest: "[推算] 总投资×(1-设备占比[用户])"
+    cash_no_equip_ratio: "[推算] 总投资（设备占比未提供，未扣减）"
+    from_profit: "[推算] 从用户月利润反推"
+    profit: "[推算] 营收-固定-变动"
+    variable_cost: "[推算] 月营收×变动成本率"
+    unit_var_cost: "[推算] 单价×变动成本率"
+    annual_fixed: "[推算] 月固定成本×12"
+    gross_margin: "[推算] 1−变动成本率"
+    vcr_from_unit_cost: "[推导] 单位变动成本÷客单价"
+    vcr_from_gm: "[推算] 从用户毛利率反推"
+    vcr_formula: "[推算] 公式推导"
+  missing:
+    revenue_none: "[缺失] 月营收未提供（且缺客流或客单价）"
+    labor_abnormal: "[缺失] 人数异常，人工不参与计算"
+    not_provided: "[缺失] 未提供"
+    not_invented: "[缺失] 未提供(不虚构)"
+    investment_none: "[缺失] 总投资未提供"
+    variable_cost: "[缺失] 变动成本率或月营收未提供"
+    unit_var_cost: "[缺失] 单价或变动成本率未提供"
+    annual_fixed: "[缺失] 月固定成本未提供"
+    profit_incomplete: "[缺失] 输入不全，无法算利润"
+    profit_no_fixed: "[缺失] 固定成本未提供，无法算利润"
+    vcr_unknown: "[缺失] 未提供(按未知计)"
+    labor_burden_zero: "[缺失] 未提供(按0计，未含雇主负担)"
+  conflict:
+    staff_out_of_range: "[矛盾] 员工数{n}超出合理区间(≤200)，疑似「薪资×人数」误抓→待澄清"
+  labor_cash: "{mark} {n}人×{salary}"
+  labor_burdened: "{mark} 裸薪{cash}×(1+{burden}负担)"
+  fixed_cost_sum: "{mark} 组件求和({comp})"
+  fixed_cost_sum_conflict: "{mark} 组件求和({comp})，与显式总数{total}矛盾→待澄清"
+wf:
+  mode:
+    custom: 自定义（用户参数充足，跳过行业模板）
+    industry: "行业模板「{industry}」"
+  mixed:
+    prefix: "检测到混合业态特征，已按「{industry}」模板计算。若需切换，请指定行业。"
+  gap:
+    revenue: 月营收（或 日均客流 + 客单价）
+    investment: 总投资（算跑道/风险需要）
+    labor: 人工成本（人数 + 薪资，未提供则按 0 计）
+    variable_cost: 变动成本率（算利润/保本需要）
+  kind:
+    missing: 缺失
+    candidate: 候选
+    derived: 推算
+  framework:
+    revenue_known: "月营收 = {rev} 元（已知）"
+    revenue_unknown: 月营收：未知（需 月营收 或 日均客流×客单价）
+    cost: "月固定成本 ≈ 租金 {rent} 元"
+    labor_part: " + 人工 {labor} 元"
+    labor_none: （人工未提供，按 0 计）
+    cash_known: "可用现金 = {cash} 元"
+    cash_unknown: 可用现金：未知（需 总投资）
+  readiness:
+    no_vcr: 变动成本率未提供（或不可推导），无法计算月利润与趋势
+    no_revenue: 月营收未提供，无法计算月利润与趋势
+    no_fixed: 固定成本未提供，无法计算月利润与趋势
+  bench:
+    margin_low: "净利率 {nm}% 低于行业典型 {lo}%-{hi}%，需审视定价或是否漏算变动成本。"
+    margin_high: "净利率 {nm}% 高于行业典型 {lo}%-{hi}%，确认是否低估了变动/隐形成本。"
+    payback_exceed: "预计回本约 {months} 个月，超出行业典型区间{hint}，现金流压力偏大。"
+    breakeven_hint: "（{bmin}-{bmax} 个月）"
+    traffic_low: "日均客流 {dt} 低于行业典型 {tmin}-{tmax}，需关注爬坡期与获客。"
+    traffic_high: "日均客流 {dt} 高于行业典型 {tmin}-{tmax}，确认是否可持续。"
+  trend:
+    dir_up: 📈 上升
+    dir_down: 📉 下降
+    dir_flat: ➡️ 持平
+    irr_percent: "{pct}%"
+    irr_unconverged: 无法收敛
+    runway_months: "{n} 个月"
+    runway_beyond: ">{n} 个月（未耗尽）"
+    seasonal_industry: "行业模板（{industry}）"
+    seasonal_generic: 通用系数（仅供参考）
+  skeleton:
+    message: 参数不足，已暂停完整分析，仅展示模型框架与待补字段。补充后重算即可生成完整仪表盘。
+    next_step: 建议补充：月营收（或 日均客流 + 客单价）、总投资、人工成本（人数 + 薪资）。
+  narrative:
+    confident: 关键参数均由你提供，结论置信度高；下方数字可放心作为决策参考。
+    profit_unknown: 月利润：还无法计算（需变动成本率）
+    profit_range: "按当前假设，月利润约 {base} 元（乐观 {best} / 保守 {worst}）"
+    profit_approx: "月利润约 {v} 元"
+    risk_focus: "风险聚焦：结论的弹性主要来自「{lead}」这一假设。{rng}。你最该优先核实/补充的就是它——一旦它变了，上面的数字会跟着动。"
+    extra_risks: " 另有 {n} 项结构化风险待关注（见下方「风险」）。"
+  scenario:
+    driver_vc_guess: 变动成本率（行业候选/推算）
+    driver_vc_missing: 变动成本率（未提供，利润不可算）
+    driver_rev_guess: 月营收（由客流推算，客流有波动）
+    driver_labor_missing: 人工成本（未提供，按 0 计）
+    driver_cash_missing: 总投资（跑道未知）
+  lever:
+    employee_count: 人工成本（当前按 0 计，最可能低估真实成本）
+    monthly_revenue: 月营收（由客流×单价推算，客流尚有波动）
+    variable_cost_ratio: 变动成本率（行业默认，可能偏离你的实际）
+    total_investment: 总投资（未提供，跑道尚不可知）
+  status:
+    profit_unknown: ⚪ 未知（需变动成本率）
+    profit_up: 🟢 盈利
+    profit_down: 🔴 亏损
+    cash_unknown_vc: ⚪ 未知（需变动成本率）
+    cash_unknown_invest: ⚪ 未知（需总投资）
+    cash_positive: 🟢 正向现金流
+    cash_danger: 🔴 危险
+    cash_tight: 🟡 偏紧
+    cash_safe: 🟢 安全
+    cash_unknown: ⚪ 未知
+    be_traffic_short: 🔴 客流不足
+    be_reachable: 🟢 可达保本
+    be_below: 🔴 未达保本
+    be_partial: ⚪ 部分未知（客单价/客流/营收未给，保本判定不完整）
+    margin_healthy: 🟢 健康
+    margin_fair: 🟡 一般
+    margin_low: 🔴 偏低
+  error:
+    breakeven_incomplete: 客单价/变动成本/固定成本未提供全，无法算保本
+    rev_based_note: 未提供客单价，已用「营收口径」保本（月均需营收）替代
+    runway_vc_missing: 变动成本率未提供，跑道无法计算
+    runway_invest_missing: 总投资未提供，跑道无法计算
+    runway_fixed_missing: 固定成本未提供，跑道无法计算
+    sens_incomplete: 输入不全，无法算敏感性
+    quick_scan_fail: "quick_scan 失败: {e}"
+    trend_fail: "trend_projection 失败: {e}"
+    compare_fail: "compare_scenarios 失败: {e}"
+    cashflow_fail: "cashflow_projection 失败: {e}"
+    compare_rev_insufficient: 对比需要两个方案都提供月营收（或 日均客流 + 客单价）。以下方案参数不足：
+    compare_profit_insufficient: 对比需要两个方案都能算出月利润。请补充变动成本率（如「变动成本率 40%」）后重试。
+    trend_insufficient: "趋势预测需要完整成本模型。{reason}。请补充后重算。"
+  compare:
+    scenario_a: 方案A
+    scenario_b: 方案B
+    label_a: 方案 A
+    label_b: 方案 B
+    verdict_b_better: 方案 B 更优
+    verdict_a_better: 方案 A 更优
+    verdict_tie: 两者相当
+    annual_b_higher: 方案B年利润更高
+    annual_a_higher: 方案A年利润更高
+    annual_tie: 年利润相当
+  cashflow:
+    receivable_lag: "收入按 {lag} 个月到账延迟计入"
+    rent_quarterly: 租金按季度支付
+    rent_monthly: 租金按月支付
+    one_time: "含 {n} 笔一次性大额支出"
+  common:
+    unknown: 未知

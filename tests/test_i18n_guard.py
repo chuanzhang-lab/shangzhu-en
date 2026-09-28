@@ -114,11 +114,21 @@ def test_t_invalid_locale_falls_back_to_zh():
 CONVERTED_MODULES = [
     os.path.join("src", "router", "formatter.py"),
     os.path.join("src", "field_model.py"),
+    os.path.join("src", "tools", "workflow_engine.py"),
 ]
 
 # 白名单：**引擎产出的数据值**，不是展示文案。展示层必须按原样匹配它们，
-# 因此不能外置。M4 引擎侧 i18n 后应改为状态码匹配，届时白名单应清空。
-ENGINE_DATA_LITERALS = {"[缺失]", "变动成本", "无限", "[用户]"}
+# 因此不能外置。
+# - "[缺失]"/"变动成本"/"[用户]"/"无限"：formatter/field_model 匹配的引擎数据标记；
+#   M4 已把 workflow_engine 的来源标注改成状态码（src/source_tags.py），
+#   但 formatter 侧对这些旧标记的匹配仍保留，故放行。
+# - 行业关键词（咖啡/宠物/…/软件/自定义/其他）：输入层匹配数据（与 field_model.aliases
+#   同类），改它会直接破坏行业模板解析与混合业态识别，不在 M4 范围。
+ENGINE_DATA_LITERALS = {
+    "[缺失]", "变动成本", "无限", "[用户]",
+    "咖啡", "宠物", "养老", "医疗", "教育", "电商", "内容",
+    "餐饮", "零售", "制造", "软件", "自定义", "其他",
+}
 
 
 def _cjk_string_literals(path: str):

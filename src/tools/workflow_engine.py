@@ -7,6 +7,12 @@ v2 改进：
 - 增加 12 个月趋势预测
 - 状态标记含 benchmark 对比
 - 参数支持更丰富（阶段、融资、团队角色等）
+
+文案外置（M4）：所有展示文案经 `t("wf.*")` 取自 src/i18n/{zh,en}.yaml；
+**来源标注拆成两条通道** —— 展示串（人读）照旧按字段存，
+状态码（机器读，语言无关）存 `src["_codes"]`，见 src/source_tags.py。
+本模块内**禁止**再用 `startswith("[用户]")` 之类的中文标记匹配做语义判断，
+一律走 `source_tags.code_of()`：否则英文环境下会静默走错分支。
 """
 
 import json
@@ -16,6 +22,10 @@ from functools import lru_cache
 from typing import Optional
 import yaml
 from langchain.tools import tool
+
+from i18n import t
+import source_tags as st
+from source_tags import CANDIDATE, CONFLICT, DERIVED, MISSING, USER
 
 from tools.financial_calculator import (
     _calc_breakeven,
@@ -159,24 +169,25 @@ def _resolve_industry(industry: str) -> dict:
 # ─── 混合业态检测 ──────────────────────────────────────────────────────────
 
 
+# ⚠️ 关键词是**输入层匹配数据**（与 field_model.aliases 同类），不是文案：
+# 改了会直接破坏混合业态识别，因此不做外置，由 i18n 护栏按白名单放行。
 MIXED_INDUSTRY_PAIRS = [
-    # (关键词A, 关键词B) → 说明
-    ({"咖啡", "宠物"}, "餐饮+宠物复合业态，请指定主要行业或分别分析两个场景"),
-    ({"养老", "医疗"}, "养老+医疗复合业态，建议按医疗模板（合规要求更高）"),
-    ({"教育", "SaaS"}, "教育+SaaS 复合业态，建议按 SaaS 模板（以软件为核心）"),
-    ({"电商", "内容"}, "电商+内容复合业态，建议按电商模板，内容为获客渠道"),
-    ({"餐饮", "零售"}, "餐饮+零售复合业态，建议按餐饮模板（保质期/食品安全约束）"),
-    ({"制造", "电商"}, "制造+电商复合业态（DTC 模式），建议按制造模板"),
+    # (关键词集合, 说明文案键)
+    ({"咖啡", "宠物"}, "coffee_pet"),
+    ({"养老", "医疗"}, "elderly_medical"),
+    ({"教育", "SaaS"}, "education_saas"),
+    ({"电商", "内容"}, "ecommerce_content"),
+    ({"餐饮", "零售"}, "food_retail"),
+    ({"制造", "电商"}, "manufacturing_ecommerce"),
 ]
 
 
 def _detect_mixed_industry(user_text: str, matched_industry: str) -> Optional[str]:
     """检测混合业态，返回提示信息或 None"""
     text_lower = user_text.lower()
-    hits = set()
-    for kw_set, _ in MIXED_INDUSTRY_PAIRS:
+    for kw_set, _note_key in MIXED_INDUSTRY_PAIRS:
         if all(k in text_lower for k in kw_set):
-            return f"检测到混合业态特征，已按「{matched_industry}」模板计算。若需切换，请指定行业。"
+            return t("wf.mixed.prefix", industry=matched_industry)
     return None
 
 
@@ -217,49 +228,56 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     # 解析行业模板
     if skip_template:
         tpl = _get_fallback_template().copy()
-        tpl["_mode"] = "自定义（用户参数充足，跳过行业模板）"
+        tpl["_mode"] = t("wf.mode.custom")
         effective_industry = industry or "自定义"
     else:
         effective_industry = industry or "其他"
         tpl = _resolve_industry(effective_industry)
-        tpl["_mode"] = f"行业模板「{effective_industry}」"
+        tpl["_mode"] = t("wf.mode.industry", industry=effective_industry)
 
     # 混合业态检测：检查原始文本或用户填写的行业名
     check_text = user_text or raw_params.get("industry", "")
     mixed_warning = _detect_mixed_industry(check_text, effective_industry) if check_text else None
 
     # 来源追踪
-    src = {}  # param_name → "[用户]" / "[候选]" / "[推算]"
+    # 两条通道：src[字段]=展示文案（人读）；src["_codes"][字段]=状态码（机器读）。
+    src = {}
 
-    def _set(key, value, source):
-        """设置参数值并记录来源"""
-        src[key] = source
+    def _set(key, value, code, copy_key, **kwargs):
+        """设置参数值并记录来源（状态码 + 展示文案）。"""
+        st.set_tag(src, key, code, copy_key, **kwargs)
         return value
 
     p = {}
 
     # ── 财务参数（无默认：没给即 [缺失]，不填 0）──
-    p["total_investment"] = _set("total_investment",
-        raw_params.get("total_investment"),
-        "[用户]" if raw_params.get("total_investment") is not None else "[缺失] 未提供")
+    p["total_investment"] = _set(
+        "total_investment", raw_params.get("total_investment"),
+        USER if raw_params.get("total_investment") is not None else MISSING,
+        "user.bare" if raw_params.get("total_investment") is not None else "missing.not_provided",
+    )
 
     if raw_params.get("monthly_rent") is None:
-        _rent_src = "[缺失] 未提供"
+        _rent_code, _rent_key = MISSING, "missing.not_provided"
     elif raw_params.get("_rent_from_annual"):
-        _rent_src = "[推算] 年租金/12"
+        _rent_code, _rent_key = DERIVED, "derived.rent_from_annual"
     else:
-        _rent_src = "[用户]"
-    p["monthly_rent"] = _set("monthly_rent",
-        raw_params.get("monthly_rent"),
-        _rent_src)
+        _rent_code, _rent_key = USER, "user.bare"
+    p["monthly_rent"] = _set(
+        "monthly_rent", raw_params.get("monthly_rent"), _rent_code, _rent_key
+    )
 
-    p["daily_traffic"] = _set("daily_traffic",
-        raw_params.get("daily_traffic"),
-        "[用户]" if raw_params.get("daily_traffic") is not None else "[缺失] 未提供")
+    p["daily_traffic"] = _set(
+        "daily_traffic", raw_params.get("daily_traffic"),
+        USER if raw_params.get("daily_traffic") is not None else MISSING,
+        "user.bare" if raw_params.get("daily_traffic") is not None else "missing.not_provided",
+    )
 
-    p["price_per_unit"] = _set("price_per_unit",
-        raw_params.get("price_per_unit"),
-        "[用户]" if raw_params.get("price_per_unit") is not None else "[缺失] 未提供")
+    p["price_per_unit"] = _set(
+        "price_per_unit", raw_params.get("price_per_unit"),
+        USER if raw_params.get("price_per_unit") is not None else MISSING,
+        "user.bare" if raw_params.get("price_per_unit") is not None else "missing.not_provided",
+    )
 
     # ── 变动成本率：公式唯一出处 = field_model.derive()（S4 收敛）──
     # 本处只做两件事：① 原始输入解析（单位归一）；② 来源标注。
@@ -290,12 +308,12 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
         vc = float(user_vc)
         # 输入解析：兼容 40(%) 与 0.4(比例) 两种写法（单位归一，不是公式）
         p["variable_cost_ratio"] = vc / 100 if vc > 1 else vc
-        src["variable_cost_ratio"] = "[用户]"
+        st.set_tag(src, "variable_cost_ratio", USER, "user.bare")
     else:
         # D2：取消「输入伪造型默认」。没给/推不出 → 缺失，不静默用行业模板填进
         # 计算图（会撑起假硬利润）；作假设候选待确认。
         p["variable_cost_ratio"] = None
-        src["variable_cost_ratio"] = "[缺失] 未提供(按未知计)"
+        st.set_tag(src, "variable_cost_ratio", MISSING, "missing.vcr_unknown")
         # 把模型的推导依赖放进 p，交给 derive() 统一求值。
         # 用户已直给 vcr 时不放，沿用旧的优先级语义（显式值不被推导依赖干扰）。
         if user_unit_var is not None:
@@ -307,50 +325,69 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     user_staff = raw_params.get("employee_count", raw_params.get("staff_count"))
     if user_staff is not None:
         p["employee_count"] = user_staff
-        src["employee_count"] = "[用户]"
+        st.set_tag(src, "employee_count", USER, "user.bare")
     else:
         p["employee_count"] = None
-        src["employee_count"] = "[缺失] 未提供"
+        st.set_tag(src, "employee_count", MISSING, "missing.not_provided")
 
     user_salary = raw_params.get("avg_salary")
     if user_salary is not None:
         p["avg_salary"] = user_salary
-        src["avg_salary"] = "[用户]"
+        st.set_tag(src, "avg_salary", USER, "user.bare")
     else:
         p["avg_salary"] = None
-        src["avg_salary"] = "[缺失] 未提供"
+        st.set_tag(src, "avg_salary", MISSING, "missing.not_provided")
 
     # ── 时间参数（无默认：没给即 [缺失]，不填 验证期/12）──
-    p["stage"] = _set("stage", raw_params.get("stage"),
-        "[用户]" if raw_params.get("stage") is not None else "[缺失] 未提供")
+    p["stage"] = _set(
+        "stage", raw_params.get("stage"),
+        USER if raw_params.get("stage") is not None else MISSING,
+        "user.bare" if raw_params.get("stage") is not None else "missing.not_provided",
+    )
 
-    p["analysis_months"] = _set("analysis_months", raw_params.get("analysis_months"),
-        "[用户]" if raw_params.get("analysis_months") is not None else "[缺失] 未提供")
+    p["analysis_months"] = _set(
+        "analysis_months", raw_params.get("analysis_months"),
+        USER if raw_params.get("analysis_months") is not None else MISSING,
+        "user.bare" if raw_params.get("analysis_months") is not None else "missing.not_provided",
+    )
 
     # ── 增长参数（无默认：没给即 [缺失]，不填 5%/1.0）──
-    p["monthly_growth_rate"] = _set("monthly_growth_rate",
-        raw_params.get("monthly_growth_rate"),
-        "[用户]" if raw_params.get("monthly_growth_rate") is not None else "[缺失] 未提供")
+    p["monthly_growth_rate"] = _set(
+        "monthly_growth_rate", raw_params.get("monthly_growth_rate"),
+        USER if raw_params.get("monthly_growth_rate") is not None else MISSING,
+        "user.bare" if raw_params.get("monthly_growth_rate") is not None else "missing.not_provided",
+    )
 
-    p["seasonal_factor"] = _set("seasonal_factor",
-        raw_params.get("seasonal_factor"),
-        "[用户]" if raw_params.get("seasonal_factor") is not None else "[缺失] 未提供")
+    p["seasonal_factor"] = _set(
+        "seasonal_factor", raw_params.get("seasonal_factor"),
+        USER if raw_params.get("seasonal_factor") is not None else MISSING,
+        "user.bare" if raw_params.get("seasonal_factor") is not None else "missing.not_provided",
+    )
 
     # ── 团队参数（无默认：没给即 [缺失]，不填 1 人/False）──
-    p["founder_count"] = _set("founder_count", raw_params.get("founder_count"),
-        "[用户]" if raw_params.get("founder_count") is not None else "[缺失] 未提供")
+    p["founder_count"] = _set(
+        "founder_count", raw_params.get("founder_count"),
+        USER if raw_params.get("founder_count") is not None else MISSING,
+        "user.bare" if raw_params.get("founder_count") is not None else "missing.not_provided",
+    )
 
-    p["has_tech_cofounder"] = _set("has_tech_cofounder",
-        raw_params.get("has_tech_cofounder"),
-        "[用户]" if raw_params.get("has_tech_cofounder") is not None else "[缺失] 未提供")
+    p["has_tech_cofounder"] = _set(
+        "has_tech_cofounder", raw_params.get("has_tech_cofounder"),
+        USER if raw_params.get("has_tech_cofounder") is not None else MISSING,
+        "user.bare" if raw_params.get("has_tech_cofounder") is not None else "missing.not_provided",
+    )
 
-    p["has_market_cofounder"] = _set("has_market_cofounder",
-        raw_params.get("has_market_cofounder"),
-        "[用户]" if raw_params.get("has_market_cofounder") is not None else "[缺失] 未提供")
+    p["has_market_cofounder"] = _set(
+        "has_market_cofounder", raw_params.get("has_market_cofounder"),
+        USER if raw_params.get("has_market_cofounder") is not None else MISSING,
+        "user.bare" if raw_params.get("has_market_cofounder") is not None else "missing.not_provided",
+    )
 
-    p["has_ops_cofounder"] = _set("has_ops_cofounder",
-        raw_params.get("has_ops_cofounder"),
-        "[用户]" if raw_params.get("has_ops_cofounder") is not None else "[缺失] 未提供")
+    p["has_ops_cofounder"] = _set(
+        "has_ops_cofounder", raw_params.get("has_ops_cofounder"),
+        USER if raw_params.get("has_ops_cofounder") is not None else MISSING,
+        "user.bare" if raw_params.get("has_ops_cofounder") is not None else "missing.not_provided",
+    )
 
     # ── 融资参数（无默认）──
     p["has_financing"] = raw_params.get("has_financing")
@@ -378,21 +415,23 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
             # 多期收入序列：保留为数组，derive() 用第一个值做单期推算
             p["monthly_revenue"] = revenue_override
             p["_revenue_series"] = list(revenue_override)  # 备份原始序列
-            src["monthly_revenue"] = f"[用户] 多期序列({len(revenue_override)}期)"
+            st.set_tag(src, "monthly_revenue", USER, "user.revenue_series",
+                       n=len(revenue_override))
         else:
             p["monthly_revenue"] = revenue_override
             # 日营业额换算的来源标注：告诉用户这是从日值得出的月值
             if _daily_src:
-                src["monthly_revenue"] = f"[推算] {_daily_src}"
+                st.set_tag(src, "monthly_revenue", DERIVED, "derived.daily_revenue",
+                           src=_daily_src)
             else:
-                src["monthly_revenue"] = "[用户]"
+                st.set_tag(src, "monthly_revenue", USER, "user.bare")
     # 否则让 derive() 从 traffic×price×30 算（src 在下面统一标注）
 
     # 固定成本组件字段（水电/包装/提成/其他固定）——用户给的输入
     for fld in ("utilities", "packaging", "commission", "other_fixed"):
         raw = raw_params.get(fld)
         if raw is not None:
-            p[fld] = _set(fld, raw, "[用户]")
+            p[fld] = _set(fld, raw, USER, "user.bare")
 
     # ── 业务规则：劳动合理性门禁（>200 人 → 标矛盾，不参与计算）──
     labor_present = all(
@@ -402,9 +441,8 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     staff_n = float(p.get("employee_count") or 0)
     labor_blocked = False
     if labor_present and staff_n > 200:
-        src["employee_count"] = (
-            f"[矛盾] 员工数{staff_n:g}超出合理区间(≤200)，疑似「薪资×人数」误抓→待澄清"
-        )
+        st.set_tag(src, "employee_count", CONFLICT, "conflict.staff_out_of_range",
+                   n=f"{staff_n:g}")
         labor_present = False
         labor_blocked = True
 
@@ -412,8 +450,10 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     if labor_burden:
         p["labor_burden"] = labor_burden
     p["labor_burden_rate"] = labor_burden
-    src["labor_burden_rate"] = (
-        "[用户]" if "labor_burden" in raw_params else "[缺失] 未提供(按0计，未含雇主负担)"
+    st.set_tag(
+        src, "labor_burden_rate",
+        USER if "labor_burden" in raw_params else MISSING,
+        "user.bare" if "labor_burden" in raw_params else "missing.labor_burden_zero",
     )
 
     # ── 业务规则：固定成本组件求和 + 最弱环标注 + 显式总数矛盾 ──
@@ -437,75 +477,82 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     # ── 月营收 src 标注 ──
     if "monthly_revenue" not in src:
         if p.get("monthly_revenue") is not None:
-            src["monthly_revenue"] = f"[推算] 从客流×单价×{DAYS_PER_MONTH}天"
+            st.set_tag(src, "monthly_revenue", DERIVED, "derived.revenue_from_traffic",
+                       days=DAYS_PER_MONTH)
         else:
-            src["monthly_revenue"] = "[缺失] 月营收未提供（且缺客流或客单价）"
+            st.set_tag(src, "monthly_revenue", MISSING, "missing.revenue_none")
 
     # ── 月人工 src 标注 ──
     if labor_blocked:
-        src["monthly_labor_cash"] = "[缺失] 人数异常，人工不参与计算"
-        src["monthly_labor"] = "[缺失] 人数异常，人工不参与计算"
+        st.set_tag(src, "monthly_labor_cash", MISSING, "missing.labor_abnormal")
+        st.set_tag(src, "monthly_labor", MISSING, "missing.labor_abnormal")
     elif labor_present:
         labor_cash = staff_n * float(p.get("avg_salary") or 0)
         monthly_labor = labor_cash * (1 + labor_burden)
-        count_src = src.get("employee_count", "")
-        sal_src = src.get("avg_salary", "")
-        count_user = count_src.startswith("[用户]")
-        sal_user = sal_src.startswith("[用户]")
+        # 语义判断走状态码，不碰展示文案（英文下 startswith("[用户]") 会静默失配）
+        count_user = st.code_of(src, "employee_count") == USER
+        sal_user = st.code_of(src, "avg_salary") == USER
         if count_user and sal_user:
-            labor_tag = "[用户]"
+            labor_code = USER
         elif count_user or sal_user:
-            labor_tag = "[推算]"
+            labor_code = DERIVED
         else:
-            labor_tag = "[候选]"
-        if labor_burden > 0 and labor_tag == "[用户]":
-            labor_tag = "[推算]"
+            labor_code = CANDIDATE
+        if labor_burden > 0 and labor_code == USER:
+            labor_code = DERIVED
         p["monthly_labor_cash"] = labor_cash
         p["monthly_labor"] = monthly_labor
-        src["monthly_labor_cash"] = f"{labor_tag} {staff_n:g}人×{float(p.get('avg_salary') or 0):g}"
-        src["monthly_labor"] = f"{labor_tag} 裸薪{labor_cash:g}×(1+{labor_burden:.0%}负担)"
+        _salary_txt = f"{float(p.get('avg_salary') or 0):g}"
+        st.set_tag(src, "monthly_labor_cash", labor_code, "labor_cash",
+                   mark=st.mark(labor_code), n=f"{staff_n:g}", salary=_salary_txt)
+        st.set_tag(src, "monthly_labor", labor_code, "labor_burdened",
+                   mark=st.mark(labor_code), cash=f"{labor_cash:g}",
+                   burden=f"{labor_burden:.0%}")
     else:
-        src["monthly_labor_cash"] = "[缺失] 未提供"
-        src["monthly_labor"] = "[缺失] 未提供"
+        st.set_tag(src, "monthly_labor_cash", MISSING, "missing.not_provided")
+        st.set_tag(src, "monthly_labor", MISSING, "missing.not_provided")
 
     # ── 固定成本业务规则：组件求和 + 最弱环 + 显式总数矛盾 + 利润反推 ──
     explicit_total = raw_params.get("monthly_expense", 0)
+    # (组件名文案键, 值, 状态码)；值为 None 或状态码为空 → 该组件不参与求和
     component_specs = [
-        ("租金", p.get("monthly_rent") if src.get("monthly_rent", "").startswith("[用户]") else None,
-         "[用户]" if src.get("monthly_rent", "").startswith("[用户]") else None),
-        ("人工", p.get("monthly_labor") if labor_present else None,
-         src.get("monthly_labor", "").split(" ")[0] if labor_present else None),
-        ("水电", p.get("utilities"), "[用户]" if p.get("utilities") is not None else None),
-        ("包装", p.get("packaging"), "[用户]" if p.get("packaging") is not None else None),
-        ("提成", p.get("commission"), "[用户]" if p.get("commission") is not None else None),
-        ("其他固定", p.get("other_fixed"), "[用户]" if p.get("other_fixed") is not None else None),
+        ("rent", p.get("monthly_rent") if st.code_of(src, "monthly_rent") == USER else None,
+         USER if st.code_of(src, "monthly_rent") == USER else ""),
+        ("labor", p.get("monthly_labor") if labor_present else None,
+         st.code_of(src, "monthly_labor") if labor_present else ""),
+        ("utilities", p.get("utilities"), USER if p.get("utilities") is not None else ""),
+        ("packaging", p.get("packaging"), USER if p.get("packaging") is not None else ""),
+        ("commission", p.get("commission"), USER if p.get("commission") is not None else ""),
+        ("other", p.get("other_fixed"), USER if p.get("other_fixed") is not None else ""),
     ]
-    present_specs = [(k, v, t) for k, v, t in component_specs if v is not None and t]
+    present_specs = [(k, v, c) for k, v, c in component_specs if v is not None and c]
     if present_specs:
         comp_sum = sum(v for _, v, _ in present_specs)
-        comp_src = " + ".join(f"{k}{t}" for k, _, t in present_specs)
-        tags = {t for _, _, t in present_specs}
-        if any(t.startswith("[候选]") or t == "[候选]" for t in tags):
-            total_tag = "[推算]"
-        elif any(t.startswith("[推算]") or t == "[推算]" for t in tags):
-            total_tag = "[推算]"
+        comp_src = " + ".join(
+            f"{t(f'src.comp.{k}')}{st.mark(c)}" for k, _, c in present_specs
+        )
+        codes = {c for _, _, c in present_specs}
+        if CANDIDATE in codes or DERIVED in codes:
+            total_code = DERIVED
         else:
-            total_tag = "[用户]"
+            total_code = USER
         if explicit_total and explicit_total > 0:
             if abs(comp_sum - explicit_total) <= 1:
                 p["monthly_fixed_cost"] = comp_sum
-                src["monthly_fixed_cost"] = f"{total_tag} 组件求和({comp_src})"
+                st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum",
+                           mark=st.mark(total_code), comp=comp_src)
             else:
                 p["monthly_fixed_cost"] = comp_sum
-                src["monthly_fixed_cost"] = (
-                    f"{total_tag} 组件求和({comp_src})，与显式总数{explicit_total:g}矛盾→待澄清"
-                )
+                st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum_conflict",
+                           mark=st.mark(total_code), comp=comp_src,
+                           total=f"{explicit_total:g}")
         else:
             p["monthly_fixed_cost"] = comp_sum
-            src["monthly_fixed_cost"] = f"{total_tag} 组件求和({comp_src})"
+            st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum",
+                       mark=st.mark(total_code), comp=comp_src)
     elif explicit_total and explicit_total > 0:
         p["monthly_fixed_cost"] = explicit_total
-        src["monthly_fixed_cost"] = "[用户] 显式总数(组件未给出)"
+        st.set_tag(src, "monthly_fixed_cost", USER, "user.explicit_total")
     else:
         user_profit = raw_params.get("monthly_profit", 0)
         if user_profit and p.get("monthly_revenue") and p.get("variable_cost_ratio") is not None:
@@ -513,70 +560,71 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
                 p["monthly_revenue"] - user_profit
                 - p["monthly_revenue"] * p["variable_cost_ratio"]
             )
-            src["monthly_fixed_cost"] = "[推算] 从用户月利润反推"
+            st.set_tag(src, "monthly_fixed_cost", DERIVED, "derived.from_profit")
         else:
             p["monthly_fixed_cost"] = None
-            src["monthly_fixed_cost"] = "[缺失] 未提供(不虚构)"
+            st.set_tag(src, "monthly_fixed_cost", MISSING, "missing.not_invented")
 
     # ── 可用现金 src 标注（值已由 derive() 算好，只补标注）──
     if p.get("total_investment"):
         eq = raw_params.get("equipment_ratio")
         if eq is not None:
             p["available_cash"] = p["total_investment"] * (1 - float(eq))
-            src["available_cash"] = "[推算] 总投资×(1-设备占比[用户])"
+            st.set_tag(src, "available_cash", DERIVED, "derived.cash_from_invest")
         else:
             p["available_cash"] = p["total_investment"]
-            src["available_cash"] = "[推算] 总投资（设备占比未提供，未扣减）"
+            st.set_tag(src, "available_cash", DERIVED, "derived.cash_no_equip_ratio")
     else:
         p["available_cash"] = None
-        src["available_cash"] = "[缺失] 总投资未提供"
+        st.set_tag(src, "available_cash", MISSING, "missing.investment_none")
 
     # ── 剩余派生字段 src 标注（值由 derive() 算好，只补来源标签）──
+    # (状态码, 有值时的文案键, 缺失时的文案键 or None)
     _src_map = {
-        "monthly_variable_cost": ("[推算] 月营收×变动成本率", "[缺失] 变动成本率或月营收未提供"),
-        "monthly_profit": ("[推算] 营收-固定-变动", None),
-        "variable_cost_per_unit": ("[推算] 单价×变动成本率", "[缺失] 单价或变动成本率未提供"),
-        "annual_fixed_cost": ("[推算] 月固定成本×12", "[缺失] 月固定成本未提供"),
-        "gross_margin": ("[推算] 1−变动成本率", None),
+        "monthly_variable_cost": (DERIVED, "derived.variable_cost", "missing.variable_cost"),
+        "monthly_profit": (DERIVED, "derived.profit", None),
+        "variable_cost_per_unit": (DERIVED, "derived.unit_var_cost", "missing.unit_var_cost"),
+        "annual_fixed_cost": (DERIVED, "derived.annual_fixed", "missing.annual_fixed"),
+        "gross_margin": (DERIVED, "derived.gross_margin", None),
     }
     # 月利润特殊：用户可直给
     user_monthly_profit = raw_params.get("monthly_profit")
     if user_monthly_profit:
         p["monthly_profit"] = user_monthly_profit
-        src["monthly_profit"] = "[用户]"
+        st.set_tag(src, "monthly_profit", USER, "user.bare")
     elif p.get("monthly_profit") is None:
         if p.get("monthly_fixed_cost") is None and p.get("monthly_revenue") is not None and p.get("variable_cost_ratio") is not None:
-            src["monthly_profit"] = "[缺失] 固定成本未提供，无法算利润"
+            st.set_tag(src, "monthly_profit", MISSING, "missing.profit_no_fixed")
         else:
-            src["monthly_profit"] = "[缺失] 输入不全，无法算利润"
+            st.set_tag(src, "monthly_profit", MISSING, "missing.profit_incomplete")
     else:
-        src["monthly_profit"] = "[推算] 营收-固定-变动"
+        st.set_tag(src, "monthly_profit", DERIVED, "derived.profit")
 
-    for fld, (ok_src, miss_src) in _src_map.items():
+    for fld, (code, ok_key, miss_key) in _src_map.items():
         if fld == "monthly_profit":
             continue  # 上面已处理
         if fld == "gross_margin" and user_vc is None and user_gm is not None:
             # S4：用户直给毛利率时它是输入项，不是「1−变动成本率」的推算结果
-            src[fld] = "[用户]"
+            st.set_tag(src, fld, USER, "user.bare")
         elif p.get(fld) is not None:
-            src[fld] = ok_src
-        elif miss_src:
-            src[fld] = miss_src
+            st.set_tag(src, fld, code, ok_key)
+        elif miss_key:
+            st.set_tag(src, fld, MISSING, miss_key)
         else:
-            src[fld] = "[缺失] 未提供"
+            st.set_tag(src, fld, MISSING, "missing.not_provided")
 
     # ── 变动成本率 src 标注（值已由 derive() 按公式唯一出处算出）──
-    # 文案与旧版保持一致：敏感度区间逻辑按 "[推算]" 前缀识别（见 _build_scenarios），
-    # 改文案会静默改变 what-if 区间行为。
-    if src.get("variable_cost_ratio") != "[用户]":
+    # 敏感度区间逻辑（见 _build_scenarios）按状态码 DERIVED 识别，
+    # 不再依赖 "[推算]" 文案前缀 —— 否则英文下会静默改变 what-if 区间行为。
+    if st.code_of(src, "variable_cost_ratio") != USER:
         if p.get("variable_cost_ratio") is None:
-            src["variable_cost_ratio"] = "[缺失] 未提供(按未知计)"
+            st.set_tag(src, "variable_cost_ratio", MISSING, "missing.vcr_unknown")
         elif user_unit_var is not None and p.get("price_per_unit"):
-            src["variable_cost_ratio"] = "[推导] 单位变动成本÷客单价"
+            st.set_tag(src, "variable_cost_ratio", DERIVED, "derived.vcr_from_unit_cost")
         elif user_gm is not None:
-            src["variable_cost_ratio"] = "[推算] 从用户毛利率反推"
+            st.set_tag(src, "variable_cost_ratio", DERIVED, "derived.vcr_from_gm")
         else:
-            src["variable_cost_ratio"] = "[推算] 公式推导"
+            st.set_tag(src, "variable_cost_ratio", DERIVED, "derived.vcr_formula")
 
     p["benchmark"] = tpl["benchmark"]
     # 行业典型成本结构占比（租金/包装/营销/人工/其他），用于差异化参考
@@ -612,13 +660,11 @@ def _benchmark_check(params: dict, benchmark: dict) -> list:
     if rev and prof is not None and lo is not None and hi is not None and rev > 0:
         nm = prof / rev
         if nm < lo:
-            warnings.append(
-                f"净利率 {nm*100:.0f}% 低于行业典型 {lo*100:.0f}%-{hi*100:.0f}%，"
-                f"需审视定价或是否漏算变动成本。")
+            warnings.append(t("wf.bench.margin_low", nm=f"{nm*100:.0f}",
+                              lo=f"{lo*100:.0f}", hi=f"{hi*100:.0f}"))
         elif nm > hi:
-            warnings.append(
-                f"净利率 {nm*100:.0f}% 高于行业典型 {lo*100:.0f}%-{hi*100:.0f}%，"
-                f"确认是否低估了变动/隐形成本。")
+            warnings.append(t("wf.bench.margin_high", nm=f"{nm*100:.0f}",
+                              lo=f"{lo*100:.0f}", hi=f"{hi*100:.0f}"))
 
     # 2) 回本月数对比（年化固定成本 ÷ 月利润，若盈利）
     months = None
@@ -629,20 +675,18 @@ def _benchmark_check(params: dict, benchmark: dict) -> list:
     bmin, bmax = benchmark.get("breakeven_months_min"), benchmark.get("breakeven_months_max")
     if months is not None and bmax is not None:
         if months > bmax:
-            hint = f"（行业典型 {bmin}-{bmax} 个月）" if bmin is not None else ""
-            warnings.append(
-                f"预计回本约 {months:.0f} 个月，超出行业典型区间{hint}，现金流压力偏大。")
+            hint = (t("wf.bench.breakeven_hint", bmin=bmin, bmax=bmax)
+                    if bmin is not None else "")
+            warnings.append(t("wf.bench.payback_exceed", months=f"{months:.0f}", hint=hint))
 
     # 3) 日均客流对比（仅 traffic_min/max 适用的行业）
     dt = params.get("daily_traffic")
     tmin, tmax = benchmark.get("traffic_min"), benchmark.get("traffic_max")
     if dt and tmin is not None and tmax is not None:
         if dt < tmin:
-            warnings.append(
-                f"日均客流 {dt:.0f} 低于行业典型 {tmin}-{tmax}，需关注爬坡期与获客。")
+            warnings.append(t("wf.bench.traffic_low", dt=f"{dt:.0f}", tmin=tmin, tmax=tmax))
         elif dt > tmax:
-            warnings.append(
-                f"日均客流 {dt:.0f} 高于行业典型 {tmin}-{tmax}，确认是否可持续。")
+            warnings.append(t("wf.bench.traffic_high", dt=f"{dt:.0f}", tmin=tmin, tmax=tmax))
 
     return warnings
 
@@ -658,19 +702,17 @@ ASSUMPTION_FIELDS = [
 
 
 def _derive_conf(param_sources: dict) -> dict:
-    """从来源标注推导置信档位 tier：user / default / guess / missing。"""
+    """从来源**状态码**推导置信档位 tier：user / default / guess / missing。
+
+    走状态码而非展示文案：文案会随 locale 变，状态码不变。
+    """
+    # 与旧实现逐档对齐：[矛盾] 旧行为是「非 user/缺失/候选」→ guess，此处同。
+    _TIER_BY_CODE = {USER: "user", MISSING: "missing", CANDIDATE: "default"}
     conf = {}
     for k, s in param_sources.items():
-        if not isinstance(s, str):  # 跳过 _guard 等结构化元数据
+        if not isinstance(s, str):  # 跳过 _guard / _codes 等结构化元数据
             continue
-        if s.startswith("[用户]"):
-            conf[k] = "user"
-        elif s.startswith("[缺失]"):
-            conf[k] = "missing"
-        elif s.startswith("[候选]"):
-            conf[k] = "default"
-        else:
-            conf[k] = "guess"  # [推算]
+        conf[k] = _TIER_BY_CODE.get(st.code_of(param_sources, k), "guess")
     return conf
 
 
@@ -703,46 +745,60 @@ def _check_sufficiency(params: dict, param_sources: dict) -> dict:
 
     - 硬门槛：月营收必须可得（用户直接给 或 客流×单价算出）> 0，否则拦，不输出仪表盘。
     - 软缺口：总投资 / 人工 缺失则列入 gaps（提示但不致命，按 0 计并标注）。
+
+    gaps 是**展示文案**（随 locale 变），因此额外返回 gap_codes（语言无关的
+    缺口码）供门禁判定用 —— 门禁不能靠中文前缀匹配（英文下会静默失效）。
     """
-    gaps = []
+    gap_codes = []
     rev = params.get("monthly_revenue")
     # 收入序列：取第一个值判断充分性
     if isinstance(rev, (list, tuple)):
         rev = rev[0] if rev else None
     if not (rev and rev > 0):
-        gaps.append("月营收（或 日均客流 + 客单价）")
-    if param_sources.get("total_investment", "").startswith("[缺失]"):
-        gaps.append("总投资（算跑道/风险需要）")
-    if param_sources.get("employee_count", "").startswith("[缺失]"):
-        gaps.append("人工成本（人数 + 薪资，未提供则按 0 计）")
+        gap_codes.append("revenue")
+    if st.code_of(param_sources, "total_investment") == MISSING:
+        gap_codes.append("investment")
+    if st.code_of(param_sources, "employee_count") == MISSING:
+        gap_codes.append("labor")
     # D2：变动成本率缺失 → 无法算利润/平衡点 → 列入缺口，可算的部分照算
-    if param_sources.get("variable_cost_ratio", "").startswith("[缺失]"):
-        gaps.append("变动成本率（算利润/保本需要）")
+    if st.code_of(param_sources, "variable_cost_ratio") == MISSING:
+        gap_codes.append("variable_cost")
+    gaps = [t(f"wf.gap.{c}") for c in gap_codes]
 
     key_fields = ["monthly_revenue", "total_investment", "employee_count",
                   "avg_salary", "variable_cost_ratio", "monthly_rent"]
     known = sum(1 for f in key_fields
-                if param_sources.get(f, "").startswith(("[用户]", "[候选]")))
+                if st.code_of(param_sources, f) in (USER, CANDIDATE))
     coverage = round(known / len(key_fields), 2)
 
     # 硬门槛：仅月营收缺失拦（无法算任何结论）；vc 缺失只列缺口、能算的照算。
     # 利润/平衡点在 vc 缺失时输出 None + 缺口标注，交由输出层呈现「还不能定」。
-    ok = not any(g.startswith("月营收") for g in gaps)
-    return {"ok": ok, "gaps": gaps, "coverage": coverage}
+    ok = "revenue" not in gap_codes
+    return {"ok": ok, "gaps": gaps, "gap_codes": gap_codes, "coverage": coverage}
+
+
+# 状态码 → 假设类型文案键（缺失/候选/推算）
+_KIND_KEY_BY_CODE = {MISSING: "missing", CANDIDATE: "candidate", DERIVED: "derived"}
 
 
 def _build_assumptions(params: dict, param_sources: dict) -> list:
-    """汇总非[用户]来源的参数，形成“当前假设清单”（决策A③ 前置可见）。"""
+    """汇总非[用户]来源的参数，形成“当前假设清单”（决策A③ 前置可见）。
+
+    `kind` 是展示文案（测试与前端按它取值），`kind_code` 是语言无关的状态码，
+    供决策层做语义判断。
+    """
     out = []
     for k in ASSUMPTION_FIELDS:
         s = param_sources.get(k, "")
-        if not s or s.startswith("[用户]"):
+        if not isinstance(s, str) or not s:
+            continue
+        code = st.code_of(param_sources, k)
+        if code == USER:
             continue
         val = params.get(k)
-        kind = ("缺失" if s.startswith("[缺失]")
-                else "候选" if s.startswith("[候选]")
-                else "推算")
-        out.append({"field": k, "value": val, "source": s, "kind": kind})
+        kind_key = _KIND_KEY_BY_CODE.get(code, "derived")
+        out.append({"field": k, "value": val, "source": s,
+                    "kind": t(f"wf.kind.{kind_key}"), "kind_code": code})
     return out
 
 
@@ -755,16 +811,17 @@ def _build_framework(params: dict, param_sources: dict) -> dict:
     labor = (params.get("employee_count", 0) or 0) * (params.get("avg_salary", 0) or 0)
     return {
         "revenue_model": (
-            f"月营收 = {rev:,.0f} 元（已知）" if rev > 0
-            else "月营收：未知（需 月营收 或 日均客流×客单价）"
+            t("wf.framework.revenue_known", rev=f"{rev:,.0f}") if rev > 0
+            else t("wf.framework.revenue_unknown")
         ),
         "cost_model": (
-            f"月固定成本 ≈ 租金 {rent:,.0f} 元"
-            + (f" + 人工 {labor:,.0f} 元" if labor else "（人工未提供，按 0 计）")
+            t("wf.framework.cost", rent=f"{rent:,.0f}")
+            + (t("wf.framework.labor_part", labor=f"{labor:,.0f}") if labor
+               else t("wf.framework.labor_none"))
         ),
         "cash_model": (
-            "可用现金：未知（需 总投资）" if params.get("available_cash") is None
-            else f"可用现金 = {params['available_cash']:,.0f} 元"
+            t("wf.framework.cash_unknown") if params.get("available_cash") is None
+            else t("wf.framework.cash_known", cash=f"{params['available_cash']:,.0f}")
         ),
     }
 
@@ -779,11 +836,11 @@ def _profit_readiness(params: dict) -> tuple[bool, str]:
     降级提示，绝不硬算假趋势 / 不参与 diff 减法。返回 (ready, 缺口说明)。
     """
     if params.get("variable_cost_ratio") is None:
-        return False, "变动成本率未提供（或不可推导），无法计算月利润与趋势"
+        return False, t("wf.readiness.no_vcr")
     if params.get("monthly_revenue") is None:
-        return False, "月营收未提供"
+        return False, t("wf.readiness.no_revenue")
     if params.get("monthly_fixed_cost") is None:
-        return False, "固定成本未提供，无法计算月利润与趋势"
+        return False, t("wf.readiness.no_fixed")
     return True, ""
 
 
@@ -810,7 +867,7 @@ def _project_trend_12m(params: dict) -> dict:
         return {"months": [], "input_mode": "unknown", "months_count": 0,
                 "summary": {"total_annual_profit": 0, "max_monthly_loss": 0,
                             "months_to_profitability": None, "months_to_breakeven": None,
-                            "trend_direction": "➡️ 持平"}}
+                            "trend_direction": t("wf.trend.dir_flat")}}
 
     # 判断输入模式：序列 vs 单值
     is_series = isinstance(revenue_input, (list, tuple)) and len(revenue_input) > 0
@@ -897,19 +954,20 @@ def _project_trend_12m(params: dict) -> dict:
         "months": months,
         "input_mode": "series" if is_series else "growth_rate",
         "months_count": months_count,
-        "seasonal_source": f"行业模板（{industry_name}）" if has_industry_seasonal else "通用系数（仅供参考）",
+        "seasonal_source": (t("wf.trend.seasonal_industry", industry=industry_name)
+                            if has_industry_seasonal else t("wf.trend.seasonal_generic")),
         "summary": {
             "total_annual_profit": round(total_annual_profit, 0),
             "max_monthly_loss": round(max_monthly_loss, 0),
             "months_to_profitability": months_to_profit,
             "months_to_breakeven": breakeven_month,
             "trend_direction": (
-                "📈 上升" if len(months) >= 2 and months[-1]["profit"] is not None
+                t("wf.trend.dir_up") if len(months) >= 2 and months[-1]["profit"] is not None
                 and months[0]["profit"] is not None
                 and months[-1]["profit"] > months[0]["profit"]
-                else "📉 下降" if len(months) >= 2 and months[-1]["profit"] is not None
+                else t("wf.trend.dir_down") if len(months) >= 2 and months[-1]["profit"] is not None
                 and months[0]["profit"] is not None
-                else "➡️ 持平"
+                else t("wf.trend.dir_flat")
             ),
         },
     }
@@ -928,7 +986,8 @@ def _project_trend_12m(params: dict) -> dict:
             result["investment_metrics"] = {
                 "npv_8pct": round(npv, 0),
                 "irr": round(irr, 4) if irr is not None else None,
-                "irr_percent": f"{irr*100:.1f}%" if irr is not None else "无法收敛",
+                "irr_percent": (t("wf.trend.irr_percent", pct=f"{irr*100:.1f}")
+                                if irr is not None else t("wf.trend.irr_unconverged")),
                 # F2：回收期与盈亏平衡月分开输出（旧实现两者同一个值）
                 "payback_months": payback_month,
                 "breakeven_month": breakeven_month,
@@ -951,7 +1010,8 @@ def _project_trend_12m(params: dict) -> dict:
                     dynamic_runway = m["month"]
         result["dynamic_runway"] = {
             "runway_months": dynamic_runway,
-            "runway_label": f"{dynamic_runway} 个月" if dynamic_runway else f">{months_count} 个月（未耗尽）",
+            "runway_label": (t("wf.trend.runway_months", n=dynamic_runway) if dynamic_runway
+                             else t("wf.trend.runway_beyond", n=months_count)),
             "min_cash": round(min_cash, 0),
             "min_cash_month": min_cash_month,
         }
@@ -960,11 +1020,14 @@ def _project_trend_12m(params: dict) -> dict:
 
 
 def _safe_runway(params: dict):
-    """可用现金或变动成本缺失时返回 '未知'，否则返回跑道月数（避免 None 参与除法崩溃）。"""
+    """可用现金或变动成本缺失时返回 '未知'，否则返回跑道月数（避免 None 参与除法崩溃）。
+
+    ⚠️ 返回值会被前端直接展示；'未知' 走文案层，英文下不再是中文残片。
+    """
     if params.get("available_cash") is None:
-        return "未知"
+        return t("wf.common.unknown")
     if params.get("variable_cost_ratio") is None and params.get("monthly_variable_cost") is None:
-        return "未知"
+        return t("wf.common.unknown")
     burn = (params["monthly_fixed_cost"] or 0) + (params.get("monthly_variable_cost") or 0)
     rev = params["monthly_revenue"]
     if isinstance(rev, (list, tuple)):
@@ -1024,6 +1087,7 @@ def _fill_and_assess(raw: dict) -> dict:
         "mixed": mixed,
         "insufficient": not suff["ok"],
         "gaps": suff["gaps"],
+        "gap_codes": suff["gap_codes"],
         "coverage": suff["coverage"],
     }
 
@@ -1035,8 +1099,9 @@ def _build_skeleton(state: dict) -> dict:
         "project_type": state["params"]["industry_name"],
         "stage": state["params"]["stage"],
         "template_mode": state["params"].get("_template_mode", ""),
-        "message": "参数不足，已暂停完整分析，仅展示模型框架与待补字段。补充后重算即可生成完整仪表盘。",
+        "message": t("wf.skeleton.message"),
         "gaps": state["gaps"],
+        "gap_codes": state.get("gap_codes", []),
         "coverage": state["coverage"],
         "confidence": state["conf"],
         "basis": state.get("basis", {}),
@@ -1044,7 +1109,7 @@ def _build_skeleton(state: dict) -> dict:
         "assumptions": state["assumptions"],
         "derived": state.get("derived", []),
         "framework": state["framework"],
-        "next_step": "建议补充：月营收（或 日均客流 + 客单价）、总投资、人工成本（人数 + 薪资）。",
+        "next_step": t("wf.skeleton.next_step"),
     }
 
 
@@ -1094,41 +1159,41 @@ def _build_scenarios(params: dict, src: dict) -> dict:
     核心思想：把"未知"从被掩盖的缺陷，变成驱动结论弹性的燃料。
     原 bug 里的"虚构 2 人×6000"在此被重新定位为「保守情景」而非「单一基准答案」。
     """
-    vc_src = src.get("variable_cost_ratio", "")
-    rev_src = src.get("monthly_revenue", "")
-    labor_src = src.get("employee_count", "")
-    cash_src = src.get("total_investment", "")
+    vc_code = st.code_of(src, "variable_cost_ratio")
+    rev_code = st.code_of(src, "monthly_revenue")
+    labor_code = st.code_of(src, "employee_count")
+    cash_code = st.code_of(src, "total_investment")
 
     base_profit, base_runway = _recompute_outputs(params)
 
     # 保守情景：成本/比率上行，营收（若推算）下行，人工缺失则假设需 2 人
     wc = dict(params)
-    if vc_src.startswith("[推算]") and wc["variable_cost_ratio"] is not None:
+    if vc_code == DERIVED and wc["variable_cost_ratio"] is not None:
         wc["variable_cost_ratio"] = min(0.95, wc["variable_cost_ratio"] + _VC_BAND)
-    if rev_src.startswith("[推算]") and wc["monthly_revenue"] is not None:
+    if rev_code == DERIVED and wc["monthly_revenue"] is not None:
         wc["monthly_revenue"] = wc["monthly_revenue"] * (1 - _REV_GUESS_BAND)
     # 无默认：人工缺失不再虚构 2人×6000（取消输入伪造型默认，D2 延展）
     worst_profit, worst_runway = _recompute_outputs(wc)
 
     # 乐观情景：反向
     bc = dict(params)
-    if vc_src.startswith("[推算]") and bc["variable_cost_ratio"] is not None:
+    if vc_code == DERIVED and bc["variable_cost_ratio"] is not None:
         bc["variable_cost_ratio"] = max(0.05, bc["variable_cost_ratio"] - _VC_BAND)
-    if rev_src.startswith("[推算]") and bc["monthly_revenue"] is not None:
+    if rev_code == DERIVED and bc["monthly_revenue"] is not None:
         bc["monthly_revenue"] = bc["monthly_revenue"] * (1 + _REV_GUESS_BAND)
     best_profit, best_runway = _recompute_outputs(bc)
 
     drivers = []
-    if vc_src.startswith(("[候选]", "[推算]")):
-        drivers.append("变动成本率（行业候选/推算）")
-    elif vc_src.startswith("[缺失]"):
-        drivers.append("变动成本率（未提供，利润不可算）")
-    if rev_src.startswith("[推算]"):
-        drivers.append("月营收（由客流推算，客流有波动）")
-    if labor_src.startswith("[缺失]"):
-        drivers.append("人工成本（未提供，按 0 计）")
-    if cash_src.startswith("[缺失]"):
-        drivers.append("总投资（跑道未知）")
+    if vc_code in (CANDIDATE, DERIVED):
+        drivers.append(t("wf.scenario.driver_vc_guess"))
+    elif vc_code == MISSING:
+        drivers.append(t("wf.scenario.driver_vc_missing"))
+    if rev_code == DERIVED:
+        drivers.append(t("wf.scenario.driver_rev_guess"))
+    if labor_code == MISSING:
+        drivers.append(t("wf.scenario.driver_labor_missing"))
+    if cash_code == MISSING:
+        drivers.append(t("wf.scenario.driver_cash_missing"))
 
     # D2：变动成本率缺失 → best/worst/base 均 None，上下游按「未知」处理而非崩溃/假数
     def _round_or_none(v):
@@ -1156,10 +1221,10 @@ _LEVER_PRIORITY = {
     "total_investment": 3,
 }
 _LEVER_NAME = {
-    "employee_count": "人工成本（当前按 0 计，最可能低估真实成本）",
-    "monthly_revenue": "月营收（由客流×单价推算，客流尚有波动）",
-    "variable_cost_ratio": "变动成本率（行业默认，可能偏离你的实际）",
-    "total_investment": "总投资（未提供，跑道尚不可知）",
+    "employee_count": "wf.lever.employee_count",
+    "monthly_revenue": "wf.lever.monthly_revenue",
+    "variable_cost_ratio": "wf.lever.variable_cost_ratio",
+    "total_investment": "wf.lever.total_investment",
 }
 # 只有真正影响利润/跑道的核心杠杆才进「风险聚焦」头条；
 # stage/growth_rate 等次要默认不在此列，避免把无关默认当风险。
@@ -1172,28 +1237,27 @@ _MATERIAL_FIELDS = {
 def _build_narrative(params: dict, src: dict, scenarios: dict, pit_total: int) -> str:
     """用置信层 + 情景，给出「风险集中在哪、你最该质疑什么」的聚焦陈述。"""
     uncertain = [k for k in _MATERIAL_FIELDS
-                 if src.get(k, "").startswith(("[候选]", "[推算]", "[缺失]"))]
+                 if st.code_of(src, k) in (CANDIDATE, DERIVED, MISSING)]
     if not uncertain:
-        return "关键参数均由你提供，结论置信度高；下方数字可放心作为决策参考。"
+        return t("wf.narrative.confident")
 
     uncertain.sort(key=lambda k: _LEVER_PRIORITY.get(k, 9))
     top = uncertain[0]
-    lead = _LEVER_NAME.get(top, top)
+    lead = t(_LEVER_NAME.get(top, top))
 
     sp = scenarios.get("monthly_profit", {})
     if sp.get("base") is None:
         # D2：变动成本率缺失 → 利润不可算，叙事只刷「还不能定」
-        rng = "月利润：还无法计算（需变动成本率）"
+        rng = t("wf.narrative.profit_unknown")
     elif scenarios.get("has_uncertainty"):
-        rng = (f"按当前假设，月利润约 {sp['base']:,.0f} 元"
-               f"（乐观 {sp['best']:,.0f} / 保守 {sp['worst']:,.0f}）")
+        rng = t("wf.narrative.profit_range", base=f"{sp['base']:,.0f}",
+                best=f"{sp['best']:,.0f}", worst=f"{sp['worst']:,.0f}")
     else:
-        rng = f"月利润约 {sp.get('base', 0):,.0f} 元"
+        rng = t("wf.narrative.profit_approx", v=f"{sp.get('base', 0):,.0f}")
 
-    text = (f"风险聚焦：结论的弹性主要来自「{lead}」这一假设。{rng}。"
-            f"你最该优先核实/补充的就是它——一旦它变了，上面的数字会跟着动。")
+    text = t("wf.narrative.risk_focus", lead=lead, rng=rng)
     if pit_total:
-        text += f" 另有 {pit_total} 项结构化风险待关注（见下方「风险」）。"
+        text += t("wf.narrative.extra_risks", n=pit_total)
     return text
 
 
@@ -1236,7 +1300,7 @@ def quick_scan(params_json: str) -> str:
         if (params["price_per_unit"] is None
                 or params["variable_cost_per_unit"] is None
                 or not fixed_known):
-            be = {"error": "客单价/变动成本/固定成本未提供全，无法算保本"}
+            be = {"error": t("wf.error.breakeven_incomplete")}
             daily_be = None
             rev_based_be = None
         else:
@@ -1264,7 +1328,7 @@ def quick_scan(params_json: str) -> str:
             be = {
                 "breakeven_revenue_monthly": rev_based_be,
                 "contribution_margin_ratio": f"{round((1 - vcr) * 100, 1)}%",
-                "note": "未提供客单价，已用「营收口径」保本（月均需营收）替代",
+                "note": t("wf.error.rev_based_note"),
             }
 
         # ── 模块 2: 现金流（可用现金缺失则跳过跑道计算；固定成本未知则跑道不可算）──
@@ -1277,21 +1341,21 @@ def quick_scan(params_json: str) -> str:
         fixed_cost = params.get("monthly_fixed_cost")
         if vcr_missing:
             # 缺失不当 0：变动成本未知时跑道/现金与利润同一套「未知」
-            rw = {"runway_months": None, "note": "变动成本率未提供，跑道无法计算"}
+            rw = {"runway_months": None, "note": t("wf.error.runway_vc_missing")}
         elif params["available_cash"] is not None and fixed_cost is not None:
             burn = fixed_cost + (monthly_var_cost or 0)
             rw = _calc_runway(params["available_cash"], burn, _rev_for_calc)
         elif params["available_cash"] is None:
-            rw = {"runway_months": None, "note": "总投资未提供，跑道无法计算"}
+            rw = {"runway_months": None, "note": t("wf.error.runway_invest_missing")}
         else:
-            rw = {"runway_months": None, "note": "固定成本未提供，跑道无法计算"}
+            rw = {"runway_months": None, "note": t("wf.error.runway_fixed_missing")}
 
         # ── 模块 3: 敏感性 ──
         # F3 修复：固定/变动成本分传，变动成本随营收联动（边际贡献口径）
         _fix_c = fixed_cost or 0
         _var_c = monthly_var_cost or 0
         if params.get("monthly_profit") is None:
-            sens = {"error": "输入不全，无法算敏感性"}
+            sens = {"error": t("wf.error.sens_incomplete")}
         else:
             sens = _calc_sensitivity(
                 params["monthly_revenue"],
@@ -1323,42 +1387,47 @@ def quick_scan(params_json: str) -> str:
 
         # ── 状态标记（D2：变动成本率缺失时 profit/gross_margin 为 None → 状态=未知）──
         if params["monthly_profit"] is None:
-            profit_status = "⚪ 未知（需变动成本率）"
+            profit_status = t("wf.status.profit_unknown")
         else:
-            profit_status = "🟢 盈利" if params["monthly_profit"] > 0 else "🔴 亏损"
+            profit_status = (t("wf.status.profit_up") if params["monthly_profit"] > 0
+                             else t("wf.status.profit_down"))
         rw_months = rw.get("runway_months")
         if vcr_missing:
-            cash_status = "⚪ 未知（需变动成本率）"
+            cash_status = t("wf.status.cash_unknown_vc")
         elif rw_months is None:
-            cash_status = "⚪ 未知（需总投资）"
+            cash_status = t("wf.status.cash_unknown_invest")
         elif isinstance(rw_months, (int, float)):
             if rw_months < 0:
-                cash_status = "🟢 正向现金流"
+                cash_status = t("wf.status.cash_positive")
             elif rw_months < 6:
-                cash_status = "🔴 危险"
+                cash_status = t("wf.status.cash_danger")
             elif rw_months < 12:
-                cash_status = "🟡 偏紧"
+                cash_status = t("wf.status.cash_tight")
             else:
-                cash_status = "🟢 安全"
+                cash_status = t("wf.status.cash_safe")
         elif rw_months == "无限":
-            cash_status = "🟢 正向现金流"
+            cash_status = t("wf.status.cash_positive")
         else:
-            cash_status = "⚪ 未知"
+            cash_status = t("wf.status.cash_unknown")
 
         if daily_be is not None and params["daily_traffic"] is not None:
-            be_status = "🔴 客流不足" if params["daily_traffic"] < daily_be else "🟢 可达保本"
+            be_status = (t("wf.status.be_traffic_short") if params["daily_traffic"] < daily_be
+                         else t("wf.status.be_reachable"))
         elif rev_based_be is not None and params["monthly_revenue"] is not None:
             _rev_check = params["monthly_revenue"]
             if isinstance(_rev_check, (list, tuple)):
                 _rev_check = _rev_check[0] if _rev_check else 0
-            be_status = "🔴 未达保本" if _rev_check < rev_based_be else "🟢 可达保本"
+            be_status = (t("wf.status.be_below") if _rev_check < rev_based_be
+                         else t("wf.status.be_reachable"))
         else:
-            be_status = "⚪ 部分未知（客单价/客流/营收未给，保本判定不完整）"
+            be_status = t("wf.status.be_partial")
         # S3：gross_margin 内部为 0~1 口径，阈值由 50/30 相应改为 0.5/0.3
         if params.get("gross_margin") is None:
-            margin_status = "⚪ 未知（需变动成本率）"
+            margin_status = t("wf.status.profit_unknown")
         else:
-            margin_status = "🟢 健康" if params["gross_margin"] >= 0.5 else ("🟡 一般" if params["gross_margin"] >= 0.3 else "🔴 偏低")
+            margin_status = (t("wf.status.margin_healthy") if params["gross_margin"] >= 0.5
+                             else (t("wf.status.margin_fair") if params["gross_margin"] >= 0.3
+                                   else t("wf.status.margin_low")))
 
         dashboard = {
             "project_type": params["industry_name"],
@@ -1396,7 +1465,7 @@ def quick_scan(params_json: str) -> str:
                 "avg_salary": params["avg_salary"],
                 "variable_cost_ratio": (
                     f"{params['variable_cost_ratio']*100:.0f}%"
-                    if params['variable_cost_ratio'] is not None else "未知"
+                    if params['variable_cost_ratio'] is not None else t("wf.common.unknown")
                 ),
                 "available_cash": round(params["available_cash"], 0) if params["available_cash"] is not None else None,
                 # 人工分解（裸薪 / 含社保）——让合计不再是黑箱
@@ -1470,7 +1539,7 @@ def quick_scan(params_json: str) -> str:
         return json.dumps(dashboard, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"quick_scan 失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("wf.error.quick_scan_fail", e=str(e))}, ensure_ascii=False)
 
 
 # ─── 工具 2: trend_projection（趋势预测）─────────────────────────────────
@@ -1506,7 +1575,7 @@ def trend_projection(params_json: str) -> str:
             return json.dumps({
                 "insufficient": True,
                 "tool": "trend",
-                "message": f"趋势预测需要完整成本模型。{profit_reason}。请补充后重算。",
+                "message": t("wf.error.trend_insufficient", reason=profit_reason),
                 "gaps": state.get("gaps", []),
                 "coverage": state.get("coverage", 0),
             }, ensure_ascii=False, indent=2)
@@ -1516,7 +1585,7 @@ def trend_projection(params_json: str) -> str:
         return json.dumps(trend, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"trend_projection 失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("wf.error.trend_fail", e=str(e))}, ensure_ascii=False)
 
 
 # ─── 工具 3: compare_scenarios（场景对比）─────────────────────────────────
@@ -1547,12 +1616,12 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
         if base_state["insufficient"] or alt_state["insufficient"]:
             gaps = []
             if base_state["insufficient"]:
-                gaps.append("方案A：" + "；".join(base_state["gaps"]))
+                gaps.append(t("wf.compare.scenario_a") + "：" + "；".join(base_state["gaps"]))
             if alt_state["insufficient"]:
-                gaps.append("方案B：" + "；".join(alt_state["gaps"]))
+                gaps.append(t("wf.compare.scenario_b") + "：" + "；".join(alt_state["gaps"]))
             return json.dumps({
                 "insufficient": True,
-                "message": "对比需要两个方案都提供月营收（或 日均客流 + 客单价）。以下方案参数不足：",
+                "message": t("wf.error.compare_rev_insufficient"),
                 "gaps": gaps,
             }, ensure_ascii=False, indent=2)
 
@@ -1563,14 +1632,14 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
         # （insufficient=False 但 monthly_profit=None），此时 diff 减法会 None-None 崩溃。
         # 复用统一 _profit_readiness，保证 trend/compare 对「算不出利润」的判定一致。
         profit_gaps = []
-        for side, p in (("方案A", base_p), ("方案B", alt_p)):
+        for side, p in ((t("wf.compare.scenario_a"), base_p), (t("wf.compare.scenario_b"), alt_p)):
             ready, reason = _profit_readiness(p)
             if not ready:
                 profit_gaps.append(f"{side}：{reason}")
         if profit_gaps:
             return json.dumps({
                 "insufficient": True,
-                "message": "对比需要两个方案都能算出月利润。请补充变动成本率（如「变动成本率 40%」）后重试。",
+                "message": t("wf.error.compare_profit_insufficient"),
                 "gaps": profit_gaps,
             }, ensure_ascii=False, indent=2)
 
@@ -1616,7 +1685,7 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
 
         comparison = {
             "base_scenario": {
-                "label": "方案 A",
+                "label": t("wf.compare.label_a"),
                 "monthly_revenue": round(base_rev, 0),
                 "monthly_profit": round(base_p["monthly_profit"], 0),
                 "monthly_fixed_cost": round(base_p["monthly_fixed_cost"], 0),
@@ -1624,7 +1693,7 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
                 "pitfall_count": base_pits["total_pitfalls"],
             },
             "alt_scenario": {
-                "label": "方案 B",
+                "label": t("wf.compare.label_b"),
                 "monthly_revenue": round(alt_rev, 0),
                 "monthly_profit": round(alt_p["monthly_profit"], 0),
                 "monthly_fixed_cost": round(alt_p["monthly_fixed_cost"], 0),
@@ -1634,7 +1703,9 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
             "diff": {
                 "profit": diff_profit,
                 "revenue": diff_revenue,
-                "verdict": "方案 B 更优" if diff_profit > 0 else ("方案 A 更优" if diff_profit < 0 else "两者相当"),
+                "verdict": (t("wf.compare.verdict_b_better") if diff_profit > 0
+                            else (t("wf.compare.verdict_a_better") if diff_profit < 0
+                                  else t("wf.compare.verdict_tie"))),
             },
         }
 
@@ -1659,16 +1730,16 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
                     if alt_be is not None or base_be is not None else None
                 ),
                 "verdict_annual": (
-                    "方案B年利润更高" if alt_annual > base_annual
-                    else "方案A年利润更高" if base_annual > alt_annual
-                    else "年利润相当"
+                    t("wf.compare.annual_b_higher") if alt_annual > base_annual
+                    else t("wf.compare.annual_a_higher") if base_annual > alt_annual
+                    else t("wf.compare.annual_tie")
                 ),
             }
 
         return json.dumps(comparison, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"compare_scenarios 失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("wf.error.compare_fail", e=str(e))}, ensure_ascii=False)
 
 
 # ─── 工具 4: cashflow_projection（月现金流明细表，档 B）─────────────────────
@@ -1721,17 +1792,17 @@ def cashflow_projection(params_json: str) -> str:
         result["basis"] = state["basis"]
         result["notes"] = []
         if lag:
-            result["notes"].append(f"收入按 {lag} 个月到账延迟计入")
+            result["notes"].append(t("wf.cashflow.receivable_lag", lag=lag))
         if rhythm.get("rent"):
             if rhythm["rent"] == "quarterly":
-                result["notes"].append("租金按季度支付")
+                result["notes"].append(t("wf.cashflow.rent_quarterly"))
             elif rhythm["rent"] == "monthly":
-                result["notes"].append("租金按月支付")
+                result["notes"].append(t("wf.cashflow.rent_monthly"))
         if one_time:
-            result["notes"].append(f"含 {len(one_time)} 笔一次性大额支出")
+            result["notes"].append(t("wf.cashflow.one_time", n=len(one_time)))
         result["param_sources"] = {k: v for k, v in state["src"].items()
                                    if isinstance(v, str) and not k.startswith("_")}
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"cashflow_projection 失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("wf.error.cashflow_fail", e=str(e))}, ensure_ascii=False)
