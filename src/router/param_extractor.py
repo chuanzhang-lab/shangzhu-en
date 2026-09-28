@@ -152,6 +152,9 @@ def _parse_number(raw: str) -> Optional[float]:
     if raw.startswith("-") or raw.startswith("负"):
         negative = True
         raw = raw[1:].strip()
+    # 千分位逗号：英文写法「12,000」必须读成 12000，否则只取到 12（静默差 1000 倍）。
+    # 只剥离「数字,数字」之间的逗号，不误伤其它逗号用法。
+    raw = re.sub(r"(?<=[0-9]),(?=[0-9])", "", raw)
 
     # 纯中文数字（含 万/亿 与缩写），如 "一万二" "两万" "一千五"
     if re.fullmatch(r"[零一二两三四五六七八九十百千万亿]+", raw):
@@ -164,19 +167,23 @@ def _parse_number(raw: str) -> Optional[float]:
     if cn is not None:
         return -cn if negative else cn
 
-    # 万 / 千：口语缩写「1万5」= 15000、「1千5」= 1500（尾数按「单位/10」计）
-    # E4 修复：旧实现只取 `\d+` 第一段，把「1万5」算成 10000 —— 丢尾数是**静默算错**。
-    for unit, scale in (("万", 10000), ("w", 10000), ("W", 10000),
-                        ("千", 1000), ("k", 1000), ("K", 1000)):
-        if unit in raw:
-            m_abbr = re.match(rf"^(\d+(?:\.\d+)?)\s*{unit}\s*(\d)", raw)
-            if m_abbr:
-                val = float(m_abbr.group(1)) * scale + float(m_abbr.group(2)) * (scale // 10)
-                return -val if negative else val
-            num = re.search(r"\d+(?:\.\d+)?", raw)
-            if num:
-                val = float(num.group(0)) * scale
-                return -val if negative else val
+    # 数量级倍率（万/千/k/million…）：来自规则包，随 locale 切换。
+    #
+    # ⚠️ 必须**锚定**匹配（数字紧邻单位），不能用 `unit in raw` 子串匹配：
+    # 英文 "80/month" 含字母 m，子串匹配会把它静默 ×1e6 —— 与项目已发生的
+    # 「静默算错」同类事故。锚定后 "/" 打断匹配，"1.2m" 仍正常命中。
+    for unit, scale in rules.number_units().items():
+        if not unit:
+            continue
+        # 口语缩写：「1万5」= 15000、「1千5」= 1500（尾数按「单位/10」计）
+        m_abbr = re.match(rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}\s*([0-9])", raw)
+        if m_abbr:
+            val = float(m_abbr.group(1)) * scale + float(m_abbr.group(2)) * (scale // 10)
+            return -val if negative else val
+        m_plain = re.match(rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}", raw)
+        if m_plain:
+            val = float(m_plain.group(1)) * scale
+            return -val if negative else val
     # 普通数字
     num = re.search(r"\d+(?:\.\d+)?", raw)
     if num:

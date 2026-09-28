@@ -47,6 +47,7 @@ def _empty_pack() -> Dict[str, Any]:
         "boundary": re.compile(r"(?!x)x"),  # 永不匹配
         "intents": [],
         "intent_priority": {},
+        "number_units": {},
     }
 
 
@@ -76,6 +77,7 @@ def _load(locale: str) -> Dict[str, Any]:
                 if item.get("name")
             ],
             "intent_priority": raw.get("intent_priority") or {},
+            "number_units": raw.get("number_units") or {},
         }
     except FileNotFoundError:
         logger.error("rules: 规则文件缺失 locale=%s path=%s", locale, path)
@@ -126,3 +128,11 @@ def intent_rules(locale: Optional[str] = None) -> List[Tuple[str, List[str], Lis
 def intent_priority(locale: Optional[str] = None) -> Dict[str, int]:
     """意图优先级（数字越大越优先）。"""
     return _pack(locale)["intent_priority"]
+
+
+def number_units(locale: Optional[str] = None) -> Dict[str, int]:
+    """数量级倍率表（如 万=1e4、k=1e3、million=1e6）。
+
+    顺序即优先级：缩写写法（「1万5」）由第一个命中的单位处理。
+    """
+    return _pack(locale)["number_units"]
