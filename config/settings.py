@@ -15,6 +15,14 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+# 展示/日志文案走 i18n（英文部署下日志全中文与界面语言不一致）
+import sys as _sys
+import os as _os
+_SRC = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")
+if _SRC not in _sys.path:
+    _sys.path.insert(0, _SRC)
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 # 串行化配置的「读-改-写」：save_llm_config 是 load→改→写三步复合操作，
@@ -71,46 +79,46 @@ def load() -> dict:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict) or "config" not in data:
-            logger.warning("配置文件格式异常，使用默认配置")
+            logger.warning(t("cs.log.bad_format"))
             return _DEFAULT_CONFIG.copy()
         return data
     except FileNotFoundError:
-        logger.info("配置文件不存在，使用默认配置: %s", CONFIG_PATH)
+        logger.info(t("cs.log.not_exist") + ": %s", CONFIG_PATH)
         return _DEFAULT_CONFIG.copy()
     except json.JSONDecodeError as e:
-        logger.error("配置文件 JSON 解析失败: %s", e)
+        logger.error(t("cs.log.parse_fail") + ": %s", e)
         return _DEFAULT_CONFIG.copy()
     except Exception as e:
-        logger.error("读取配置文件失败: %s", e)
+        logger.error(t("cs.log.read_fail") + ": %s", e)
         return _DEFAULT_CONFIG.copy()
 
 
 def validate(config: dict) -> tuple[bool, str]:
     """校验配置格式。返回 (是否通过, 错误信息)。"""
     if not isinstance(config, dict):
-        return False, "配置必须是 JSON 对象"
+        return False, t("cs.err.not_json_object")
     
     # 支持两种格式：{"config": {...}} 或直接 {...}
     inner = config.get("config", config)
     if not isinstance(inner, dict):
-        return False, "配置内容必须是对象"
+        return False, t("cs.err.content_not_object")
     
     # 必填字段检查
     for field in _REQUIRED_FIELDS:
         val = inner.get(field)
         if not val or not str(val).strip():
-            return False, f"缺少必填字段: {field}"
+            return False, t("cs.err.missing_fields") + f": {field}"
     
     # 类型检查
     for field, expected_type in _FIELD_TYPES.items():
         val = inner.get(field)
         if val is not None and not isinstance(val, expected_type):
-            return False, f"字段 {field} 类型错误，期望 {expected_type.__name__}"
+            return False, t("cs.err.field_type") + f" {expected_type.__name__}: {field}"
     
     # URL 格式基础检查
     base_url = inner.get("base_url", "")
     if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
-        return False, "base_url 必须以 http:// 或 https:// 开头"
+        return False, t("cs.err.bad_url_scheme")
     
     return True, ""
 
@@ -131,7 +139,7 @@ def save(config: dict) -> tuple[bool, str]:
         try:
             shutil.copy2(str(CONFIG_PATH), str(bak_path))
         except Exception as e:
-            logger.warning("备份旧配置失败: %s", e)
+            logger.warning(t("cs.log.backup_failed") + ": %s", e)
     
     # 原子写入：先写临时文件，再 rename
     try:
@@ -154,10 +162,10 @@ def save(config: dict) -> tuple[bool, str]:
                 pass
             raise
     except Exception as e:
-        logger.error("保存配置失败: %s", e)
-        return False, f"写入失败: {e}"
+        logger.error(t("cs.log.save_failed") + ": %s", e)
+        return False, t("cs.log.write_failed") + f": {e}"
     
-    logger.info("配置已保存: %s", CONFIG_PATH)
+    logger.info(t("cs.log.saved") + ": %s", CONFIG_PATH)
     return True, ""
 
 

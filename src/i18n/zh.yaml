@@ -1261,3 +1261,43 @@ ws:
     avg_salary: 人均月薪（元）
     price_per_unit: 客单价（元）
   app_title: 创业者工作台
+
+# ─── config/settings（LLM 配置读写）──────────────────────────────────────
+cs:
+  err:
+    not_json_object: 配置必须是 JSON 对象
+    content_not_object: 配置内容必须是对象
+    bad_url_scheme: base_url 必须以 http:// 或 https:// 开头
+    missing_fields: 缺少必填字段
+    field_type: 字段类型错误，期望
+  log:
+    saved: 配置已保存
+    save_failed: 保存配置失败
+    backup_failed: 备份旧配置失败
+    write_failed: 写入失败
+    bad_format: 配置文件格式异常，使用默认配置
+    not_exist: 配置文件不存在，使用默认配置
+    parse_fail: 配置文件 JSON 解析失败
+    read_fail: 读取配置文件失败
+
+# ─── project_manager ─────────────────────────────────────────────────────
+pm:
+  updated: 参数 {field} 已更新为 {value}，其他参数保持不变
+  extracted: 已提取 {n} 个参数
+  parse_fail: 解析失败
+  unknown: 未知
+
+# ─── storage/local_store（日志/降级横幅）──────────────────────────────────
+ls:
+  log:
+    ready: 存储后端就绪
+    pg_unavailable: PostgreSQL 不可用
+    degrade_file: 降级本地文件 store
+    degraded_file: 已降级本地文件 store
+    restart_note: 重启不丢，但非多端共享
+    file_unavailable: 本地文件 store 也不可用
+    degrade_memory: 降级内存 store：数据重启即丢！
+    corrupt_backup: 本地 store 文件损坏，已备份到
+    restart_from_empty: 从空 store 重启
+    corrupt_backup_fail: 本地 store 文件损坏且备份失败
+    pg_reconnect: PG 连接失效，重连重试

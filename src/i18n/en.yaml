@@ -1262,3 +1262,43 @@ ws:
     avg_salary: Average monthly salary (CNY)
     price_per_unit: Unit price (CNY)
   app_title: Founder Workbench
+
+# ─── config/settings (LLM config read/write) ─────────────────────────────
+cs:
+  err:
+    not_json_object: Config must be a JSON object
+    content_not_object: Config content must be an object
+    bad_url_scheme: base_url must start with http:// or https://
+    missing_fields: Missing required field
+    field_type: Field has the wrong type, expected
+  log:
+    saved: Config saved
+    save_failed: Failed to save config
+    backup_failed: Failed to back up old config
+    write_failed: Write failed
+    bad_format: Config file malformed; using defaults
+    not_exist: Config file missing; using defaults
+    parse_fail: Config JSON parse failed
+    read_fail: Failed to read config file
+
+# ─── project_manager ─────────────────────────────────────────────────────
+pm:
+  updated: "Parameter {field} updated to {value}; other parameters unchanged"
+  extracted: "{n} parameters extracted"
+  parse_fail: "Parse failed"
+  unknown: Unknown
+
+# ─── storage/local_store (logs / degrade banners) ─────────────────────────
+ls:
+  log:
+    ready: Storage backend ready
+    pg_unavailable: PostgreSQL unavailable
+    degrade_file: falling back to local file store
+    degraded_file: Fell back to local file store
+    restart_note: survives restart, but not shared across devices
+    file_unavailable: local file store also unavailable
+    degrade_memory: "fell back to in-memory store: data is lost on restart!"
+    corrupt_backup: local store file corrupted; backed up to
+    restart_from_empty: restarting from an empty store
+    corrupt_backup_fail: local store file corrupted and backup failed
+    pg_reconnect: PG connection lost; reconnecting
