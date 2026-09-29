@@ -231,6 +231,8 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "param_advisor.py"),
     os.path.join("src", "tools", "pitfall_detector.py"),
     os.path.join("src", "tools", "report_generator.py"),
+    os.path.join("src", "tools", "project_manager.py"),
+    os.path.join("src", "storage", "local_store.py"),
     "web_server.py",
 ]
 
@@ -263,6 +265,9 @@ ENGINE_DATA_LITERALS = {
     # 只在渲染时才映射成展示名（i18n.industry_name）。放进文案层就等于把
     # 数据面和展示面混在一起，两处都会漂。
     "通用",
+    # project_manager：city 是输入层**数据**匹配正则（中文地点后缀 市/区/县），
+    # 与行业关键词同类，改它会破坏城市抽取；英文抽取走后续 rules.city_patterns。
+    r"在(\w+(?:市|区|县))",
 }
 
 

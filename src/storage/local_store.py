@@ -37,6 +37,8 @@ from typing import List, Optional
 # 双通道 handler——降级原因必须能在日志文件里查到，不能只走 stderr 的 lastResort。
 logger = logging.getLogger("web.local_store")
 
+from i18n import t  # noqa: E402  降级/损坏日志走 i18n，与界面语言一致
+
 # 注意：psycopg 不在模块顶层导入。
 # 顶层 import psycopg 会让「最小依赖」声明失真——未装 Postgres 驱动时 import 即崩。
 # 改为在 PostgresStore 内部延迟导入，保证无驱动时服务仍能降级启动。
@@ -189,9 +191,9 @@ class LocalFileStore(BaseStore):
             backup = f"{self.path}.corrupt-{int(time.time())}"
             try:
                 os.replace(self.path, backup)
-                logger.error(f"本地 store 文件损坏，已备份到 {backup}，从空 store 重启: {e}")
+                logger.error(t("ls.log.corrupt_backup") + f" {backup}, " + t("ls.log.restart_from_empty") + f": {e}")
             except OSError:
-                logger.error(f"本地 store 文件损坏且备份失败: {e}")
+                logger.error(t("ls.log.corrupt_backup_fail") + f": {e}")
             self._tasks, self._msgs = {}, {}
 
     def _flush(self) -> None:
@@ -296,7 +298,7 @@ _DEFAULT_DB_URL = "postgresql://newmacbook@localhost:5432/shangzhu"
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT '新任务',
+    name TEXT NOT NULL DEFAULT 'New task',
     params JSONB NOT NULL DEFAULT '{}',
     industry TEXT,
     turn INTEGER NOT NULL DEFAULT 0,
@@ -411,7 +413,7 @@ class PostgresStore(BaseStore):
                     last_err = e
                     self._drop_conn()
                     if attempt == 0:
-                        logger.warning(f"PG 连接失效，重连重试: {e}")
+                        logger.warning(t("ls.log.pg_reconnect") + f": {e}")
             raise last_err  # type: ignore[misc]
 
     def ping(self) -> None:
@@ -542,7 +544,7 @@ def get_store() -> BaseStore:
             pg.ping()
             candidate = pg
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"PostgreSQL 不可用（{e}），降级本地文件 store")
+            logger.warning(t("ls.log.pg_unavailable") + f" ({e}), " + t("ls.log.degrade_file"))
             if candidate is not None:
                 candidate.close()
 
@@ -552,13 +554,13 @@ def get_store() -> BaseStore:
                 fs = LocalFileStore()
                 fs.ping()
                 candidate = fs
-                logger.warning(f"已降级本地文件 store：{fs.path}（重启不丢，但非多端共享）")
+                logger.warning(t("ls.log.degraded_file") + f": {fs.path} (" + t("ls.log.restart_note") + ")")
             except Exception as e:  # noqa: BLE001
-                logger.error(f"本地文件 store 也不可用（{e}），降级内存 store：数据重启即丢！")
+                logger.error(t("ls.log.file_unavailable") + f" ({e}), " + t("ls.log.degrade_memory"))
 
         # 3) 内存兜底：最后一道，明确标注会丢
         _store = candidate if candidate is not None else MemoryStore()
-        logger.info(f"存储后端就绪: {type(_store).__name__}")
+        logger.info(t("ls.log.ready") + f": {type(_store).__name__}")
     return _store
 
 

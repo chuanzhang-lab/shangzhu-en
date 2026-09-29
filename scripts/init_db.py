@@ -22,7 +22,7 @@ DEFAULT_URL = f"postgresql://newmacbook@localhost:5432/{DB_NAME}"
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT '新任务',
+    name TEXT NOT NULL DEFAULT 'New task',
     params JSONB NOT NULL DEFAULT '{}',
     industry TEXT,
     turn INTEGER NOT NULL DEFAULT 0,

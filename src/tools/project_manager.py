@@ -23,6 +23,8 @@ import re
 from typing import Optional
 from langchain.tools import tool
 
+from i18n import industry_name, t
+
 # 复用引擎层统一的参数提取器（唯一真相源），避免双解析器漂移
 from router.param_extractor import extract_params as _extract_params
 
@@ -80,11 +82,11 @@ def create_or_update_project(text: str) -> str:
         return json.dumps({
             "action": "parsed",
             "params": parsed,
-            "message": f"已提取 {len(parsed)} 个参数: {', '.join(parsed.keys())}",
+            "message": t("pm.extracted", n=len(parsed), fields=", ".join(parsed.keys())),
             "missing": _check_missing_params(parsed),
         }, ensure_ascii=False, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"解析失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("pm.parse_fail") + f": {str(e)}"}, ensure_ascii=False)
 
 
 @tool
@@ -102,7 +104,7 @@ def update_project_param(key: str, value: str) -> str:
         "action": "update",
         "key": key,
         "value": value,
-        "message": f"参数 {key} 已更新为 {value}，其他参数保持不变"
+        "message": t("pm.updated", field=key, value=value)
     }, ensure_ascii=False)
 
 
@@ -118,8 +120,10 @@ def get_project_summary(params_json: str) -> str:
     """
     try:
         params = json.loads(params_json) if isinstance(params_json, str) else params_json
+        industry = params.get("industry")
+        city = params.get("city")
         return json.dumps({
-            "project_summary": f"{params.get('industry', '未知')} · {params.get('city', '未知')}",
+            "project_summary": f"{industry_name(industry) if industry else t('pm.unknown')} · {city or t('pm.unknown')}",
             "provided_params": list(params.keys()),
             "param_count": len(params),
             "missing_required": _check_missing_params(params),
@@ -131,10 +135,10 @@ def get_project_summary(params_json: str) -> str:
 def _check_missing_params(params: dict) -> list:
     """检查哪些必要参数缺失"""
     required = [
-        ("total_investment", "总投资"),
-        ("monthly_rent", "月租金"),
-        ("daily_traffic", "日均客流"),
-        ("price_per_unit", "客单价"),
+        ("total_investment", t("field.label.total_investment")),
+        ("monthly_rent", t("field.label.monthly_rent")),
+        ("daily_traffic", t("field.label.daily_traffic")),
+        ("price_per_unit", t("field.label.price_per_unit")),
     ]
     missing = []
     for key, label in required:

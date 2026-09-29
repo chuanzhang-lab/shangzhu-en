@@ -1283,7 +1283,7 @@ cs:
 # ─── project_manager ─────────────────────────────────────────────────────
 pm:
   updated: 参数 {field} 已更新为 {value}，其他参数保持不变
-  extracted: 已提取 {n} 个参数
+  extracted: "已提取 {n} 个参数: {fields}"
   parse_fail: 解析失败
   unknown: 未知
 

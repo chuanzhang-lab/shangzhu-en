@@ -1284,7 +1284,7 @@ cs:
 # ─── project_manager ─────────────────────────────────────────────────────
 pm:
   updated: "Parameter {field} updated to {value}; other parameters unchanged"
-  extracted: "{n} parameters extracted"
+  extracted: "{n} parameters extracted: {fields}"
   parse_fail: "Parse failed"
   unknown: Unknown
 
