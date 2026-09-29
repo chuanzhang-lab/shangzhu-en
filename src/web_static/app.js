@@ -111,11 +111,11 @@ function openModelSettings() {
       '<div class="modal-box">' +
         '<div class="modal-title">' + t('ui.modal_title') + '</div>' +
         '<label class="modal-label">' + t('ui.modal_model') + '</label>' +
-        '<input class="modal-input" id="ms-model" placeholder="t('ui.modal_ph_model')">' +
+        '<input class="modal-input" id="ms-model" placeholder="' + t('ui.modal_ph_model') + '">' +
         '<label class="modal-label">' + t('ui.modal_url') + '</label>' +
-        '<input class="modal-input" id="ms-url" placeholder="t('ui.modal_ph_url')">' +
+        '<input class="modal-input" id="ms-url" placeholder="' + t('ui.modal_ph_url') + '">' +
         '<label class="modal-label">' + t('ui.modal_key') + '</label>' +
-        '<input class="modal-input" id="ms-key" type="password" placeholder="t('ui.modal_ph_key')">' +
+        '<input class="modal-input" id="ms-key" type="password" placeholder="' + t('ui.modal_ph_key') + '">' +
         '<div class="modal-actions">' +
           '<button class="modal-btn cancel" id="ms-cancel">' + t('ui.cancel') + '</button>' +
           '<button class="modal-btn save" id="ms-save">' + t('ui.save') + '</button>' +
@@ -202,10 +202,10 @@ async function _loadTasksInner() {
 
 // 空项目引导示例卡（新建任务/切到空任务时复用，保持与首屏一致）
 const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>' + t('ui.empty_title') + '</h2><p>' + t('ui.empty_desc') + '</p><div class="examples">' +
-  '<button class="example" data-q="' + t('ws.html.example_q_coffee') + "">' + t('ui.example_coffee') + '</button>' +
-  '<button class="example" data-q="' + t('ws.html.example_q_saas') + "">' + t('ui.example_saas') + '</button>' +
-  '<button class="example" data-q="' + t('ws.html.example_q_quick') + "">' + t('ui.example_quick') + '</button>' +
-  '<button class="example" data-q="' + t('ws.html.example_q_benchmark') + "">' + t('ui.example_benchmark') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_coffee') + '">' + t('ui.example_coffee') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_saas') + '">' + t('ui.example_saas') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_quick') + '">' + t('ui.example_quick') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_benchmark') + '">' + t('ui.example_benchmark') + '</button>' +
   '</div></div>';
 
 function clearChat() {
@@ -218,7 +218,7 @@ function clearChat() {
 async function newTask() {
   currentTaskId = null; let ok = false;
   try {
-    const r = await fetch('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: '新任务' }) });
+    const r = await fetch('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: t('ws.task.new') }) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const t = await r.json(); currentTaskId = t.id; ok = true;
   } catch (e) { console.error('[newTask] 新建任务失败:', e); currentTaskId = null; }
@@ -839,8 +839,9 @@ function updateParamsPanel(params, paramSources, derived) {
       // 来源标签：无来源信息（历史快照恢复）时不渲染，避免误标「推算」
       let srcHtml = '';
       if (src) {
-        const srcClass = src.startsWith('[用户]') ? 'psrc-user' : src.startsWith('[缺失]') ? 'psrc-missing' : 'psrc-derived';
-        const srcLabel = src.startsWith('[用户]') ? t('ui.src_user') : src.startsWith('[缺失]') ? t('ui.src_missing') : t('ui.src_derived');
+        const code = srcCodeOf(paramSources, f, src);
+        const srcClass = (code === 'user') ? 'psrc-user' : (code === 'missing') ? 'psrc-missing' : 'psrc-derived';
+        const srcLabel = (code === 'user') ? t('ui.src_user') : (code === 'missing') ? t('ui.src_missing') : t('ui.src_derived');
         srcHtml = '<span class="psrc ' + srcClass + '">' + srcLabel + '</span>';
       }
       const hl = (f === recentlyUpdatedField) ? ' just-updated' : '';   // F3 变更高亮
@@ -851,15 +852,23 @@ function updateParamsPanel(params, paramSources, derived) {
     const okDerived = derived.filter(d => d.status === 'ok');
     const missDerived = derived.filter(d => d.status === 'missing');
     if (okDerived.length > 0) { html += '<div class="param-section">' + t('ui.derived_section') + '</div>';
-      okDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span style="display:flex;align-items:center;gap:6px;"><span class="psrc psrc-derived">推算</span><span class="pval" style="color:#666;cursor:default;">' + formatNum(d.value) + ' ' + (d.unit||'') + '</span></span></div>'; }); }
+      okDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span style="display:flex;align-items:center;gap:6px;"><span class="psrc psrc-derived">' + t('ui.src_derived') + '</span><span class="pval" style="color:#666;cursor:default;">' + formatNum(d.value) + ' ' + (d.unit||'') + '</span></span></div>'; }); }
     if (missDerived.length > 0) { html += '<div class="param-section">' + t('ui.missing_section') + '</div>';
-      missDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span class="psrc psrc-missing">缺 ' + (d.missing||'') + '</span></div>'; }); }
+      missDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span class="psrc psrc-missing">' + t('ui.src_missing') + ' ' + (d.missing||'') + '</span></div>'; }); }
   }
   paramsList.innerHTML = html;
 }
 
 function fieldLabel(f) {
   return tOr('ui.field.' + f, tOr('field.label.' + f, f)); }
+function srcCodeOf(paramSources, f, src) {
+  // 优先读后端下发的机器码表 _codes（语言无关）；历史存档无 _codes 时按本地化标记前缀回退。
+  const codes = (paramSources || {})._codes || {};
+  if (codes[f]) return codes[f];
+  if (String(src).indexOf('[User]') === 0 || String(src).indexOf('[用户]') === 0) return 'user';
+  if (String(src).indexOf('[Missing]') === 0 || String(src).indexOf('[缺失]') === 0) return 'missing';
+  return 'derived';
+}
 function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'number' && Number.isFinite(v)) return (v * 100).toFixed(0) + '%'; return formatNum(v); }
 function formatNum(v) { if (v === null || v === undefined) return '—'; if (typeof v === 'number' && Number.isFinite(v)) return v.toLocaleString(); if (typeof v === 'number' && !Number.isFinite(v)) return '—'; if (String(v).trim() === '') return '—'; return String(v); }
 
@@ -920,7 +929,7 @@ function addActionButtons(el, content) {
     const btn = document.createElement('button');
     btn.className = 'act-btn apply';
     btn.textContent = op.label;
-    btn.addEventListener('click', () => { input.value = '应用' + op.tag; drafts[currentCat] = input.value; send(); });
+    btn.addEventListener('click', () => { input.value = t('op.cmd.apply') + op.tag; drafts[currentCat] = input.value; send(); });
     actionsDiv.appendChild(btn);
   });
   el.appendChild(actionsDiv);
