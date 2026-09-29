@@ -1,6 +1,6 @@
 #!/bin/bash
 # 创业者工作台 — 启动脚本
-# 使用 fangan1 的 venv Python（shangzhu 的 .venv 软链到 WPS Python 缺 uvicorn）
+# 优先用项目 .venv，缺失时回退到 SHANGZHU_FALLBACK_PY 环境变量指定的解释器
 # 端口: 8081
 # 用法: ./start.sh
 
