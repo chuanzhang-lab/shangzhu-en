@@ -933,3 +933,104 @@ pa:
     need_more: "需更深入的策略调整"
     note: "工具给出基于行业 benchmark 的方向性建议。LLM 可在此基础上补充具体实施细节。"
     error: "suggest_params 失败: {err}"
+
+# ─── 陷阱检测（pitfall_detector）─────────────────────────────────────────
+pt:
+  cat:
+    pricing: "定价"
+    cashflow: "现金流"
+    market: "市场"
+    team: "团队"
+    compliance: "合规"
+    other: "其他"
+  analyzed:
+    not_provided: "未提供"
+  msg:
+    pricing_ok: "未检测到明显的定价陷阱，定价策略基本合理。"
+    cashflow_ok: "未检测到明显的现金流陷阱，现金流状况基本健康。"
+    market_ok: "未检测到明显的市场陷阱。"
+    team_ok: "未检测到明显的团队陷阱，团队结构基本合理。"
+    team_skipped: "团队信息未提供，跳过团队陷阱扫描。"
+    none_watch: "未检测到明显陷阱。但建议持续关注：现金流变化、竞争格局、合规要求更新。"
+    none: "未检测到明显陷阱。"
+  price_below_cost:
+    type: "定价低于成本"
+    detail: "定价 {price} ≤ 变动成本 {vc}，每卖一单都在亏损。"
+    impact: "卖得越多亏得越多，这是最常见的创业死亡原因之一。"
+    action: "立即将定价提高到变动成本的至少 1.5-2 倍。"
+  low_margin:
+    type: "毛利率过低"
+    detail: "毛利率仅 {margin}%，扣除固定成本后可能没有利润。"
+    impact: "无法覆盖运营和获客成本，难以持续。"
+    action: "目标毛利率至少 40-50%，当前需将价格提高到约 {target} 或降低变动成本。"
+  price_far_below_competitor:
+    type: "价格远低于竞品"
+    detail: "定价 {price} 不到竞品价格 {comp} 的 50%。"
+    impact: "可能引发价格战，或让用户怀疑质量。低价不等于竞争力。"
+    action: "考虑差异化定位而非单纯低价竞争。如果成本结构确实更低，确保这个优势是可持续的。"
+  margin_below_industry:
+    type: "毛利率低于行业均值"
+    detail: "毛利率 {margin}% 远低于行业平均 {avg}%。"
+    impact: "可能在商业模式或成本控制上存在结构性问题。"
+    action: "分析成本结构，找出与行业差距的根源。"
+  runway_critical:
+    type: "现金流即将断裂"
+    detail: "现金仅能支撑 {months} 个月。"
+    impact: "资金链断裂是创业公司第一大死因。"
+    action: "立即削减非必要支出；加速应收账款回收；启动融资或寻求过桥贷款。"
+  runway_tight:
+    type: "现金流偏紧"
+    detail: "现金仅能支撑 {months} 个月，不足一年。"
+    impact: "留给试错和调整的时间窗口很窄。"
+    action: "制定 3 个月内降本 20% 的计划；提前接触投资人。"
+  cash_gap:
+    type: "现金流剪刀差"
+    detail: "应收账款 {ar} 天，应付账款 {ap} 天，存在 {gap} 天资金缺口。"
+    impact: "你在用自己的钱帮客户垫资。"
+    action: "缩短账期目标：将应收账款压缩到 {target} 天以内；对大客户要求预付。"
+  slow_inventory:
+    type: "存货周转过慢"
+    detail: "存货周转天数 {days} 天，超过 3 个月。"
+    impact: "大量资金沉淀在库存中，且面临贬值/过期风险。"
+    action: "清理滞销库存；优化采购策略；考虑 JIT 或预售模式。"
+  zero_revenue_burn:
+    type: "零收入持续消耗"
+    detail: "目前没有任何收入，但每月固定支出持续。"
+    impact: "如果不能在跑道耗尽前实现收入，项目将被迫终止。"
+    action: "设定明确的收入里程碑和截止日期；考虑先做最小可行产品（MVP）快速验证。"
+  tam_too_broad:
+    type: "市场定义过宽"
+    detail: "TAM 描述使用了宽泛词汇，但团队仅 {team} 人。"
+    impact: "过于宽泛的市场定义意味着没有明确的切入点，资源会被分散。"
+    action: "将市场缩小到可验证的细分领域。问自己：'前 100 个付费用户具体是谁？'"
+  claims_no_competitor:
+    type: "声称无竞争对手"
+    detail: "声称或暗示没有竞争对手。"
+    impact: "几乎不存在真正的'无人区'。'无竞争'通常意味着：市场不存在、你不知道竞品、或替代方案你没识别。"
+    action: "认真回答：用户目前用什么方式解决这个问题？那才是真正的竞争对手。"
+  customer_concentration:
+    type: "单一客户依赖"
+    detail: "最大客户收入占比 {pct}%，超过 40% 红线。"
+    impact: "失去这一个客户可能导致公司现金流断裂。"
+    action: "目标是将最大客户占比降到 30% 以下。积极拓展新客户分散风险。"
+  solo_founder:
+    type: "单一创始人"
+    detail: "只有一位创始人。"
+    impact: "所有决策压力集中在一个人身上，缺乏制衡和互补。投资人对单一创始人团队通常更谨慎。"
+    action: "尽快找到 1-2 位互补的联合创始人，覆盖技术/产品/市场中的薄弱环节。"
+  no_tech_cofounder:
+    type: "技术项目缺少技术合伙人"
+    detail: "这是一个技术驱动型项目，但团队中缺少技术合伙人。"
+    impact: "技术决策、产品迭代、团队招聘都会受到严重影响。外包技术团队很难做出好产品。"
+    action: "必须找到一位技术合伙人（CTO），而非依赖外包。核心技术和产品必须掌握在团队内部。"
+  no_domain_expert:
+    type: "缺乏行业专家"
+    detail: "团队中缺少对目标行业有深入理解的人。"
+    impact: "可能做出'技术很好但没人需要'的产品，或踩到行业特有的坑。"
+    action: "引入一位有行业经验的顾问或合伙人，至少在早期阶段深度参与。"
+  license_required:
+    warning: "检测到 {n} 项可能的合规要求，遗漏任何一项都可能导致罚款或停业。"
+    action: "建议在正式运营前咨询专业律师或工商代办，确认完整的许可证清单。"
+  license_none:
+    message: "未从描述中识别到特殊行业合规要求。如涉及食品、医疗、金融、教育等领域，请自行核实。"
+    action: "所有行业至少需要：营业执照、税务登记、社保登记。"

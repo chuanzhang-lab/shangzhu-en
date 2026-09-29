@@ -931,3 +931,107 @@ pa:
     need_more: "A deeper strategic change is needed"
     note: "Directional suggestions based on industry benchmarks. The advisor can add implementation detail on top."
     error: "suggest_params failed: {err}"
+
+# ─── Pitfall detector ───────────────────────────────────────────────────
+# 每条陷阱四件套：type / detail / impact / action，按 code 索引（非按展示文案）。
+pt:
+  cat:
+    pricing: "Pricing"
+    cashflow: "Cash flow"
+    market: "Market"
+    team: "Team"
+    compliance: "Compliance"
+    other: "Other"
+  analyzed:
+    not_provided: "Not provided"
+  msg:
+    pricing_ok: "No obvious pricing pitfall detected; the pricing strategy looks sound."
+    cashflow_ok: "No obvious cash-flow pitfall detected; cash flow looks basically healthy."
+    market_ok: "No obvious market pitfall detected."
+    team_ok: "No obvious team pitfall detected; the team structure looks reasonable."
+    team_skipped: "No founder information provided; team pitfall scan skipped."
+    none_watch: "No obvious pitfall detected. Still worth watching: cash-flow changes, the competitive landscape, and compliance updates."
+    none: "No obvious pitfall detected."
+  price_below_cost:
+    type: "Priced below cost"
+    detail: "Price {price} is at or below variable cost {vc} — every sale loses money."
+    impact: "The more you sell, the more you lose. This is one of the most common causes of startup death."
+    action: "Raise the price to at least 1.5-2x variable cost immediately."
+  low_margin:
+    type: "Gross margin too low"
+    detail: "Gross margin is only {margin}%; after fixed costs there may be no profit left."
+    impact: "It cannot cover operating and acquisition costs, so it is hard to sustain."
+    action: "Target a gross margin of at least 40-50%: raise the price to about {target}, or cut variable cost."
+  price_far_below_competitor:
+    type: "Priced far below competitors"
+    detail: "Price {price} is less than 50% of the competitor price {comp}."
+    impact: "It can trigger a price war, or make customers doubt the quality. A low price is not the same as competitiveness."
+    action: "Differentiate instead of just undercutting. If your cost structure really is lower, make sure that advantage is sustainable."
+  margin_below_industry:
+    type: "Gross margin below industry average"
+    detail: "Gross margin {margin}% is far below the industry average of {avg}%."
+    impact: "There may be a structural problem in the business model or in cost control."
+    action: "Analyse the cost structure and find the root cause of the gap with the industry."
+  runway_critical:
+    type: "Cash flow about to break"
+    detail: "Cash only covers {months} months."
+    impact: "Running out of cash is the number one cause of death for startups."
+    action: "Cut non-essential spending now; speed up collections; start fundraising or seek a bridge loan."
+  runway_tight:
+    type: "Cash flow tight"
+    detail: "Cash only covers {months} months — less than a year."
+    impact: "The window for experimenting and adjusting is very narrow."
+    action: "Plan a 20% cost cut within 3 months; approach investors early."
+  cash_gap:
+    type: "Cash-flow scissors gap"
+    detail: "Receivables {ar} days, payables {ap} days — a {gap}-day funding gap."
+    impact: "You are financing your customers with your own money."
+    action: "Shorten terms: bring receivables down to within {target} days; require prepayment from large customers."
+  slow_inventory:
+    type: "Inventory turns too slowly"
+    detail: "Inventory turnover is {days} days — more than 3 months."
+    impact: "A lot of cash is trapped in stock, which is also exposed to depreciation or expiry."
+    action: "Clear slow-moving stock; optimise purchasing; consider JIT or a pre-sale model."
+  zero_revenue_burn:
+    type: "Burning cash with zero revenue"
+    detail: "There is no revenue yet, but fixed monthly expenses continue."
+    impact: "If revenue does not arrive before the runway runs out, the project will be forced to stop."
+    action: "Set explicit revenue milestones and deadlines; consider validating with an MVP first."
+  tam_too_broad:
+    type: "Market defined too broadly"
+    detail: "The TAM description uses very broad wording, but the team is only {team} people."
+    impact: "An overly broad market definition means there is no clear entry point, and resources get spread thin."
+    action: "Narrow the market to a segment you can actually validate. Ask yourself: who exactly are the first 100 paying customers?"
+  claims_no_competitor:
+    type: "Claims to have no competitors"
+    detail: "States or implies there are no competitors."
+    impact: "Genuinely empty markets almost do not exist. \"No competition\" usually means: the market does not exist, you do not know the alternatives, or you have not identified the substitutes."
+    action: "Answer seriously: how do users solve this problem today? That is your real competitor."
+  customer_concentration:
+    type: "Dependent on a single customer"
+    detail: "The largest customer is {pct}% of revenue, above the 40% red line."
+    impact: "Losing that one customer could break the company's cash flow."
+    action: "Bring the largest customer below 30% of revenue. Actively add new customers to spread the risk."
+  solo_founder:
+    type: "Solo founder"
+    detail: "There is only one founder."
+    impact: "All decision pressure sits on one person, with no checks and no complementary skills. Investors are usually more cautious about solo-founder teams."
+    action: "Find 1-2 complementary co-founders as soon as possible, covering gaps in tech / product / market."
+  no_tech_cofounder:
+    type: "Tech project without a technical co-founder"
+    detail: "This is a technology-driven project, but the team has no technical co-founder."
+    impact: "Technical decisions, product iteration and hiring all suffer badly. Outsourced tech teams rarely ship a good product."
+    action: "You must find a technical co-founder (CTO) rather than rely on outsourcing. Core technology and product must stay in-house."
+  no_domain_expert:
+    type: "No domain expert"
+    detail: "Nobody on the team has deep understanding of the target industry."
+    impact: "You risk building something technically good that nobody needs, or hitting industry-specific traps."
+    action: "Bring in an advisor or partner with industry experience, involved deeply at least in the early stage."
+  # ⚠️ 证照原名是**中国大陆司法辖区数据**，见 src/tools/compliance_map.py —— 翻译 = 捏造法律名词。
+  # 这里的做法是**标注口径**而非翻译：明确告知读者这是中国口径，需按当地法规自行核实。
+  license_required:
+    warning: "Detected {n} possible compliance requirements (licence names shown as-is in their original Chinese, since they are China-specific); missing any one can lead to fines or forced closure."
+    action: "Consult a lawyer or a business-registration agent before you start operating, and confirm the full licence list for your jurisdiction."
+  license_none:
+    message: "No industry-specific compliance requirement recognised from the description. If you operate in food, healthcare, finance, education or similar, verify it yourself."
+    action: "Every business needs at least: a business licence, tax registration, and social-insurance registration (China baseline — check your local equivalents)."
