@@ -897,3 +897,37 @@ pg:
   dc:
     revenue_mismatch: "Monthly revenue {rev} differs by more than 50% from the {implied} implied by daily traffic {traffic} x unit price {price} x {days} days — please confirm the definition"
     cost_unsustainable: "Total cost {total} is more than 10x monthly revenue {rev} — this combination is not physically sustainable"
+
+# ─── Parameter advisor (param_advisor) ────────────────────────────────────
+pa:
+  dir:
+    up: "Raise"
+    down: "Cut"
+    none: "No change needed"
+  issue:
+    negative_profit: "Monthly loss of {loss} CNY"
+    short_runway: "Cash runway is only {runway} months"
+    tight_runway: "Cash runway is {runway} months — tight"
+    low_price: "Unit price {price} CNY is low; typical for food & beverage / retail is 20-35 CNY"
+    low_margin: "Gross margin {gm}% is below the industry benchmark of {bench}%"
+    high_rent: "Rent is {ratio}% of revenue; it should be under 15%"
+    low_traffic: "Current traffic is only {pct}% of break-even"
+  sug:
+    raise_price_cover: "Raising the price by {delta} CNY would cover the monthly loss of {loss} CNY (at current traffic)"
+    cut_fixed: "Cut monthly fixed cost by {cut} CNY (from {cur} to {new})"
+    cashflow_positive: "Cash flow is positive"
+    runway_target: "To reach a {months}-month runway, monthly spend must drop by {cut} CNY"
+    price_typical: "Typical industry price is {lo}-{hi} CNY; a conservative increase goes to {target} CNY"
+    price_aggressive: "Aggressive: move to the industry median price of {mid} CNY (may lose 10-20% of customers)"
+    vc_at_benchmark: "Already close to the industry benchmark gross margin of {gm}%"
+    vc_improve: "Raise gross margin from {cur}% to {target}%: switch suppliers / buy at larger volume / optimise the recipe"
+    rent_cut: "Bring rent down to 15% of revenue ({target} CNY), saving {cut} CNY/month. How: relocate / expand to spread the cost / sublet"
+    traffic_insufficient: "Insufficient parameters"
+    traffic_target: "Daily traffic needs to reach {be} ({delta}) to break even. How: promotions / more channels / a better location"
+  summary:
+    healthy: "Parameters are healthy; no adjustment needed"
+    turnaround: "These changes turn the loss into a profit"
+    improve: "Profit improves by {delta} CNY/month"
+    need_more: "A deeper strategic change is needed"
+    note: "Directional suggestions based on industry benchmarks. The advisor can add implementation detail on top."
+    error: "suggest_params failed: {err}"

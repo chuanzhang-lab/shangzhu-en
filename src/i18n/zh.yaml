@@ -899,3 +899,37 @@ pg:
   dc:
     revenue_mismatch: "月营收 {rev} 与「日均{traffic}×单价{price}×{days}天」推算 {implied} 差异超 50%，请确认口径"
     cost_unsustainable: "总成本 {total} 超月营收 {rev} 10 倍，参数组合物理上不可持续"
+
+# ─── 参数建议器（param_advisor）───────────────────────────────────────────
+pa:
+  dir:
+    up: "提高"
+    down: "降低"
+    none: "无需调整"
+  issue:
+    negative_profit: "月亏损 {loss} 元"
+    short_runway: "现金流跑道仅 {runway} 个月"
+    tight_runway: "现金流跑道 {runway} 个月，偏紧"
+    low_price: "客单价 {price} 元偏低，餐饮/零售典型 20-35 元"
+    low_margin: "毛利率 {gm}% 低于行业 benchmark {bench}%"
+    high_rent: "月租占营收 {ratio}%，合理应 < 15%"
+    low_traffic: "当前客流仅达盈亏平衡的 {pct}%"
+  sug:
+    raise_price_cover: "提价 {delta} 元可覆盖月亏损 {loss} 元（基于当前客流）"
+    cut_fixed: "削减月固定成本 {cut} 元（从 {cur} → {new}）"
+    cashflow_positive: "现金流为正"
+    runway_target: "为达到 {months} 个月跑道，需削减月支出 {cut} 元"
+    price_typical: "行业典型价 {lo}-{hi} 元，保守提价到 {target} 元"
+    price_aggressive: "激进策略：到行业中位价 {mid} 元（可能流失 10-20% 客户）"
+    vc_at_benchmark: "已接近行业 benchmark 毛利率 {gm}%"
+    vc_improve: "毛利率从 {cur}% 提到 {target}%：换供应商/提采购规模/配方优化"
+    rent_cut: "月租降到营收 15%（{target} 元），省 {cut} 元/月。方式：换地段/扩面积摊薄/转租"
+    traffic_insufficient: "参数不足"
+    traffic_target: "日均客流需达 {be}（+{delta}）才能保本。方式：促销/扩渠道/选址引流"
+  summary:
+    healthy: "参数健康，无需调整"
+    turnaround: "调整后扭亏为盈"
+    improve: "利润改善 {delta} 元/月"
+    need_more: "需更深入的策略调整"
+    note: "工具给出基于行业 benchmark 的方向性建议。LLM 可在此基础上补充具体实施细节。"
+    error: "suggest_params 失败: {err}"

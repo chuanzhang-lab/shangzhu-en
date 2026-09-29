@@ -11,6 +11,8 @@ LLM 调用此工具拿到硬数据后，可以叠加自己的判断和补充。
 """
 
 import json
+
+from i18n import t
 from langchain.tools import tool
 
 from tools.workflow_engine import _fill_params, _resolve_industry, INDUSTRY_TEMPLATES, FALLBACK_TEMPLATE, _parse_tool_input
@@ -41,7 +43,8 @@ def _check_issues(params: dict) -> list[dict]:
             "code": "negative_profit",
             "severity": "critical",
             "target_param": "multiple",
-            "message": f"月亏损 {abs(round(params['monthly_profit']))} 元",
+            "message": t("pa.issue.negative_profit",
+                         loss=f"{abs(round(params['monthly_profit'])):,}"),
         })
 
     # ── 2. 跑道不足 ──
@@ -54,14 +57,14 @@ def _check_issues(params: dict) -> list[dict]:
                     "code": "short_runway",
                     "severity": "critical",
                     "target_param": "monthly_fixed_cost",
-                    "message": f"现金流跑道仅 {runway:.1f} 个月",
+                    "message": t("pa.issue.short_runway", runway=f"{runway:.1f}"),
                 })
             elif runway < 12:
                 issues.append({
                     "code": "tight_runway",
                     "severity": "high",
                     "target_param": "monthly_fixed_cost",
-                    "message": f"现金流跑道 {runway:.1f} 个月，偏紧",
+                    "message": t("pa.issue.tight_runway", runway=f"{runway:.1f}"),
                 })
 
     # ── 3. 客单价异常低（vs 行业 benchmark）──
@@ -73,7 +76,7 @@ def _check_issues(params: dict) -> list[dict]:
                 "code": "low_price",
                 "severity": "high",
                 "target_param": "price_per_unit",
-                "message": f"客单价 {price} 元偏低，餐饮/零售典型 20-35 元",
+                "message": t("pa.issue.low_price", price=price),
             })
 
     # ── 4. 毛利率偏离 ──
@@ -83,7 +86,7 @@ def _check_issues(params: dict) -> list[dict]:
             "code": "low_margin",
             "severity": "high",
             "target_param": "variable_cost_ratio",
-            "message": f"毛利率 {actual_gm:.0f}% 低于行业 benchmark {benchmark_gm}%",
+            "message": t("pa.issue.low_margin", gm=f"{actual_gm:.0f}", bench=benchmark_gm),
         })
 
     # ── 5. 月租占比过高 ──
@@ -96,7 +99,7 @@ def _check_issues(params: dict) -> list[dict]:
                 "code": "high_rent",
                 "severity": "high",
                 "target_param": "monthly_rent",
-                "message": f"月租占营收 {rent_ratio*100:.0f}%，合理应 < 15%",
+                "message": t("pa.issue.high_rent", ratio=f"{rent_ratio*100:.0f}"),
             })
 
     # ── 6. 客流量低于盈亏平衡 ──
@@ -113,7 +116,8 @@ def _check_issues(params: dict) -> list[dict]:
                     "code": "low_traffic",
                     "severity": "high",
                     "target_param": "daily_traffic",
-                    "message": f"当前客流仅达盈亏平衡的 {params['daily_traffic']/breakeven_traffic*100:.0f}%",
+                    "message": t("pa.issue.low_traffic",
+                         pct=f"{params['daily_traffic']/breakeven_traffic*100:.0f}"),
                 })
 
     return issues
@@ -186,8 +190,9 @@ def _solve_negative_profit(params: dict) -> list[dict]:
                 "target_param": "price_per_unit",
                 "current": price,
                 "suggested": new_price,
-                "direction": "提高",
-                "rationale": f"提价 {delta:.1f} 元可覆盖月亏损 {round(loss)} 元（基于当前客流）",
+                "direction": t("pa.dir.up"),
+                "rationale": t("pa.sug.raise_price_cover", delta=f"{delta:.1f}",
+                               loss=f"{round(loss):,}"),
                 "expected_profit_delta": round(loss, 0),
             })
 
@@ -200,8 +205,9 @@ def _solve_negative_profit(params: dict) -> list[dict]:
             "target_param": "monthly_fixed_cost",
             "current": fixed,
             "suggested": round(new_fixed),
-            "direction": "降低",
-            "rationale": f"削减月固定成本 {cut} 元（从 {fixed} → {round(new_fixed)}）",
+            "direction": t("pa.dir.down"),
+            "rationale": t("pa.sug.cut_fixed", cut=f"{cut:,}", cur=f"{fixed:,.0f}",
+                               new=f"{round(new_fixed):,}"),
             "expected_profit_delta": round(cut, 0),
         })
 
@@ -217,8 +223,8 @@ def _suggest_cut_fixed_cost(params: dict, target_runway: int) -> dict:
             "target_param": "monthly_fixed_cost",
             "current": params["monthly_fixed_cost"],
             "suggested": params["monthly_fixed_cost"],
-            "direction": "无需调整",
-            "rationale": "现金流为正",
+            "direction": t("pa.dir.none"),
+            "rationale": t("pa.sug.cashflow_positive"),
             "expected_profit_delta": 0,
         }
 
@@ -229,8 +235,8 @@ def _suggest_cut_fixed_cost(params: dict, target_runway: int) -> dict:
         "target_param": "monthly_fixed_cost",
         "current": params["monthly_fixed_cost"],
         "suggested": new_fixed,
-        "direction": "降低",
-        "rationale": f"为达到 {target_runway} 个月跑道，需削减月支出 {cut} 元",
+        "direction": t("pa.dir.down"),
+        "rationale": t("pa.sug.runway_target", months=target_runway, cut=f"{cut:,}"),
         "expected_profit_delta": cut,
     }
 
@@ -266,8 +272,9 @@ def _suggest_raise_price(params: dict) -> list[dict]:
             "target_param": "price_per_unit",
             "current": price,
             "suggested": round(conservative, 1),
-            "direction": "提高",
-            "rationale": f"行业典型价 {range_info[0]}-{range_info[1]} 元，保守提价到 {round(conservative)} 元",
+            "direction": t("pa.dir.up"),
+            "rationale": t("pa.sug.price_typical", lo=range_info[0], hi=range_info[1],
+                               target=f"{round(conservative):,}"),
             "expected_profit_delta": round(profit_gain, 0),
         })
 
@@ -280,8 +287,8 @@ def _suggest_raise_price(params: dict) -> list[dict]:
             "target_param": "price_per_unit",
             "current": price,
             "suggested": round(aggressive, 1),
-            "direction": "提高",
-            "rationale": f"激进策略：到行业中位价 {round(aggressive)} 元（可能流失 10-20% 客户）",
+            "direction": t("pa.dir.up"),
+            "rationale": t("pa.sug.price_aggressive", mid=f"{round(aggressive):,}"),
             "expected_profit_delta": round(profit_gain2, 0),
         })
 
@@ -301,8 +308,8 @@ def _suggest_cut_vc(params: dict) -> dict:
             "target_param": "variable_cost_ratio",
             "current": vc,
             "suggested": vc,
-            "direction": "无需调整",
-            "rationale": f"已接近行业 benchmark 毛利率 {benchmark_gm}%",
+            "direction": t("pa.dir.none"),
+            "rationale": t("pa.sug.vc_at_benchmark", gm=benchmark_gm),
             "expected_profit_delta": 0,
         }
 
@@ -315,8 +322,8 @@ def _suggest_cut_vc(params: dict) -> dict:
         "target_param": "variable_cost_ratio",
         "current": f"{vc*100:.0f}%",
         "suggested": f"{target_vc*100:.0f}%",
-        "direction": "降低",
-        "rationale": f"毛利率从 {(1-vc)*100:.0f}% 提到 {benchmark_gm}%：换供应商/提采购规模/配方优化",
+        "direction": t("pa.dir.down"),
+        "rationale": t("pa.sug.vc_improve", cur=f"{(1-vc)*100:.0f}", target=benchmark_gm),
         "expected_profit_delta": round(profit_gain, 0),
     }
 
@@ -332,8 +339,8 @@ def _suggest_cut_rent(params: dict) -> dict:
         "target_param": "monthly_rent",
         "current": current_rent,
         "suggested": target_rent,
-        "direction": "降低",
-        "rationale": f"月租降到营收 15%（{target_rent} 元），省 {cut} 元/月。方式：换地段/扩面积摊薄/转租",
+        "direction": t("pa.dir.down"),
+        "rationale": t("pa.sug.rent_cut", target=f"{target_rent:,}", cut=f"{cut:,}"),
         "expected_profit_delta": cut,
     }
 
@@ -350,8 +357,8 @@ def _suggest_raise_traffic(params: dict) -> dict:
             "target_param": "daily_traffic",
             "current": current_traffic,
             "suggested": current_traffic,
-            "direction": "无需调整",
-            "rationale": "参数不足",
+            "direction": t("pa.dir.none"),
+            "rationale": t("pa.sug.traffic_insufficient"),
             "expected_profit_delta": 0,
         }
 
@@ -362,8 +369,9 @@ def _suggest_raise_traffic(params: dict) -> dict:
         "target_param": "daily_traffic",
         "current": current_traffic,
         "suggested": round(breakeven_traffic),
-        "direction": "提高",
-        "rationale": f"日均客流需达 {round(breakeven_traffic)}（+{delta}）才能保本。方式：促销/扩渠道/选址引流",
+        "direction": t("pa.dir.up"),
+        "rationale": t("pa.sug.traffic_target", be=f"{round(breakeven_traffic):,}",
+                               delta=f"{delta:+,}"),
         "expected_profit_delta": 0,  # 客流改善难精确估算
     }
 
@@ -405,7 +413,7 @@ def suggest_params(params_json: str) -> str:
         if not issues:
             result = {
                 "status": "healthy",
-                "message": "参数健康，无需调整",
+                "message": t("pa.summary.healthy"),
                 "current_metrics": {
                     "monthly_profit": round(params["monthly_profit"], 0),
                     "monthly_revenue": round(params["monthly_revenue"], 0),
@@ -432,15 +440,16 @@ def suggest_params(params_json: str) -> str:
                 "current_monthly_profit": round(params["monthly_profit"], 0),
                 "total_expected_improvement": round(total_improvement, 0),
                 "projected_monthly_profit": round(new_profit, 0),
-                "verdict": "调整后扭亏为盈" if new_profit > 0 and params["monthly_profit"] <= 0
-                          else f"利润改善 {round(total_improvement)} 元/月"
+                "verdict": t("pa.summary.turnaround")
+                          if new_profit > 0 and params["monthly_profit"] <= 0
+                          else t("pa.summary.improve", delta=f"{round(total_improvement):,}")
                           if total_improvement > 0
-                          else "需更深入的策略调整",
+                          else t("pa.summary.need_more"),
             },
-            "note": "工具给出基于行业 benchmark 的方向性建议。LLM 可在此基础上补充具体实施细节。",
+            "note": t("pa.summary.note"),
         }
 
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        return json.dumps({"error": f"suggest_params 失败: {str(e)}"}, ensure_ascii=False)
+        return json.dumps({"error": t("pa.summary.error", err=e)}, ensure_ascii=False)
