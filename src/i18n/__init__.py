@@ -51,7 +51,7 @@ def _env_locale() -> str:
     if raw in SUPPORTED_LOCALES:
         return raw
     if raw:
-        logger.warning("i18n: 不支持的 %s=%r，回退 %s", _ENV_KEY, raw, DEFAULT_LOCALE)
+        logger.warning("i18n: unsupported %s=%r, falling back to %s", _ENV_KEY, raw, DEFAULT_LOCALE)
     return DEFAULT_LOCALE
 
 
@@ -63,7 +63,7 @@ def get_locale() -> str:
 def set_locale(locale: str) -> None:
     """设置会话级 locale（仅影响当前上下文）。非法值不生效并告警。"""
     if locale not in SUPPORTED_LOCALES:
-        logger.warning("i18n: set_locale 收到不支持的 locale=%r，已忽略", locale)
+        logger.warning("i18n: set_locale got unsupported locale=%r, ignored", locale)
         return
     _locale_ctx.set(locale)
 
@@ -98,9 +98,9 @@ def _load(locale: str) -> Dict[str, str]:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         table = _flatten(raw)
     except FileNotFoundError:
-        logger.error("i18n: 资源文件缺失 locale=%s path=%s", locale, path)
+        logger.error("i18n: resource file missing locale=%s path=%s", locale, path)
     except Exception as exc:  # yaml 解析失败 / 编码问题等
-        logger.error("i18n: 资源加载失败 locale=%s path=%s err=%s", locale, path, exc)
+        logger.error("i18n: resource load failed locale=%s path=%s err=%s", locale, path, exc)
     _cache[locale] = table
     return table
 
@@ -137,7 +137,7 @@ def industry_name(key: str) -> str:
         return ""
     name = t(f"industry.name.{key}")
     if name.startswith(_MISSING_PREFIX):
-        logger.error("i18n: 行业展示名缺失 industry=%s", key)
+        logger.error("i18n: industry display name missing industry=%s", key)
         return key
     return name
 
@@ -153,7 +153,7 @@ def t(key: str, **kwargs: Any) -> str:
     if template is None and locale != DEFAULT_LOCALE:
         template = _load(DEFAULT_LOCALE).get(key)
     if template is None:
-        logger.error("i18n: 缺失键 locale=%s key=%s", locale, key)
+        logger.error("i18n: missing key locale=%s key=%s", locale, key)
         return f"{_MISSING_PREFIX}{key}]"
     if not kwargs:
         return template
@@ -161,6 +161,6 @@ def t(key: str, **kwargs: Any) -> str:
         return template.format(**kwargs)
     except Exception as exc:
         logger.error(
-            "i18n: 占位符填充失败 key=%s kwargs=%s err=%s", key, kwargs, exc
+            "i18n: placeholder fill failed key=%s kwargs=%s err=%s", key, kwargs, exc
         )
         return template

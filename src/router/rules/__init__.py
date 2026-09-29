@@ -45,7 +45,7 @@ def _compile(pattern: str):
         return re.compile(pattern, re.IGNORECASE)
     except re.error as exc:
         # 规则是数据：写错不会抛到调用方，只会静默失配 —— 必须留下日志
-        logger.error("rules: 正则编译失败 pattern=%r err=%s", pattern, exc)
+        logger.error("rules: regex compile failed pattern=%r err=%s", pattern, exc)
         return re.compile(r"(?!x)x")
 
 
@@ -133,9 +133,9 @@ def _load(locale: str) -> Dict[str, Any]:
             "decision_subtypes": raw.get("decision_subtypes") or {},
         }
     except FileNotFoundError:
-        logger.error("rules: 规则文件缺失 locale=%s path=%s", locale, path)
+        logger.error("rules: rules file missing locale=%s path=%s", locale, path)
     except Exception as exc:  # yaml 解析失败 / 编码问题 / 结构异常
-        logger.error("rules: 规则加载失败 locale=%s path=%s err=%s", locale, path, exc)
+        logger.error("rules: rules load failed locale=%s path=%s err=%s", locale, path, exc)
 
     _cache[locale] = pack
     return pack
@@ -146,7 +146,7 @@ def _pack(locale: Optional[str] = None) -> Dict[str, Any]:
     loc = locale or get_locale()
     pack = _load(loc)
     if not pack["fields"] and loc != DEFAULT_LOCALE:
-        logger.warning("rules: locale=%s 规则不可用，回退 %s", loc, DEFAULT_LOCALE)
+        logger.warning("rules: locale=%s rules unavailable, falling back to %s", loc, DEFAULT_LOCALE)
         pack = _load(DEFAULT_LOCALE)
     return pack
 
