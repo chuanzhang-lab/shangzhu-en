@@ -873,3 +873,29 @@ bench:
     "内容": "平台算法依赖风险极高，建议多平台分发"
     "房地产": "资金杠杆风险，利率波动直接影响利润"
     "企业服务": "客户集中度风险：单一客户 > 30% 收入即为高风险"
+
+# ─── 参数守门层（param_guard）─────────────────────────────────────────────
+pg:
+  unit:
+    per_month: "元/月"
+    cny: "元"
+    per_day: "单/天"
+    person: "人"
+    per_unit: "元/单位"
+    ratio_or_pct: "0~1 或 0~100%"
+    pct: "%"
+    none: ""
+  norm:
+    to_ratio: "按百分比归一化 {value}→{norm}"
+    to_pct: "按比例转百分比 {value}→{norm}%"
+  err:
+    type_mismatch: "类型异常：期望数值，实际 {actual}"
+    autofix: "{field}={value} 超界，已自动修正为 {fixed}（{unit}），疑似单位/笔误（如「6000%」想写「60%」）→ 请确认"
+    above_max: "{field}={value} 超出物理上限 {max}（{unit}），疑似单位/笔误 → 已拦截，不进入计算"
+    below_min: "{field}={value} 低于物理下限 {min}（{unit}）"
+    industry_cap: "{field}={value} 超出{industry}常见上限 {cap}（{unit}），疑似抽取串台 → 已拦截，不进入计算"
+    soft_range: "{field}={value} 超出常见区间 [{lo}, {hi}]（{unit}）"
+    contradiction: "「{field}」本次={new} 与历史={old} 矛盾，请确认是否为笔误"
+  dc:
+    revenue_mismatch: "月营收 {rev} 与「日均{traffic}×单价{price}×{days}天」推算 {implied} 差异超 50%，请确认口径"
+    cost_unsustainable: "总成本 {total} 超月营收 {rev} 10 倍，参数组合物理上不可持续"

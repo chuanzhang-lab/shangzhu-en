@@ -183,6 +183,7 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "market_research.py"),
     os.path.join("src", "op_executor.py"),
     os.path.join("src", "advisor", "advisor_formatter.py"),
+    os.path.join("src", "param_guard.py"),
 ]
 
 # 白名单：**非展示文案**，展示层/语义层必须按原样匹配，因此不能外置。
@@ -192,7 +193,10 @@ CONVERTED_MODULES = [
 # - session_state 的输入层关键词与续算/重置提示词：与 field_model.aliases 同类
 #   （输入匹配数据，非展示），改它会破坏参数抽取与意图识别。
 ENGINE_DATA_LITERALS = {
-    "[缺失]", "变动成本", "无限", "[用户]",
+    # param_guard 的来源标注前缀：classify_basis 靠 startswith 判定 basis，
+    # 是**语义判定依据**不是展示文案；改英文会让 basis 分类静默降级。
+    # 真正要展示的来源串由 source_tags.mark() 生成（已走 i18n）。
+    "[缺失]", "变动成本", "无限", "[用户]", "[推导]", "[候选]",
     "咖啡", "宠物", "养老", "医疗", "教育", "电商", "内容",
     "餐饮", "零售", "制造", "软件", "自定义", "其他",
     "杯", "假设/缺失", "推算", "用户", "缺失",

@@ -24,6 +24,8 @@
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from i18n import industry_name, t
+
 # ── 校验级别 ──────────────────────────────────────────────────────────────
 LEVEL_OK = "ok"
 LEVEL_WARNING = "warning"      # 超出常识但可能合法
@@ -81,93 +83,93 @@ FIELD_CONSTRAINTS = {
     "monthly_rent": {
         "type": (int, float), "min": 0, "max": 100_000_000,
         "soft_min": 0, "soft_max": 500_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "monthly_revenue": {
         "type": (int, float), "min": 0, "max": 1e12,
         "soft_min": 0, "soft_max": 10_000_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "total_investment": {
         "type": (int, float), "min": 0, "max": 1e12,
         "soft_min": 0, "soft_max": 50_000_000,
-        "unit_hint": "元",
+        "unit_hint": "pg.unit.cny",
     },
     "price_per_unit": {
         "type": (int, float), "min": 0.01, "max": 10_000_000,
         "soft_min": 0.1, "soft_max": 100_000,
-        "unit_hint": "元",
+        "unit_hint": "pg.unit.cny",
         # 餐饮/零售客单价软上限：串台到几十万必须待确认并剔除
         "industry_soft_max": {"餐饮": 1000, "零售": 5000, "电商": 5000},
     },
     "daily_traffic": {
         "type": (int, float), "min": 0, "max": 1_000_000,
         "soft_min": 0, "soft_max": 50_000,
-        "unit_hint": "单/天",
+        "unit_hint": "pg.unit.per_day",
     },
     "employee_count": {
         "type": (int, float), "min": 0, "max": 200,
         "soft_min": 0, "soft_max": 50,
-        "unit_hint": "人",
+        "unit_hint": "pg.unit.person",
     },
     "avg_salary": {
         "type": (int, float), "min": 0, "max": 5_000_000,
         "soft_min": 500, "soft_max": 100_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "variable_cost_ratio": {
         "type": (int, float), "min": 0, "max": 1.0,
         "soft_min": 0, "soft_max": 0.95,
         "normalize": "percent_or_ratio",
-        "unit_hint": "0~1 或 0~100%",
+        "unit_hint": "pg.unit.ratio_or_pct",
     },
     "variable_cost_rate": {  # 抽取可能给 60 表示 60%
         "type": (int, float), "min": 0, "max": 100,
         "soft_min": 0, "soft_max": 95,
         "normalize": "percent_or_ratio",
-        "unit_hint": "%",
+        "unit_hint": "pg.unit.pct",
     },
     "gross_margin": {
         "type": (int, float), "min": -1, "max": 1,
         "soft_min": 0, "soft_max": 0.9,
         "normalize": "percent_or_ratio",
-        "unit_hint": "0~1 或 0~100%",
+        "unit_hint": "pg.unit.ratio_or_pct",
     },
     "monthly_growth_rate": {
         "type": (int, float), "min": -1, "max": 1,
         "soft_min": -0.2, "soft_max": 0.5,
         "normalize": "percent_or_ratio",
-        "unit_hint": "0~1 或 0~100%",
+        "unit_hint": "pg.unit.ratio_or_pct",
     },
     "monthly_expense": {  # 显式固定成本总数
         "type": (int, float), "min": 0, "max": 1e10,
         "soft_min": 0, "soft_max": 5_000_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "utilities": {
         "type": (int, float), "min": 0, "max": 1e8,
         "soft_min": 0, "soft_max": 100_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "packaging": {
         "type": (int, float), "min": 0, "max": 1e8,
         "soft_min": 0, "soft_max": 200_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "commission": {
         "type": (int, float), "min": 0, "max": 1e8,
         "soft_min": 0, "soft_max": 500_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "other_fixed": {
         "type": (int, float), "min": 0, "max": 1e8,
         "soft_min": 0, "soft_max": 200_000,
-        "unit_hint": "元/月",
+        "unit_hint": "pg.unit.per_month",
     },
     "unit_variable_cost": {
         "type": (int, float), "min": 0, "max": 1e6,
         "soft_min": 0, "soft_max": 10_000,
-        "unit_hint": "元/单位",
+        "unit_hint": "pg.unit.per_unit",
     },
 }
 
@@ -197,12 +199,12 @@ def normalize_value(field: str, value: Any) -> Tuple[Any, Optional[str]]:
         # 比例字段：60 → 0.6；6000 → 60（仍 >1，由校验标记 CRITICAL）
         if v > 1.0:
             norm = v / 100.0
-            return norm, f"按百分比归一化 {value}→{norm:g}"
+            return norm, t("pg.norm.to_ratio", value=value, norm=f"{norm:g}")
         return v, None
     # 百分比字段：0.6 → 60；6000 保留（由校验按 >100 标记 CRITICAL）
     if 0 < v <= 1.0:
         norm = v * 100.0
-        return norm, f"按比例转百分比 {value}→{norm:g}%"
+        return norm, t("pg.norm.to_pct", value=value, norm=f"{norm:g}")
     return v, None
 
 
@@ -240,7 +242,7 @@ def validate_field(field: str, value: Any, industry: Optional[str] = None) -> Di
     if expected and not isinstance(value, expected):
         result.update(
             level=LEVEL_WARNING,
-            message=f"类型异常：期望数值，实际 {type(value).__name__}",
+            message=t("pg.err.type_mismatch", actual=type(value).__name__),
             needs_confirmation=True,
         )
         return result
@@ -253,7 +255,8 @@ def validate_field(field: str, value: Any, industry: Optional[str] = None) -> Di
     hard_max = spec.get("max", float("inf"))
     soft_min = spec.get("soft_min", float("-inf"))
     soft_max = spec.get("soft_max", float("inf"))
-    unit = spec.get("unit_hint", "")
+    # unit_hint 存的是**键**不是文案：模块级常量直接存文案会把语言冻结在 import 时刻
+    unit = t(spec.get("unit_hint") or "pg.unit.none")
 
     # 硬边界：物理不可能 → 尝试自动修正（宁修正+标记，不丢弃；丢弃会让整句落 chitchat）
     if v < hard_min or v > hard_max:
@@ -265,17 +268,18 @@ def validate_field(field: str, value: Any, industry: Optional[str] = None) -> Di
                 auto_fix = candidate
         if auto_fix is not None:
             result["auto_fix"] = auto_fix
-            result["message"] = (
-                f"{field}={v:g} 超界，已自动修正为 {auto_fix:g}（{unit}），"
-                f"疑似单位/笔误（如「6000%」想写「60%」）→ 请确认"
+            result["message"] = t(
+                "pg.err.autofix", field=field, value=f"{v:g}",
+                fixed=f"{auto_fix:g}", unit=unit,
             )
         elif v > hard_max:
-            result["message"] = (
-                f"{field}={v:g} 超出物理上限 {hard_max:g}（{unit}），"
-                f"疑似单位/笔误 → 已拦截，不进入计算"
+            result["message"] = t(
+                "pg.err.above_max", field=field, value=f"{v:g}",
+                max=f"{hard_max:g}", unit=unit,
             )
         else:
-            result["message"] = f"{field}={v:g} 低于物理下限 {hard_min:g}（{unit}）"
+            result["message"] = t("pg.err.below_min", field=field, value=f"{v:g}",
+                                  min=f"{hard_min:g}", unit=unit)
         result["level"] = LEVEL_CRITICAL
         result["needs_confirmation"] = True
         return result
@@ -286,9 +290,9 @@ def validate_field(field: str, value: Any, industry: Optional[str] = None) -> Di
     if cap is not None and v > cap:
         result.update(
             level=LEVEL_CRITICAL,
-            message=(
-                f"{field}={v:g} 超出{industry}常见上限 {cap:g}（{unit}），"
-                f"疑似抽取串台 → 已拦截，不进入计算"
+            message=t(
+                "pg.err.industry_cap", field=field, value=f"{v:g}",
+                industry=industry_name(industry), cap=f"{cap:g}", unit=unit,
             ),
             needs_confirmation=True,
         )
@@ -298,7 +302,8 @@ def validate_field(field: str, value: Any, industry: Optional[str] = None) -> Di
     if v < soft_min or v > soft_max:
         result.update(
             level=LEVEL_WARNING,
-            message=f"{field}={v:g} 超出常见区间 [{soft_min:g}, {soft_max:g}]（{unit}）",
+            message=t("pg.err.soft_range", field=field, value=f"{v:g}",
+                      lo=f"{soft_min:g}", hi=f"{soft_max:g}", unit=unit),
             needs_confirmation=False,
         )
         return result
@@ -359,10 +364,8 @@ def validate_params(
                     "field": field,
                     "old_value": old,
                     "new_value": value,
-                    "message": (
-                        f"「{field}」本次={value} 与历史={old} 矛盾，"
-                        f"请确认是否为笔误"
-                    ),
+                    "message": t("pg.err.contradiction", field=field,
+                                 new=value, old=old),
                 })
                 needs_confirm.append(field)
 
@@ -427,10 +430,10 @@ def check_derived_consistency(params: Dict[str, Any]) -> List[Dict[str, str]]:
         if abs(implied - rev) / rev > 0.5:
             issues.append({
                 "field": "monthly_revenue",
-                "message": (
-                    f"月营收 {rev:,.0f} 与「日均{traffic}×单价{price}"
-                    f"×{DAYS_PER_MONTH}天」"
-                    f"推算 {implied:,.0f} 差异超 50%，请确认口径"
+                "message": t(
+                    "pg.dc.revenue_mismatch", rev=f"{rev:,.0f}",
+                    traffic=traffic, price=price, days=DAYS_PER_MONTH,
+                    implied=f"{implied:,.0f}",
                 ),
             })
 
@@ -443,10 +446,8 @@ def check_derived_consistency(params: Dict[str, Any]) -> List[Dict[str, str]]:
             if total_cost > rev * 10:
                 issues.append({
                     "field": "cost_structure",
-                    "message": (
-                        f"总成本 {total_cost:,.0f} 超月营收 {rev:,.0f} 10 倍，"
-                        f"参数组合物理上不可持续"
-                    ),
+                    "message": t("pg.dc.cost_unsustainable",
+                                 total=f"{total_cost:,.0f}", rev=f"{rev:,.0f}"),
                 })
 
     return issues

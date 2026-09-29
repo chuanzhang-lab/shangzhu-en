@@ -871,3 +871,29 @@ bench:
     "内容": "Platform algorithm dependency is a severe risk — distribute across several platforms"
     "房地产": "Leverage risk: interest rate moves hit profit directly"
     "企业服务": "Customer concentration risk: a single customer above 30% of revenue is high risk"
+
+# ─── Parameter guard (param_guard) ────────────────────────────────────────
+pg:
+  unit:
+    per_month: "CNY/month"
+    cny: "CNY"
+    per_day: "units/day"
+    person: "people"
+    per_unit: "CNY/unit"
+    ratio_or_pct: "0-1 or 0-100%"
+    pct: "%"
+    none: ""
+  norm:
+    to_ratio: "Normalized from percentage {value} to {norm}"
+    to_pct: "Converted ratio to percentage {value} to {norm}%"
+  err:
+    type_mismatch: "Type mismatch: expected a number, got {actual}"
+    autofix: "{field}={value} is out of range; auto-corrected to {fixed} ({unit}) — likely a unit slip or typo (e.g. \"6000%\" meant \"60%\"). Please confirm"
+    above_max: "{field}={value} exceeds the physical maximum {max} ({unit}) — likely a unit slip or typo; blocked, not used in calculation"
+    below_min: "{field}={value} is below the physical minimum {min} ({unit})"
+    industry_cap: "{field}={value} exceeds the typical {industry} ceiling {cap} ({unit}) — likely an extraction mix-up; blocked, not used in calculation"
+    soft_range: "{field}={value} is outside the typical range [{lo}, {hi}] ({unit})"
+    contradiction: "\"{field}\" is {new} now but was {old} before — please confirm whether one of them is a typo"
+  dc:
+    revenue_mismatch: "Monthly revenue {rev} differs by more than 50% from the {implied} implied by daily traffic {traffic} x unit price {price} x {days} days — please confirm the definition"
+    cost_unsustainable: "Total cost {total} is more than 10x monthly revenue {rev} — this combination is not physically sustainable"
