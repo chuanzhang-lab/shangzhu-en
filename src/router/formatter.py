@@ -15,7 +15,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-from i18n import t
+from i18n import has, industry_name, t
 
 # 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
 # 这三个是 formatter.py 里仅有的中文字面量，护栏测试按白名单放行。
@@ -24,7 +24,34 @@ _ENGINE_VC_HINT = "变动成本"
 _ENGINE_INFINITE_MARK = "无限"
 
 
-def _traffic_unit(benchmark: Optional[Dict] = None, params: Optional[Dict] = None) -> str:
+def _fmt_benchmark_lines(bench: Dict, industry_key: str = "") -> List[str]:
+    """行业基准的**结构化渲染**。
+
+    旧实现把 bench 整个 dict 原样倒出来（`- key_warning: 新店前 3 个月…`），
+    两个问题：
+    1. 值是中文内容 → 英文版每次扫描都漏中文；
+    2. 连 `profit_margin_min` / `traffic_min` 这些**引擎内部字段**一起倒给用户，
+       两种语言下都是噪音。
+
+    这里只渲染四项对人有用的（客流区间 / 利润率 / 回本周期 / 核心风险），
+    文案走 i18n，按行业取（基准是**每行业不同**的内容，不是通用 UI 文案）。
+    """
+    # 「自定义 / 其他」没有基准条目：先问有没有，别把 missing 标记漏给用户
+    if not industry_key or not has(f"bench.traffic.{industry_key}"):
+        # 拿不到行业键就退回「有啥显示啥」——宁可显示原始值也不静默留白
+        return [f"- {k}: {v}" for k, v in bench.items()
+                if isinstance(v, (int, float, str))]
+    return [
+        f"- {t('bench.label.traffic_range')}: {t(f'bench.traffic.{industry_key}')}",
+        f"- {t('bench.label.profit_margin')}: {t(f'bench.margin.{industry_key}')}",
+        f"- {t('bench.label.breakeven')}: {t(f'bench.breakeven.{industry_key}')}",
+        f"- {t('bench.label.key_warning')}: {t(f'bench.warning.{industry_key}')}",
+        f"- {t('bench.note')}",
+    ]
+
+
+def _traffic_unit(benchmark: Optional[Dict] = None, params: Optional[Dict] = None,
+                  industry_key: str = "") -> str:
     """客流单位：用户口中的量词 > 行业 benchmark 默认 > 中性兜底。
 
     行业默认：从 benchmark 的 daily_traffic_range 取（「80-250 杯」→「杯/天」）。
@@ -37,7 +64,15 @@ def _traffic_unit(benchmark: Optional[Dict] = None, params: Optional[Dict] = Non
     user_unit = (params or {}).get("_traffic_unit")
     if user_unit:
         return f"{user_unit}{t('fmt.traffic_unit.per_day')}"
-    rng = (benchmark or {}).get("daily_traffic_range") or ""
+    # 行业默认：优先从**本地化后**的基准串取单位。
+    # 中文「80-250 杯」能正则出「杯」；英文 "80-250 servings/day" 里没有 CJK，
+    # 正则自然不命中 → 落到下面 fmt.traffic_unit.fallback（"units/day"）。
+    # 若仍读原始 dict，英文版就会漏出「63 杯/day」这种混血串。
+    rng = ""
+    if industry_key and has(f"bench.traffic.{industry_key}"):
+        rng = t(f"bench.traffic.{industry_key}")
+    else:
+        rng = (benchmark or {}).get("daily_traffic_range") or ""
     m = re.search(r"\d+\s*[-~－—]\s*\d+\s*([\u4e00-\u9fa5]{1,2})\s*$", rng)
     if m:
         return f"{m.group(1)}{t('fmt.traffic_unit.per_day')}"
@@ -151,14 +186,20 @@ def _fmt_scan(data: Dict) -> str:
     sensitivity = data.get("sensitivity", {}).get("scenarios", [])
     pitfalls = data.get("pitfalls", {}).get("pitfalls", [])
     bench = data.get("benchmark", {})
+    # 基准是**按行业取**的，需要行业数据键（project_type 就是它，未经展示名映射）
+    industry_key = data.get("project_type") or ""
 
     lines = []
 
     # 标题 + 项目类型
     # 括号内只呈现**已知**信息：stage/template_mode 缺失时不得渲染成字面量「None」
-    project_type = data.get("project_type") or t("fmt.common.project_type_default")
+    # project_type 是**行业数据键**，展示前映射成展示名（键本身永不变）
+    project_type = (industry_name(data.get("project_type"))
+                    or t("fmt.common.project_type_default"))
     _quals = [s for s in (data.get("stage"), data.get("template_mode")) if s]
-    _suffix = f"（{' · '.join(str(q) for q in _quals)}）" if _quals else ""
+    # 连括号都是文案：中文用全角「（）」，英文用半角 " ()"，写死就混血
+    _suffix = (t("fmt.common.qual_suffix", s=" · ".join(str(q) for q in _quals))
+               if _quals else "")
     lines.append(t("fmt.scan.title", project_type=project_type, suffix=_suffix))
     lines.append("")
 
@@ -200,7 +241,8 @@ def _fmt_scan(data: Dict) -> str:
             t(
                 "fmt.scan.breakeven_row",
                 value=f"{daily_breakeven:.0f}",
-                unit=_traffic_unit(data.get("benchmark"), data.get("params")),
+                unit=_traffic_unit(data.get("benchmark"), data.get("params"),
+                                   industry_key),
             )
         )
 
@@ -280,6 +322,10 @@ def _fmt_scan(data: Dict) -> str:
                 return t("fmt.common.unknown")
             if isinstance(v, (int, float)):
                 return f"{v:,.0f}"
+            # 「无限」是引擎的**数据标记**（靠等值比较识别），不是文案。
+            # 直接 str(v) 会让英文版漏出中文，必须先翻译成展示文案。
+            if str(v) == _ENGINE_INFINITE_MARK:
+                return t("fmt.common.infinite")
             return str(v)
 
         lines.append(t("fmt.scan.scenarios_header"))
@@ -339,11 +385,7 @@ def _fmt_scan(data: Dict) -> str:
     # Benchmark
     if bench and isinstance(bench, dict) and bench:
         lines.append(t("fmt.scan.benchmark_header"))
-        for k, v in bench.items():
-            if isinstance(v, (int, float)):
-                lines.append(f"- {k}: {v}")
-            elif isinstance(v, str):
-                lines.append(f"- {k}: {v}")
+        lines.extend(_fmt_benchmark_lines(bench, industry_key))
         lines.append("")
 
     # 操作提示
@@ -718,7 +760,8 @@ def _fmt_cashflow(data: Dict) -> str:
         return "\n".join(md)
 
     md = [t("fmt.cashflow.title"), ""]
-    project_type = data.get("project_type") or t("fmt.common.project_type_default")
+    project_type = (industry_name(data.get("project_type"))
+                    or t("fmt.common.project_type_default"))
     md.append(t("fmt.cashflow.opening", project_type=project_type, value=_fmt_num_cf(data.get("opening_now"))))
     if data.get("notes"):
         md.append("")

@@ -23,7 +23,7 @@ from typing import Optional
 import yaml
 from langchain.tools import tool
 
-from i18n import t
+from i18n import industry_name, t
 import source_tags as st
 from source_tags import CANDIDATE, CONFLICT, DERIVED, MISSING, USER
 
@@ -187,7 +187,7 @@ def _detect_mixed_industry(user_text: str, matched_industry: str) -> Optional[st
     text_lower = user_text.lower()
     for kw_set, _note_key in MIXED_INDUSTRY_PAIRS:
         if all(k in text_lower for k in kw_set):
-            return t("wf.mixed.prefix", industry=matched_industry)
+            return t("wf.mixed.prefix", industry=industry_name(matched_industry))
     return None
 
 
@@ -233,7 +233,7 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
     else:
         effective_industry = industry or "其他"
         tpl = _resolve_industry(effective_industry)
-        tpl["_mode"] = t("wf.mode.industry", industry=effective_industry)
+        tpl["_mode"] = t("wf.mode.industry", industry=industry_name(effective_industry))
 
     # 混合业态检测：检查原始文本或用户填写的行业名
     check_text = user_text or raw_params.get("industry", "")
@@ -947,14 +947,16 @@ def _project_trend_12m(params: dict) -> dict:
     max_monthly_loss = min(valid_profits) if valid_profits else 0
 
     # 季节系数来源标注
-    industry_name = params.get("industry_name", "")
+    # ⚠️ 局部变量不能叫 industry_name：会遮蔽刚 import 进来的 i18n.industry_name()
+    # （M5 在 decision_engine 踩过同一个坑：局部变量 t 遮蔽了 i18n.t）
+    industry_key = params.get("industry_name", "")
     has_industry_seasonal = season_map != _DEFAULT_SEASON_MAP
 
     result = {
         "months": months,
         "input_mode": "series" if is_series else "growth_rate",
         "months_count": months_count,
-        "seasonal_source": (t("wf.trend.seasonal_industry", industry=industry_name)
+        "seasonal_source": (t("wf.trend.seasonal_industry", industry=industry_name(industry_key))
                             if has_industry_seasonal else t("wf.trend.seasonal_generic")),
         "summary": {
             "total_annual_profit": round(total_annual_profit, 0),

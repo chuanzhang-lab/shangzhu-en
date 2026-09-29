@@ -102,6 +102,67 @@ def test_t_missing_key_is_explicit_never_empty():
     assert out.startswith("[i18n:missing:"), f"缺失键未返回显式标记: {out!r}"
 
 
+# zh.yaml 的 bench.* 是「手抄配置」的高危区：配置改了、yaml 没跟上，
+# 中文版就会显示过期基准，而英文版还在翻旧文案 —— 两边都错且没人发现。
+# 这两条测试把「配置 → zh.yaml → en.yaml」的链条钉死。
+_BENCH_FIELDS = {
+    "traffic": "daily_traffic_range",
+    "margin": "typical_profit_margin",
+    "breakeven": "avg_breakeven_months",
+    "warning": "key_warning",
+}
+_CJK = re.compile(r"[一-鿿]")
+
+
+def _config_benchmarks() -> dict:
+    import yaml  # 顶部 import 会让护栏在 pyyaml 缺失时整片红，放进函数里隔离
+
+    with open(os.path.join(ROOT, "config", "industry_templates.yaml"),
+              "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    return {k: (v.get("benchmark") or {})
+            for k, v in cfg["industry_templates"].items()}
+
+
+def test_zh_bench_copy_matches_industry_config():
+    """zh.yaml 的 bench.* 必须与 config/industry_templates.yaml 逐字一致。
+
+    zh 侧的基准文案**来源就是配置**，抄一份进 yaml 是为了让渲染代码只有
+    「按行业 + locale 取键」这一条路径（不搞两套 dispatch）。
+    代价是存在重复 → 用这条测试把重复钉死：改配置不改 yaml = 测试红。
+    """
+    i18n.reload()
+    zh = i18n._load("zh")
+    for industry, bench in _config_benchmarks().items():
+        for group, cfg_field in _BENCH_FIELDS.items():
+            key = f"bench.{group}.{industry}"
+            assert key in zh, f"zh.yaml 缺 {key}"
+            assert zh[key] == bench.get(cfg_field), (
+                f"{key} 与配置不一致：yaml={zh[key]!r} "
+                f"config={bench.get(cfg_field)!r} —— 改了配置就要同步 zh.yaml"
+            )
+
+
+def test_en_bench_and_industry_names_are_fully_translated():
+    """每个行业都得有英文展示名 + 英文基准四项，且不含中文残片。
+
+    缺一项 → 渲染时静默回退中文（「混血输出」），这正是本分支最要防的事故。
+    """
+    i18n.reload()
+    en = i18n._load("en")
+    industries = set(_config_benchmarks())
+    # 用户没说行业时 effective_industry 会落到这两个键，虽无基准也必须有展示名
+    for key in industries | {"自定义", "其他"}:
+        assert f"industry.name.{key}" in en, f"en.yaml 缺行业展示名 {key}"
+    for industry in industries:
+        for group in _BENCH_FIELDS:
+            key = f"bench.{group}.{industry}"
+            assert key in en, f"en.yaml 缺 {key}"
+            assert not _CJK.search(en[key]), (
+                f"{key} 仍是中文：{en[key]!r} —— 英文版会漏中文残片"
+            )
+
+
 def test_t_invalid_locale_falls_back_to_zh():
     """非法 locale 不生效（不能静默用错语言）。"""
     i18n.reload()

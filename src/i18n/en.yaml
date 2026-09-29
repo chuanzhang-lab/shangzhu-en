@@ -7,10 +7,12 @@ fmt:
   # ── Shared fragments ──────────────────────────────────────────────────
   common:
     project_type_default: "Project"
+    qual_suffix: " ({s})"
     money: "{v} CNY"
     delta_money: "+{v} CNY"
     unknown: "Unknown"
     unknown_pending: "Unknown / to be filled"
+    infinite: "Unlimited"
     assumptions_header: "## Current assumptions (fill in to take effect)"
     assumptions_table_header: "| Parameter | Current value | Source |"
     supplement: "- Add: {item}"
@@ -785,3 +787,87 @@ af:
     gross_margin: 'Gross margin'
     monthly_fixed_cost: 'Monthly fixed cost'
     runway_months: 'Runway'
+
+# ─── 行业展示名 ─────────────────────────────────────────────
+# 键是**数据键**（引擎靠它查 industry_templates），只映射展示名，键本身永不变。
+industry:
+  name:
+    "餐饮": "Food & Beverage"
+    "零售": "Retail"
+    "SaaS": "SaaS"
+    "教育": "Education"
+    "电商": "E-commerce"
+    "制造": "Manufacturing"
+    "宠物": "Pet Services"
+    "医疗": "Healthcare"
+    "金融": "Finance"
+    "内容": "Content & Media"
+    "房地产": "Real Estate"
+    "企业服务": "Enterprise Services"
+    # 非模板行业：用户没说行业时 effective_industry 会落到这两个键，
+    # 它们**没有** benchmark 条目（渲染前用 i18n.has() 问过再取）
+    "自定义": "Custom"
+    "其他": "Other"
+
+# ─── 行业基准（内容，非 UI 文案）─────────────────────────────
+# zh 侧的值必须与 config/industry_templates.yaml 的 benchmark 逐字一致，
+# 由 test_bench_copy_matches_config 守住；改配置不改这里 = 测试红。
+bench:
+  note: "Industry reference ranges (CNY basis), not a forecast"
+  label:
+    traffic_range: "Daily traffic"
+    profit_margin: "Typical profit margin"
+    breakeven: "Typical break-even"
+    key_warning: "Key risk"
+  traffic:
+    "餐饮": "80-250 servings/day"
+    "零售": "50-150 customers/day"
+    "SaaS": "N/A (measured by MRR)"
+    "教育": "Class capacity × number of sessions"
+    "电商": "By GMV / order volume"
+    "制造": "N/A"
+    "宠物": "10-30 pets/day"
+    "医疗": "20-80 visits/day"
+    "金融": "N/A"
+    "内容": "By follower count / view count"
+    "房地产": "N/A"
+    "企业服务": "N/A (by contract value)"
+  margin:
+    "餐饮": "15-25%"
+    "零售": "10-18%"
+    "SaaS": "Target 20-30% (early-stage losses are normal)"
+    "教育": "20-35%"
+    "电商": "5-15%"
+    "制造": "8-15%"
+    "宠物": "20-30%"
+    "医疗": "15-30%"
+    "金融": "25-40%"
+    "内容": "20-40% (highly volatile)"
+    "房地产": "15-25%"
+    "企业服务": "15-25%"
+  breakeven:
+    "餐饮": "6-12 months"
+    "零售": "8-18 months"
+    "SaaS": "18-36 months"
+    "教育": "6-15 months"
+    "电商": "3-12 months"
+    "制造": "12-24 months"
+    "宠物": "8-15 months"
+    "医疗": "12-24 months"
+    "金融": "12-24 months"
+    "内容": "6-18 months"
+    "房地产": "12-36 months"
+    "企业服务": "12-24 months"
+  warning:
+    "餐饮": "A new store typically only reaches 40-50% of its target footfall in the first 3 months"
+    "零售": "Inventory turnover is the core metric — keep it within 30 days"
+    "SaaS": "LTV/CAC should be > 3 and monthly churn < 5%"
+    "教育": "A school operating licence is required; compliance cost is high"
+    "电商": "Traffic cost keeps rising — keep CAC within 20% of average order value"
+    "制造": "If the yield rate is below 95%, the project is not viable"
+    "宠物": "A pet safety incident can trigger a large one-off payout"
+    "医疗": "Licensing barriers are extremely high; compliance runs 10-15% of total cost"
+    "金融": "Regulatory compliance is the first lifeline; compliance cost is extremely high"
+    "内容": "Platform algorithm dependency is a severe risk — distribute across several platforms"
+    "房地产": "Leverage risk: interest rate moves hit profit directly"
+    "企业服务": "Customer concentration risk: a single customer above 30% of revenue is high risk"

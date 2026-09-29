@@ -41,6 +41,9 @@ _locale_ctx: ContextVar[Optional[str]] = ContextVar("shangzhu_locale", default=N
 
 _cache: Dict[str, Dict[str, str]] = {}
 
+# t() 的缺失标记前缀，供调用方判断「这个键有没有真的取到」
+_MISSING_PREFIX = "[i18n:missing:"
+
 
 def _env_locale() -> str:
     """读部署级 locale 配置；非法值一律回退中文（不静默用错语言）。"""
@@ -107,6 +110,38 @@ def reload() -> None:
     _cache.clear()
 
 
+def has(key: str) -> bool:
+    """键在当前 locale（或中文回退）下是否存在。
+
+    给「有才显示」的场景用：例如行业基准只覆盖了 12 个行业，
+    「自定义 / 其他」没有基准条目 —— 调用方应先问再取，
+    否则会拿到 `[i18n:missing:...]` 标记串直接漏给用户。
+    """
+    locale = get_locale()
+    return key in _load(locale) or key in _load(DEFAULT_LOCALE)
+
+
+def industry_name(key: str) -> str:
+    """行业**数据键** → 展示名（只在渲染时映射，数据面原样不动）。
+
+    为什么不能直接把 industry 翻成英文：
+    `industry` 在引擎里是**数据值**（餐饮 / SaaS / …），行业模板查找、
+    `is_tech_project` 判定、别名解析全靠它。翻译键本身 = 让
+    `industry_templates` 查不到模板（同类事故：把行业名当文案翻）。
+    所以这里做的是**展示名映射**，键本身永远不动。
+
+    缺映射时回退数据键本身并记 ERROR —— 宁可露出原始键，也不冒充空白
+    （与「缺失不冒充 0」同一条原则）。
+    """
+    if not key:
+        return ""
+    name = t(f"industry.name.{key}")
+    if name.startswith(_MISSING_PREFIX):
+        logger.error("i18n: 行业展示名缺失 industry=%s", key)
+        return key
+    return name
+
+
 def t(key: str, **kwargs: Any) -> str:
     """取文案。
 
@@ -119,7 +154,7 @@ def t(key: str, **kwargs: Any) -> str:
         template = _load(DEFAULT_LOCALE).get(key)
     if template is None:
         logger.error("i18n: 缺失键 locale=%s key=%s", locale, key)
-        return f"[i18n:missing:{key}]"
+        return f"{_MISSING_PREFIX}{key}]"
     if not kwargs:
         return template
     try:
