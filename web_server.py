@@ -891,7 +891,7 @@ SETTINGS_MODAL_HTML = """
   <div class="modal-box">
     <div class="modal-title">⚙️ LLM 配置</div>
     <label class="modal-label">模型名称</label>
-    <input class="modal-input" id="cfg-model" placeholder="例如: deepseek-v4-flash">
+    <input class="modal-input" id="cfg-model" placeholder="e.g. your model id">
     <label class="modal-label">API 端点 (base_url)</label>
     <input class="modal-input" id="cfg-base-url" placeholder="https://api.longcat.chat/openai">
     <label class="modal-label">API Key</label>
