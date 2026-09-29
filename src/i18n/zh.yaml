@@ -627,12 +627,7 @@ ui:
     params_loaded: 参数已加载
     connecting: 连接中...
     connect_failed: 连接失败
-
-ui:
-  connected: 已连接
-  connect_failed: 连接失败
-  toast:
-    saved_ok: "✅ 已保存且连通性测试通过（{0}ms）"
+    saved_ok: ✅ 已保存且连通性测试通过（{0}ms）
     saved_test_fail: ⚠️ 已保存，但连通性测试未通过：
     saved_req_fail: ⚠️ 已保存，但连通性测试请求失败
     model_empty: ⚠️ 模型名称不能为空
@@ -647,15 +642,17 @@ ui:
     renamed: ✅ 已改名：
     rename_fail: ⚠️ 改名失败，请重试
     deleted: 🗑️ 已删除：
-    delete_fail: "⚠️ 删除失败: "
+    delete_fail: '⚠️ 删除失败: '
     retry: 请重试
-    preview_ok: "✅ 预览: "
+    preview_ok: '✅ 预览: '
     preview_req_fail: ⚠️ 预览请求失败
     applied: ✅ 已应用
     apply_req_fail: ⚠️ 应用请求失败
-    export_incomplete: "⚠️ 参数不全（缺 {0}），导出的模型不完整。先在对话里补齐。"
-    updated: "✅ {0} 已更新为 {1}"
-    not_adopted: "⚠️ {0} 未采纳（当前 {1}），请用「{0} {2}%」重试"
+    export_incomplete: ⚠️ 参数不全（缺 {0}），导出的模型不完整。先在对话里补齐。
+    updated: ✅ {0} 已更新为 {1}
+    not_adopted: ⚠️ {0} 未采纳（当前 {1}），请用「{0} {2}%」重试
+  connected: 已连接
+  connect_failed: 连接失败
   unknown_error: 未知错误
   unnamed_task: 未命名任务
   confirm_delete: 确认?
@@ -701,8 +698,6 @@ ui:
   advisor_risk: 风险提示
   advisor_actions: 建议动作
   advisor_basis: 依据
-
-ui:
   example_coffee: 📊 餐饮项目分析
   example_saas: 💻 SaaS 模式评估
   example_quick: ⚡ 快速扫描
@@ -715,11 +710,10 @@ ui:
   advice_timeout: 解读超时，可重试
   net_error_retry: 网络错误，可重试
   thinking: 思考中
-  req_fail_prefix: "请求失败: "
+  req_fail_prefix: '请求失败: '
   no_response: （无响应）
   req_timeout: 请求超时（60s），请重试
   net_error: 网络错误，可重试
-
 # ─── cost_attribution（成本归因）────────────────────────────────────────────
 # 分量名（ca.comp.*）必须翻译：formatter 把它作为参数塞进英文句子 component_row，
 # 留中文就会在英文输出里嵌中文（混血输出）。

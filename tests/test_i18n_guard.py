@@ -16,6 +16,7 @@
 import os
 import re
 import tomllib
+from collections import Counter
 from string import Formatter
 
 import i18n
@@ -64,6 +65,49 @@ def test_locale_key_parity_between_zh_and_en():
     assert en, "en.yaml 未加载到任何键——资源文件路径或格式有问题"
     assert not (zh - en), f"en.yaml 缺少这些键（会导致英文界面中文残片）: {sorted(zh - en)}"
     assert not (en - zh), f"zh.yaml 缺少这些键: {sorted(en - zh)}"
+
+
+def test_i18n_yaml_has_no_duplicate_top_level_keys():
+    """i18n YAML 不得有重复的顶层键。
+
+    事故原型：`ui:` 在 zh/en.yaml 里出现过 **3 次**，`yaml.safe_load` 对重复键
+    **后者静默覆盖前者**（不报错、不警告）——于是前两块（ui.cat / ui.field /
+    全部 toast / modal / advisor 文案）整个失效，前端 74 个键全部渲染成
+    `[i18n:missing:ui.xxx]`。属于「不崩、不报错，只悄悄丢功能」的静默降级。
+
+    资源文件是数据不是代码，改错不会有任何异常，只能靠这条声明级断言兜住。
+    """
+    for locale in ("zh", "en"):
+        path = os.path.join(ROOT, "src", "i18n", f"{locale}.yaml")
+        tops = [
+            line[:-1]
+            for line in _read(path).split("\n")
+            if line and not line[0].isspace() and not line.startswith("#")
+            and line.rstrip().endswith(":")
+        ]
+        dupes = [k for k, n in Counter(tops).items() if n > 1]
+        assert not dupes, (
+            f"{locale}.yaml 有重复顶层键 {dupes}——yaml.safe_load 会静默保留最后一块，"
+            f"前面的整段文案会被无声丢弃（前端渲染成 [i18n:missing:...]）"
+        )
+
+
+def test_frontend_referenced_keys_all_resolve():
+    """app.js 里 t('ui.x') / tOr('ui.x') 引用的键必须在两种语言下都存在。
+
+    前端 t() 对缺失键返回 `[i18n:missing:key]`（看得见的乱码），
+    但只有真正点到那条路径才会暴露——用静态扫描兜住全部引用。
+    """
+    app_js = _read(os.path.join(ROOT, "src", "web_static", "app.js"))
+    refs = set(re.findall(r"t(?:Or)?\(\s*'((?:ui|field)\.[A-Za-z0-9_.]+)'", app_js))
+    # `tOr('ui.field.' + f, f)` 这类「前缀 + 变量」拼接，静态扫到的是前缀本身
+    refs = {r for r in refs if not r.endswith(".")}
+    assert refs, "app.js 未引用任何 i18n 键——扫描正则或文件路径有问题"
+    i18n.reload()
+    for locale in ("zh", "en"):
+        table = i18n._load(locale)
+        missing = sorted(k for k in refs if k not in table)
+        assert not missing, f"{locale}.yaml 缺少前端引用的键: {missing}"
 
 
 def test_placeholder_parity_between_zh_and_en():

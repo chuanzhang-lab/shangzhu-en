@@ -625,39 +625,36 @@ ui:
     other_fixed: Other fixed
   toast:
     no_param_change: No parameter changes detected
-    current_params: "Current params: "
+    current_params: 'Current params: '
     params_loaded: Params loaded
     connecting: Connecting...
     connect_failed: Connection failed
-
-ui:
-  connected: Connected
-  connect_failed: Connection failed
-  toast:
-    saved_ok: "✅ Saved and connectivity test passed ({0}ms)"
-    saved_test_fail: "⚠️ Saved, but connectivity test failed: "
+    saved_ok: ✅ Saved and connectivity test passed ({0}ms)
+    saved_test_fail: '⚠️ Saved, but connectivity test failed: '
     saved_req_fail: ⚠️ Saved, but the connectivity test request failed
     model_empty: ⚠️ Model name cannot be empty
     key_short: ⚠️ API key too short (min 8 chars); check it is complete
     save_fail: ⚠️ Save failed
-    saved: "✅ Saved: "
+    saved: '✅ Saved: '
     save_req_fail: ⚠️ Save request failed
     load_cfg_fail: ⚠️ Failed to load config
     task_deleted: ⚠️ Current task was deleted; switched to the most recent task
     tasks_load_fail: ⚠️ Failed to load task list; refresh and retry
     new_task_fail: ⚠️ Failed to create task; retry
-    renamed: "✅ Renamed: "
+    renamed: '✅ Renamed: '
     rename_fail: ⚠️ Rename failed; retry
-    deleted: "🗑️ Deleted: "
-    delete_fail: "⚠️ Delete failed: "
+    deleted: '🗑️ Deleted: '
+    delete_fail: '⚠️ Delete failed: '
     retry: retry
-    preview_ok: "✅ Preview: "
+    preview_ok: '✅ Preview: '
     preview_req_fail: ⚠️ Preview request failed
     applied: ✅ Applied
     apply_req_fail: ⚠️ Apply request failed
-    export_incomplete: "⚠️ Parameters incomplete (missing {0}); the exported model is incomplete. Fill them in the chat first."
-    updated: "✅ {0} updated to {1}"
-    not_adopted: "⚠️ {0} not adopted (current {1}); retry with \"{0} {2}%\""
+    export_incomplete: ⚠️ Parameters incomplete (missing {0}); the exported model is incomplete. Fill them in the chat first.
+    updated: ✅ {0} updated to {1}
+    not_adopted: ⚠️ {0} not adopted (current {1}); retry with "{0} {2}%"
+  connected: Connected
+  connect_failed: Connection failed
   unknown_error: Unknown error
   unnamed_task: Untitled task
   confirm_delete: Confirm?
@@ -703,8 +700,6 @@ ui:
   advisor_risk: Risk warning
   advisor_actions: Suggested actions
   advisor_basis: Basis
-
-ui:
   example_coffee: 📊 Restaurant analysis
   example_saas: 💻 SaaS model assessment
   example_quick: ⚡ Quick scan
@@ -717,11 +712,10 @@ ui:
   advice_timeout: Interpretation timed out; retry
   net_error_retry: Network error; retry
   thinking: Thinking…
-  req_fail_prefix: "Request failed: "
+  req_fail_prefix: 'Request failed: '
   no_response: (no response)
   req_timeout: Request timed out (60s); retry
   net_error: Network error; retry
-
 # ─── cost attribution ──────────────────────────────────────────────────────
 ca:
   gap:
