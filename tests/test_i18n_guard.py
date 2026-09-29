@@ -186,6 +186,7 @@ CONVERTED_MODULES = [
     os.path.join("src", "param_guard.py"),
     os.path.join("src", "tools", "param_advisor.py"),
     os.path.join("src", "tools", "pitfall_detector.py"),
+    os.path.join("src", "tools", "report_generator.py"),
 ]
 
 # 白名单：**非展示文案**，展示层/语义层必须按原样匹配，因此不能外置。

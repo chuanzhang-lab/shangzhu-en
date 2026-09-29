@@ -1034,3 +1034,70 @@ pt:
   license_none:
     message: "未从描述中识别到特殊行业合规要求。如涉及食品、医疗、金融、教育等领域，请自行核实。"
     action: "所有行业至少需要：营业执照、税务登记、社保登记。"
+
+# ─── 报告生成（report_generator）─────────────────────────────────────────
+rg:
+  fmt:
+    markdown_local: "Markdown (本地)"
+  note:
+    saved_md: "已保存为本地 Markdown 文件。"
+    excel: "下载链接 24 小时内有效。当前仅输出第一个 Sheet，多 Sheet 支持开发中。"
+  err:
+    openpyxl_missing: "openpyxl 未安装，无法生成 Excel"
+    report_failed: "报告生成失败: {err}"
+    markdown_invalid: "请检查 Markdown 内容是否合法，或稍后重试。"
+    sheets_empty: "sheets_json 不能为空"
+    sheets_json_format: "sheets_json 格式错误"
+    excel_failed: "Excel 生成失败: {err}"
+    canvas_json_format: "canvas_json 格式错误"
+    canvas_failed: "画布报告生成失败: {err}"
+  canvas:
+    not_filled: "未填写"
+    head: "# 商业模式画布\n\n## 项目：{title}\n\n| 模块 | 内容 |\n|------|------|\n"
+    consistency: "\n---\n\n## 逻辑一致性检查\n\n请检查以下问题：\n1. 价值主张是否真正解决了客户细分群体的痛点？\n2. 收入来源是否与客户细分的支付能力和意愿匹配？\n3. 渠道通路是否与目标客户的使用习惯一致？\n4. 成本结构是否与收入来源匹配？是否存在未覆盖的隐性成本？\n5. 关键资源和关键活动是否足以支撑价值主张的交付？\n"
+    field:
+      value_proposition: "价值主张"
+      customer_segments: "客户细分"
+      channels: "渠道通路"
+      customer_relationships: "客户关系"
+      revenue_streams: "收入来源"
+      key_resources: "核心资源"
+      key_activities: "关键业务"
+      key_partners: "重要伙伴"
+      cost_structure: "成本结构"
+  report:
+    default_title: "商业建模分析报告"
+    project_type: "- 项目类型：{v}"
+    stage: "- 阶段：{v}"
+    unknown: "未知"
+    core_header: "## 核心指标"
+    core_table: "| 指标 | 数值 |\n|------|------|"
+    status_header: "## 状态评估"
+    narrative_header: "## 风险聚焦"
+    sens_header: "## 敏感性分析"
+    sens_table: "| 场景 | 月利润 |\n|------|--------|"
+    pit_header: "## 风险清单"
+  # 引擎 core_metrics / status 的**数据键** → 展示名。
+  # 报告是交到用户手上的文件，snake_case 数据键不得原样印出。
+  metric:
+    monthly_revenue: "月营收"
+    monthly_profit: "月利润"
+    daily_breakeven: "保本客流（单日）"
+    breakeven_revenue_monthly: "保本月营收"
+    runway_months: "现金流可撑月数"
+    gross_margin_percent: "毛利率（%）"
+  status:
+    profit: "盈利性"
+    cash: "现金流"
+    breakeven: "保本"
+    margin: "毛利率"
+  sheet:
+    core: "核心指标"
+    status: "状态评估"
+    pitfalls: "风险清单"
+    core_col_metric: "指标"
+    core_col_value: "数值"
+    status_col_dim: "维度"
+    status_col_eval: "评估"
+    pit_col_level: "级别"
+    pit_col_risk: "风险"

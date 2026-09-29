@@ -358,15 +358,19 @@ def _fmt_scan(data: Dict) -> str:
         lines.append("")
 
     # 敏感性分析
-    if sensitivity:
+    # 只呈现**带标签**的三档情景。_calc_sensitivity 返回 steps×steps 网格
+    # （默认 3×3=9 条），标签落在索引 2/4/6；按 [:3] 切片会取到无标签行，
+    # 渲染成「?」——按标签筛才与 steps 解耦。
+    labeled_sens = [s for s in sensitivity if s.get("scenario")]
+    if labeled_sens:
         lines.append(t("fmt.scan.sensitivity_header"))
         lines.append(t("fmt.scan.sensitivity_table_header"))
         lines.append("|------|------|------|--------|")
-        for s in sensitivity[:3]:
+        for s in labeled_sens:
             rev = s.get("revenue_change", "0%")
             cost = s.get("cost_change", "0%")
             profit = s.get("profit", 0)
-            lines.append(f"| {s.get('scenario', '?')} | {rev} | {cost} | {profit:,.0f} |")
+            lines.append(f"| {s['scenario']} | {rev} | {cost} | {profit:,.0f} |")
         lines.append("")
 
     # 风险

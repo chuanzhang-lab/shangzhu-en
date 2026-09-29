@@ -1035,3 +1035,70 @@ pt:
   license_none:
     message: "No industry-specific compliance requirement recognised from the description. If you operate in food, healthcare, finance, education or similar, verify it yourself."
     action: "Every business needs at least: a business licence, tax registration, and social-insurance registration (China baseline — check your local equivalents)."
+
+# ─── Report generator ───────────────────────────────────────────────────
+rg:
+  fmt:
+    markdown_local: "Markdown (local file)"
+  note:
+    saved_md: "Saved as a local Markdown file."
+    excel: "The download link is valid for 24 hours. Only the first sheet is exported for now; multi-sheet support is in progress."
+  err:
+    openpyxl_missing: "openpyxl is not installed, cannot generate Excel"
+    report_failed: "Report generation failed: {err}"
+    markdown_invalid: "Check that the Markdown content is valid, or try again later."
+    sheets_empty: "sheets_json must not be empty"
+    sheets_json_format: "sheets_json is not valid JSON"
+    excel_failed: "Excel generation failed: {err}"
+    canvas_json_format: "canvas_json is not valid JSON"
+    canvas_failed: "Canvas report generation failed: {err}"
+  canvas:
+    not_filled: "Not filled in"
+    head: "# Business Model Canvas\n\n## Project: {title}\n\n| Block | Content |\n|------|------|\n"
+    consistency: "\n---\n\n## Consistency check\n\nPlease check the following:\n1. Does the value proposition really solve a pain of the customer segments?\n2. Do the revenue streams match the ability and willingness to pay of those segments?\n3. Do the channels match how the target customers actually behave?\n4. Does the cost structure match the revenue streams? Any hidden cost left uncovered?\n5. Are the key resources and key activities enough to deliver the value proposition?\n"
+    field:
+      value_proposition: "Value proposition"
+      customer_segments: "Customer segments"
+      channels: "Channels"
+      customer_relationships: "Customer relationships"
+      revenue_streams: "Revenue streams"
+      key_resources: "Key resources"
+      key_activities: "Key activities"
+      key_partners: "Key partners"
+      cost_structure: "Cost structure"
+  report:
+    default_title: "Business Modelling Analysis Report"
+    project_type: "- Project type: {v}"
+    stage: "- Stage: {v}"
+    unknown: "Unknown"
+    core_header: "## Core metrics"
+    core_table: "| Metric | Value |\n|------|------|"
+    status_header: "## Status assessment"
+    narrative_header: "## Risk focus"
+    sens_header: "## Sensitivity analysis"
+    sens_table: "| Scenario | Monthly profit |\n|------|--------|"
+    pit_header: "## Risk list"
+  # Engine core_metrics / status **data keys** -> display names.
+  # The report is handed to the user; snake_case data keys must never be printed as-is.
+  metric:
+    monthly_revenue: "Monthly revenue"
+    monthly_profit: "Monthly profit"
+    daily_breakeven: "Break-even traffic (per day)"
+    breakeven_revenue_monthly: "Break-even monthly revenue"
+    runway_months: "Runway (months)"
+    gross_margin_percent: "Gross margin (%)"
+  status:
+    profit: "Profitability"
+    cash: "Cash"
+    breakeven: "Break-even"
+    margin: "Margin"
+  sheet:
+    core: "Core metrics"
+    status: "Status"
+    pitfalls: "Risk list"
+    core_col_metric: "Metric"
+    core_col_value: "Value"
+    status_col_dim: "Dimension"
+    status_col_eval: "Assessment"
+    pit_col_level: "Level"
+    pit_col_risk: "Risk"
