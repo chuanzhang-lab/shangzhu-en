@@ -229,10 +229,12 @@ fields:
       staff: 'after'
       workers: 'after'
   - field: 'avg_salary'
-    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head']
+    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head', 'paid', 'pays']
     position: 'before'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
     kw_position: {}
+    # 「paid 8000 rent」是房租不是薪资：paid 是薪资动词，但后面紧跟租金语境时拒收。
+    reject_context: ['rent', 'lease', 'rental', 'mortgage', 'deposit', 'for rent']
   - field: 'daily_traffic'
     keywords:
       - 'daily traffic'
@@ -297,7 +299,7 @@ fields:
     #   salary, not a unit price. Grabbing it invents a price_per_unit out of thin air.
     reject_context: ['cost', 'employee', 'employees', 'staff', 'salary', 'wage',
                      'payroll', 'person', 'people', 'worker', 'workers', 'month',
-                     'monthly', '/mo']
+                     'monthly', '/mo', 'paid', 'pays', 'pay']
     kw_position:
       each: 'before'
       'a cup': 'before'

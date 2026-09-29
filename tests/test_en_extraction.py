@@ -68,6 +68,18 @@ def test_labor_pair_not_mistaken_for_unit_price(en):
     assert "price_per_unit" not in p
 
 
+def test_each_paid_per_month_is_salary_not_unit_price(en):
+    """「2 employees, each paid 5000 per month」→ 人数+薪资，不是客单价。
+
+    "paid"（过去式）不在薪资词表里时，5000 会被 "each" 误抓成 price_per_unit
+    （凭空多一个客单价、真正薪资却落空）—— 抽错比抽漏危险。
+    """
+    p = _params("I have 2 employees, each paid 5000 per month")
+    assert p.get("employee_count") == 2.0
+    assert p.get("avg_salary") == 5000.0
+    assert "price_per_unit" not in p
+
+
 def test_variable_cost_percent_is_normalised_to_ratio(en):
     """55% 必须归一化成 0.55，不能是 55，也不能被当成营收。
 
