@@ -77,25 +77,24 @@ def _looks_like_param_update(text: str) -> bool:
 
 
 
-_WEAK_COMPARE_MARKERS = ("如果", "假如", "假设", "要是")
-_STRONG_COMPARE_MARKERS = (
-    "对比", "比较", "vs", "两种方案", "两个方案",
-    "选哪个", "选a", "选b", "方案a", "方案b",
-    "好还是", "还是好", "哪个更好", "哪个好", "怎么选",
-    "更划算", "哪个划算", "a还是b",
+# 对比标记词走规则层（locale 感知）：识别不出 "which is better" 时
+# compare 意图静默降级成 quick_scan，用户永远拿不到方案对比。
+# 中文正则「好…还是 / 还是…好」是语言结构本身，保留为显式分支。
+_ZH_COMPARE_RES = (
+    re.compile(r"好\s*[，,]?\s*还是"),
+    re.compile(r"还是\s*[^，。？！]*好"),
+    re.compile(r"方案\s*[abAB]"),
 )
 
 
 def _has_strong_compare(text: str) -> bool:
-    t = text or ""
-    low = t.lower()
-    if any(m in t or m in low for m in _STRONG_COMPARE_MARKERS):
+    raw = text or ""
+    low = raw.lower()
+    if any(m.lower() in low for m in rules.strong_compare_markers()):
         return True
-    if re.search(r"好\s*[，,]?\s*还是", t) or re.search(r"还是\s*[^，。？！]*好", t):
+    if re.search(r"\bvs\.?\b", raw, re.IGNORECASE):
         return True
-    if re.search(r"方案\s*[abAB]", t) or re.search(r"\bvs\.?\b", t, re.IGNORECASE):
-        return True
-    return False
+    return any(rx.search(raw) for rx in _ZH_COMPARE_RES)
 
 
 def _finalize(intent: str, score: float, text: str,
@@ -113,7 +112,7 @@ def _finalize(intent: str, score: float, text: str,
     时才保留 compare；否则降为 quick_scan 并允许 merge。
     """
     if intent == "compare" and not _has_strong_compare(text):
-        if any(m in (text or "") for m in _WEAK_COMPARE_MARKERS):
+        if any(m.lower() in (text or "").lower() for m in rules.weak_compare_markers()):
             if not has_base:
                 intent = "quick_scan" if _looks_like_param_update(text) else "chitchat"
     if intent == "chitchat" and _looks_like_param_update(text):
@@ -125,32 +124,20 @@ def _finalize(intent: str, score: float, text: str,
     return (intent, score)
 
 
-_DECISION_MARKERS = (
-    "该不该开", "要不要开", "能不能开", "值得开", "该开吗",
-    "该不该继续", "要不要继续", "能不能继续", "该继续吗",
-    "要不要撤", "要不要停", "关不关", "该不该关", "要不要关",
-    "继续下去", "还行不行", "先验证什么", "先验证哪", "验证什么",
-    "撑多久", "能扛多久", "资金够撑", "现金够撑", "还能撑",
-    "划不划算", "值不值", "要不要做", "该不该做", "能不能做",
-)
+# 决策/现金流问句标记也走规则层：识别不出 "should I continue" 就不会给
+# 「选项+风险+验证」，落回纯仪表盘 —— 症状看起来像功能缺失，实为识别没命中。
 
 
 def _looks_like_decision_question(text: str) -> bool:
     """文本是否含 L2 决策问句（夹带参数也应路由 decide）。"""
-    return any(m in text for m in _DECISION_MARKERS)
-
-
-_CASHFLOW_MARKERS = (
-    "现金流", "现金流水", "钱什么时候花完", "钱够不够", "钱够吗",
-    "缺多少钱", "还差多少钱", "现金够不够", "资金够不够",
-    "月底还有多少", "月底剩多少", "现金到几月", "现金流明细",
-    "现金明细", "月度现金",
-)
+    low = (text or "").lower()
+    return any(m.lower() in low for m in rules.decision_markers())
 
 
 def _looks_like_cashflow_question(text: str) -> bool:
     """文本是否含现金流明细问句（夹带参数也应路由 cashflow；「撑多久」归 decide）。"""
-    return any(m in text for m in _CASHFLOW_MARKERS)
+    low = (text or "").lower()
+    return any(m.lower() in low for m in rules.cashflow_markers())
 
 
 def _split_clauses(text: str) -> List[str]:

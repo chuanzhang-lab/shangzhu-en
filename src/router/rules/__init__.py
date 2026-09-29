@@ -39,6 +39,16 @@ DEFAULT_LOCALE = "zh"
 _cache: Dict[str, Dict[str, Any]] = {}
 
 
+def _compile(pattern: str):
+    """编译单条正则；失败返回永不匹配的正则并记 ERROR（绝不中断抽取链路）。"""
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except re.error as exc:
+        # 规则是数据：写错不会抛到调用方，只会静默失配 —— 必须留下日志
+        logger.error("rules: 正则编译失败 pattern=%r err=%s", pattern, exc)
+        return re.compile(r"(?!x)x")
+
+
 def _empty_pack() -> Dict[str, Any]:
     """空包：任何一项缺失都不能让调用方崩。"""
     return {
@@ -50,6 +60,16 @@ def _empty_pack() -> Dict[str, Any]:
         "number_units": {},
         "compare_markers": [],
         "market_metrics": [],
+        "focus_fields": {},
+        "continuation_hints": [],
+        "reset_hints": [],
+        "vc_ratio_patterns": [],
+        "annual_rent_patterns": [],
+        "labor_pair_patterns": [],
+        "strong_compare_markers": [],
+        "weak_compare_markers": [],
+        "decision_markers": [],
+        "cashflow_markers": [],
     }
 
 
@@ -84,6 +104,31 @@ def _load(locale: str) -> Dict[str, Any]:
             "number_units": raw.get("number_units") or {},
             "compare_markers": raw.get("compare_markers") or [],
             "market_metrics": raw.get("market_metrics") or [],
+            "focus_fields": raw.get("focus_fields") or {},
+            "continuation_hints": raw.get("continuation_hints") or [],
+            "reset_hints": raw.get("reset_hints") or [],
+            # 流程型抽取器正则：编译一次缓存，避免每次抽取都 re.compile
+            "vc_ratio_patterns": [
+                _compile(p["regex"]) for p in (raw.get("vc_ratio_patterns") or [])
+                if p.get("regex")
+            ],
+            "annual_rent_patterns": [
+                _compile(p["regex"]) for p in (raw.get("annual_rent_patterns") or [])
+                if p.get("regex")
+            ],
+            "labor_pair_patterns": [
+                {
+                    "re": _compile(p["regex"]),
+                    "count": int(p.get("count_group", 1)),
+                    "salary": int(p.get("salary_group", 2)),
+                }
+                for p in (raw.get("labor_pair_patterns") or [])
+                if p.get("regex")
+            ],
+            "strong_compare_markers": raw.get("strong_compare_markers") or [],
+            "weak_compare_markers": raw.get("weak_compare_markers") or [],
+            "decision_markers": raw.get("decision_markers") or [],
+            "cashflow_markers": raw.get("cashflow_markers") or [],
         }
     except FileNotFoundError:
         logger.error("rules: 规则文件缺失 locale=%s path=%s", locale, path)
@@ -159,3 +204,60 @@ def market_metrics(locale: Optional[str] = None) -> List[str]:
     同样是输入层匹配数据：拿中文词表去匹配英文提问，命中率恒为 0。
     """
     return _pack(locale)["market_metrics"]
+
+
+def focus_fields(locale: Optional[str] = None) -> Dict[str, List[str]]:
+    """关注字段关键词（关键词 → 字段名），供 LLM 视图做相关性过滤。"""
+    return _pack(locale)["focus_fields"]
+
+
+def continuation_hints(locale: Optional[str] = None) -> List[str]:
+    """续算意图线索词（命中即强制走 merge，不重新抽取、不进 chitchat）。"""
+    return _pack(locale)["continuation_hints"]
+
+
+def reset_hints(locale: Optional[str] = None) -> List[str]:
+    """重置命令词（清空当前会话、开启新项目）。"""
+    return _pack(locale)["reset_hints"]
+
+
+def vc_ratio_patterns(locale: Optional[str] = None) -> List[Any]:
+    """变动成本率正则（已编译）：「占营收45% / 成本率40%」。
+
+    必须专门处理：通用字段会把「45」抽成 45（而非 0.45），
+    或被 unit_variable_cost 当成「每份 45 元」。
+    """
+    return _pack(locale)["vc_ratio_patterns"]
+
+
+def annual_rent_patterns(locale: Optional[str] = None) -> List[Any]:
+    """年租金正则（已编译）。年额当月租是 **12 倍量级** 的错误。"""
+    return _pack(locale)["annual_rent_patterns"]
+
+
+def strong_compare_markers(locale: Optional[str] = None) -> List[str]:
+    """强对比标记词（intent.py 的 L2 裁定用）。语义开关，非文案。"""
+    return _pack(locale)["strong_compare_markers"]
+
+
+def weak_compare_markers(locale: Optional[str] = None) -> List[str]:
+    """弱对比标记词：仅当会话已有 base 或句内确有对比结构时才保留 compare。"""
+    return _pack(locale)["weak_compare_markers"]
+
+
+def decision_markers(locale: Optional[str] = None) -> List[str]:
+    """决策问句标记（夹带参数也应路由 decide，给「选项+风险+验证」）。"""
+    return _pack(locale)["decision_markers"]
+
+
+def cashflow_markers(locale: Optional[str] = None) -> List[str]:
+    """现金流明细问句标记（夹带参数也应路由 cashflow；「撑多久」归 decide）。"""
+    return _pack(locale)["cashflow_markers"]
+
+
+def labor_pair_patterns(locale: Optional[str] = None) -> List[Dict[str, Any]]:
+    """人力连写正则（已编译）：一次捕获 (人数, 薪资)，避免两者互相错抽。
+
+    每项形如 {"re": <compiled>, "count": <组号>, "salary": <组号>}。
+    """
+    return _pack(locale)["labor_pair_patterns"]

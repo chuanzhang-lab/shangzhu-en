@@ -492,39 +492,18 @@ def _extract_labor_pair(text: str) -> Tuple[Optional[float], Optional[float]]:
     靠通用字段循环无法区分「2人」的 2（人数）和「8000」（薪资），
     故用专门的正则一次性捕获两者，避免薪资被错抽成人数。
     """
-    # 1) 标准：N人 + 薪资（可无乘号）
-    m = re.search(
-        r"(\d+)\s*人\s*(?:[*×xX]\s*)?(?:月薪|工资|薪资|人均)?\s*"
-        r"(\d+(?:\.\d+)?\s*[万千]?)",
-        text,
-    )
-    if m:
-        count = float(m.group(1))
-        salary = _parse_number(m.group(2).strip())
-        if salary is not None and _plausible_labor(count, salary):
-            return (count, salary)
-
-    # 2) 薪×人：人工3500*2 / 工资3500×2 / 月薪3500x2人 / 人工改为3500*2
-    m = re.search(
-        r"(?:人工|员工|雇|工资|月薪|薪资|人均)\s*" + _LABOR_VERB +
-        r"(\d+(?:\.\d+)?\s*[万千]?)\s*[*×xX]\s*(\d+)\s*人?",
-        text,
-    )
-    if m:
-        salary = _parse_number(m.group(1).strip())
-        count = float(m.group(2))
-        if salary is not None and _plausible_labor(count, salary):
-            return (count, salary)
-
-    # 3) 人×薪（无「人」字）：人工2*3500 / 人工改为2*3500
-    m = re.search(
-        r"(?:人工|员工|雇)\s*" + _LABOR_VERB +
-        r"(\d+)\s*[*×xX]\s*(\d+(?:\.\d+)?\s*[万千]?)",
-        text,
-    )
-    if m:
-        count = float(m.group(1))
-        salary = _parse_number(m.group(2).strip())
+    # 全部走规则层（locale 感知）：组号也由规则给出，两种语言不必同序。
+    # 写死中文的后果不只是「抽不到」——「2 employees at 6000 each」里的 2
+    # 会被通用售价字段抓成 price_per_unit=2，属于**抽错**而非抽漏。
+    for item in rules.labor_pair_patterns():
+        m = item["re"].search(text)
+        if not m:
+            continue
+        try:
+            count = float(m.group(item["count"]))
+            salary = _parse_number(m.group(item["salary"]).strip())
+        except (IndexError, ValueError):
+            continue
         if salary is not None and _plausible_labor(count, salary):
             return (count, salary)
 
@@ -556,23 +535,10 @@ def _extract_cost_ratio(text: str, params: dict) -> None:
     """
     if params.get("variable_cost_ratio") is not None:
         return
-    pats = [
-        # E1 修复（2026-09-12）：对象词「营业额/营收/收入」改为**可省略**——
-        # 「食材大概35% / 食材成本35% / 原料成本大概 40%」——口语不等于术语
-        r"(?<!固定)(?<!总)(?:食材|原料|材料)(?:成本)?\s*"
-        r"(?:占|为|是|到)?\s*(?:大概|大约|约)?\s*(-?\d+(?:\.\d+)?)\s*%",
-        # 「食材成本占40%」是口语里最自然的说法，旧实现要求显式对象词而漏抽。
-        # 负向断言排除「固定成本占…」「总成本占…」：那是**固定成本占比**，
-        # 不是变动成本率（不能把「月固定成本占40%」算成 vcr=0.4）。
-        r"(?<!固定)(?<!总)(?:食材|原料|材料|变动|可变|运营)?成本占"
-        r"(?:(?:营业额|营收|收入)\s*)?(-?\d+(?:\.\d+)?)\s*(?!成)%?",
-        r"成本率\s*(?:为|是|到|改成|改为)?\s*(-?\d+(?:\.\d+)?)\s*(?!成)%?",
-        # F1：变动成本/可变成本 + 明确比例语义（含「改为/改成/为/是/到」等动词，
-        # 后面直接跟 0~100 的百分数）→ 归一化为 ratio。避免误抓「每份成本 45 元」。
-        r"(?:变动成本率|可变成本率|变动成本|可变成本)\s*(?:为|是|到|改成|改为|变成)?\s*(-?\d{1,3}(?:\.\d+)?)\s*%",
-    ]
-    for pat in pats:
-        m = re.search(pat, text)
+    # 正则走规则层（locale 感知）：写死中文 = 英文部署抽不出比例，
+    # 只能靠通用字段兜底 → 55% 被当成 55（差 100 倍），且可能被当成「每份 55 元」。
+    for pat in rules.vc_ratio_patterns():
+        m = pat.search(text)
         if m:
             val = float(m.group(1))
             if 0 < abs(val) < 100:           # 百分数（0<|v|<100），归一化；极小/极大视为噪声
@@ -584,6 +550,9 @@ def _extract_cost_ratio(text: str, params: dict) -> None:
                 params["variable_cost_ratio"] = (
                     val if (not has_pct and abs(val) <= 1) else val / 100
                 )  # 保留符号
+                # 记下原始百分数：通用字段常把同一个数字当成「月营收」
+                # （「55% of revenue」→ revenue=55），下游据此去噪，不能只靠猜。
+                params["_vc_raw_pct"] = val
             return
 
 
@@ -874,20 +843,16 @@ def _extract_labor_total(text: str, params: dict) -> None:
 
 
 def _extract_annual_rent(text: str, params: dict) -> None:
-    """年租金 → 月租 = 年额/12。不把年额当月租。"""
+    """年租金 → 月租 = 年额/12。不把年额当月租。
+
+    正则走规则层（locale 感知）：英文下若没有对应规则，「annual rent 120000」
+    会被普通租金字段当成月租 —— **12 倍量级**的错误，且界面上完全看不出来。
+    """
     if not text:
         return
-    pats = (
-        r"(?:年租金|年租)\s*"
-        r"((?:-?\d+(?:\.\d+)?|[一二两三四五六七八九十]+)(?:\s*[万千])?)",
-        r"(?:房租|租金)[^，。；0-9一二两三四五六七八九十]{0,6}一年\s*"
-        r"((?:-?\d+(?:\.\d+)?|[一二两三四五六七八九十]+)(?:\s*[万千])?)",
-        r"一年(?:的)?(?:房租|租金)\s*"
-        r"((?:-?\d+(?:\.\d+)?|[一二两三四五六七八九十]+)(?:\s*[万千])?)",
-    )
     annual = None
-    for pat in pats:
-        m = re.search(pat, text)
+    for pat in rules.annual_rent_patterns():
+        m = pat.search(text)
         if not m:
             continue
         annual = _parse_number(m.group(1).strip())
@@ -976,6 +941,16 @@ def extract_params(text: str) -> Dict:
         # 若原文确实写了「3500人/位/名」则保留；否则视为误抓
         if not re.search(rf"{int(ec)}\s*[人位名个]", text):
             params.pop("employee_count", None)
+
+    # ── 去噪：变动成本率的百分数被通用字段误当成「月营收」──
+    # 「variable cost is 55% of revenue」里的 55 是比例，不是营收；
+    # 通用字段按位置就近取数会抽出 monthly_revenue=55（凭空多一个营收，
+    # 且会让「客流×单价 vs 营收」的派生一致性检查凭空冲突）。
+    raw_pct = params.pop("_vc_raw_pct", None)
+    if raw_pct is not None:
+        rev = params.get("monthly_revenue")
+        if isinstance(rev, (int, float)) and rev in (raw_pct, raw_pct / 100.0):
+            params.pop("monthly_revenue", None)
 
     # ── 后处理：固定成本组件去重 ──
     # 「水电杂费」这类复合词会被 utilities（匹配「水电」）与 other_fixed

@@ -17,6 +17,7 @@
 import threading
 import time
 from i18n import t
+from router import rules
 from typing import Dict, List, Optional
 
 # thread_id -> 会话状态
@@ -96,29 +97,24 @@ for _grp, _fields in PARAM_GROUPS.items():
 
 # ── 关注字段推断（Direction 5：长会话注意力）────────────────────────────────
 # 从用户文本推断当前关注的参数字段，供 to_llm_view 做相关性过滤。
-_FIELD_KEYWORDS = {
-    "客流": "daily_traffic", "卖": "daily_traffic", "每天": "daily_traffic",
-    "日均": "daily_traffic", "日售": "daily_traffic", "杯": "daily_traffic",
-    "租金": "monthly_rent", "房租": "monthly_rent", "月租": "monthly_rent", "铺租": "monthly_rent",
-    "客单价": "price_per_unit", "单价": "price_per_unit", "售价": "price_per_unit",
-    "人工": "employee_count", "员工": "employee_count", "人数": "employee_count",
-    "薪资": "avg_salary", "工资": "avg_salary", "月薪": "avg_salary",
-    "变动成本": "variable_cost_ratio", "成本率": "variable_cost_ratio",
-    "投资": "total_investment", "投入": "total_investment", "启动资金": "total_investment",
-    "营收": "monthly_revenue", "收入": "monthly_revenue", "月收": "monthly_revenue", "流水": "monthly_revenue",
-    "利润": "monthly_profit", "盈利": "monthly_profit", "亏损": "monthly_profit",
-    "水电": "utilities", "包装": "packaging", "提成": "commission",
-}
+#
+# 词表走 rules.focus_fields()（locale 感知），不在此处写死：
+# 这是**输入层匹配数据**，写死中文会让英文部署的关注字段推断命中率恒为 0
+# —— 不报错、只是 LLM 视图永远不过滤，属于最难发现的静默降级。
 
 
 def infer_focus_fields(text: str) -> Optional[List[str]]:
     """从用户文本推断关注的参数字段。返回 None 表示不过滤（全量输出）。"""
     if not text:
         return None
+    lowered = text.lower()
     fields = []
-    for keyword, field in _FIELD_KEYWORDS.items():
-        if keyword in text:
-            fields.append(field)
+    # 词表是 {字段: [关键词...]}（规则层），此处反查成 关键词 → 字段
+    for field, keywords in rules.focus_fields().items():
+        for kw in keywords:
+            if kw.lower() in lowered:
+                fields.append(field)
+                break
     return list(set(fields)) if fields else None
 
 
@@ -554,17 +550,9 @@ def session_stats() -> dict:
 
 # ─── 续算意图 / 重置命令识别 ──────────────────────────────────────────────
 
-_CONTINUATION_HINTS = [
-    "再算", "重新算", "重算", "再分析", "重新分析", "重新评估",
-    "改成", "改为", "调整", "更新", "加上", "补上", "补充", "加上去",
-    "改一下", "调一下", "更新一下", "换一下", "改成", "把",
-    "那如果", "如果", "假如", "假设", "现在", "当前", "我的项目",
-]
-
-_RESET_HINTS = [
-    "重新开始", "重新来", "新项目", "开新项目", "清空", "重置", "重开",
-    "换个项目", "不要之前", "忘掉之前", "换个方向",
-]
+# 词表走 rules（locale 感知）：这两处是**语义开关**，不是文案。
+# 英文下识别不出 "start over" 就不会重置；识别不出 "change rent to" 就不会
+# 走 merge —— 症状是「信息不全」反复误报，看起来像引擎算错，其实是识别没命中。
 
 
 def is_continuation(text: str) -> bool:
@@ -575,16 +563,17 @@ def is_continuation(text: str) -> bool:
     """
     if not text:
         return False
-    t = text.lower()
-    return any(h in t for h in _CONTINUATION_HINTS)
+    # 变量名不能叫 t：会遮蔽 i18n.t()（本项目已踩过三次同名遮蔽）
+    raw = text.lower()
+    return any(h.lower() in raw for h in rules.continuation_hints())
 
 
 def is_reset_command(text: str) -> bool:
     """识别用户想要清空当前会话、开启新项目。"""
     if not text:
         return False
-    t = text.lower()
-    return any(h in t for h in _RESET_HINTS)
+    raw = text.lower()
+    return any(h.lower() in raw for h in rules.reset_hints())
 
 
 # ─── 给 LLM 接地的项目上下文 ──────────────────────────────────────────────

@@ -290,8 +290,18 @@ fields:
       - 'a bowl'
     position: 'after'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
-    reject_context: ['cost']
+    # "each" is ambiguous in English: "15 each" (per cup) vs "6000 each" (per person).
+    # - kw_position before: take the number BEFORE "each" (otherwise the search runs
+    #   off the end of the sentence and grabs a neighbouring number).
+    # - reject_context: if that neighbourhood is about headcount/payroll, it is a
+    #   salary, not a unit price. Grabbing it invents a price_per_unit out of thin air.
+    reject_context: ['cost', 'employee', 'employees', 'staff', 'salary', 'wage',
+                     'payroll', 'person', 'people', 'worker', 'workers', 'month',
+                     'monthly', '/mo']
     kw_position:
+      each: 'before'
+      'a cup': 'before'
+      'a bowl': 'before'
       price: 'before'
       ticket price: 'before'
       unit price: 'before'
@@ -570,3 +580,120 @@ market_metrics:
   - unit price
   - conversion rate
   - penetration rate
+
+# ── Focus-field keywords (session_state.infer_focus_fields) ───────────────
+# Input-layer matching data: with a Chinese-only list, focus inference never hits.
+focus_fields:
+  daily_traffic: [traffic, customers, cups, sold, per day, daily, footfall, visitors]
+  monthly_rent: [rent, lease, monthly rent, shop rent]
+  price_per_unit: [unit price, price per, average price, ticket, aov]
+  employee_count: [headcount, staff, employees, team size, people]
+  avg_salary: [salary, wage, pay, payroll, per month]
+  variable_cost_ratio: [variable cost, cost ratio, cogs, ingredient cost]
+  total_investment: [investment, invest, startup capital, initial cost, budget]
+  monthly_revenue: [revenue, monthly revenue, sales, turnover, income]
+  monthly_profit: [profit, margin, loss, loss-making, profitable]
+  utilities: [utilities, electricity, water, power]
+  packaging: [packaging, packing, package]
+  commission: [commission, platform fee, take rate]
+
+# ── Continuation / reset command words ────────────────────────────────────
+# These are **semantic switches**: if English "start over" is not recognised the
+# session never resets; if "change rent to" is not recognised the engine skips
+# merge and keeps reporting missing parameters.
+continuation_hints:
+  - recalculate
+  - recompute
+  - re-run
+  - rerun
+  - reanalyze
+  - re-analyse
+  - re-analyze
+  - analyse again
+  - analyze again
+  - change
+  - changed
+  - set
+  - adjust
+  - update
+  - add
+  - also
+  - what if
+  - if
+  - suppose
+  - now
+  - currently
+  - current
+  - my project
+  - " and "
+reset_hints:
+  - start over
+  - start again
+  - new project
+  - fresh start
+  - clear
+  - reset
+  - restart
+  - another project
+  - different project
+  - forget
+  - forget what
+  - change direction
+  - switch project
+  - wipe
+
+# ── Process-oriented extractor regexes (param_extractor's special-case semantics) ──
+# Not copy: these are **semantic recognition rules**. Hardcoding Chinese means an
+# English deploy either misses the value or grabs the wrong one.
+# Each entry carries explicit group numbers so the two languages need not share order.
+
+# Variable cost ratio (normalised 0~1): "45% of revenue" / "variable cost 60%"
+vc_ratio_patterns:
+  - regex: '(?:ingredient|material|raw material|cogs|variable)(?:\s+cost)?\s*(?:is|are|at|of|about|around)?\s*(-?\d+(?:\.\d+)?)\s*%'
+  - regex: '(?:variable cost ratio|variable cost rate|cost ratio)\s*(?:is|are|at|of|=)?\s*(-?\d{1,3}(?:\.\d+)?)\s*%'
+  - regex: '(-?\d+(?:\.\d+)?)\s*%\s*(?:of\s+)?(?:revenue|sales|turnover|income)'
+
+# Annual rent -> monthly rent = annual / 12 (treating annual as monthly is a 12x error)
+# Order matters: "annual rent" style (keyword first) must run before the generic
+# "rent ... per year" form, and both must run before the generic rent field grabs
+# the number as a monthly value.
+annual_rent_patterns:
+  - regex: '(?:annual rent|yearly rent|rent per year|rent per annum|annual lease|yearly lease)\s*((?:-?\d+(?:\.\d+)?)(?:\s*(?:k|thousand|million|m|bn|billion))?)'
+  # "rent 120000 per year": number BEFORE the marker. Capture must span both sides.
+  - regex: '(?:rent|lease)\s*((?:-?\d+(?:\.\d+)?)(?:\s*(?:k|thousand|million|m|bn|billion))?)\s*(?:per year|a year|annually|yearly|per annum)'
+  - regex: '(?:rent|lease)\s*[^0-9]{0,12}?(?:per year|a year|annually|yearly|per annum)\s*((?:-?\d+(?:\.\d+)?)(?:\s*(?:k|thousand|million|m|bn|billion))?)'
+  - regex: '(?:a year|per year|annually|yearly|per annum)(?:\s+of)?(?:\s+rent)?\s*((?:-?\d+(?:\.\d+)?)(?:\s*(?:k|thousand|million|m|bn|billion))?)'
+
+# Labor pair: "2 employees at 6000 each" / "salary 6000 x 2" — capture both at once
+# so the headcount is never mistaken for the salary (and vice versa).
+labor_pair_patterns:
+  - regex: '(\d+)\s*(?:employees|staff|people|workers|persons|heads)\s*(?:at|with|×|x|\*|@)?\s*(?:salary|wage|pay|each|a month|per month|monthly)?\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
+    count_group: 1
+    salary_group: 2
+  - regex: '(?:salary|wage|pay)\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?\s*(?:×|x|\*|for|times|each)?\s*(\d+)\s*(?:employees|staff|people|workers|persons|heads)?'
+    count_group: 2
+    salary_group: 1
+  - regex: '(\d+)\s*(?:employees|staff|people|workers)\s*[*×xX]\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
+    count_group: 1
+    salary_group: 2
+
+
+# ── L2 intent reinforcement markers (intent.py strong-compare / decision / cashflow) ──
+# Semantic switches: failing to recognise "should I continue" means the user
+# gets a bare dashboard instead of "options + risks + what to validate".
+strong_compare_markers: [compare, comparison, " vs ", versus, "option a",
+  "option b", "which is better", "which one", "which should i", "better to",
+  "a or b", "plan a", "plan b"]
+weak_compare_markers: [if, suppose, assuming, what if]
+decision_markers: [should i open, should i start, should i continue,
+  should i keep, should i close, should i quit, should i shut down,
+  should i do, should i invest, is it worth, worth it, worth opening,
+  worth continuing, worth doing, how long can i survive, how long can it last,
+  how long will it last, can i survive, keep going or not, what to validate first,
+  validate what first, what should i validate, when to pull the plug,
+  pull the plug, shut it down or not]
+cashflow_markers: [cash flow, cashflow, cash situation, cash details,
+  monthly cash, when will the money run out, run out of money,
+  will i run out, do i have enough money, enough cash, how much do i spend,
+  monthly spending, spending details, money left at month end,
+  how much am i short]
