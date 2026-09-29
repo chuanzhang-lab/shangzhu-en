@@ -111,11 +111,11 @@ function openModelSettings() {
       '<div class="modal-box">' +
         '<div class="modal-title">' + t('ui.modal_title') + '</div>' +
         '<label class="modal-label">' + t('ui.modal_model') + '</label>' +
-        '<input class="modal-input" id="ms-model" placeholder="如 deepseek-v4-flash">' +
+        '<input class="modal-input" id="ms-model" placeholder="t('ui.modal_ph_model')">' +
         '<label class="modal-label">' + t('ui.modal_url') + '</label>' +
-        '<input class="modal-input" id="ms-url" placeholder="如 https://api.deepseek.com/v1">' +
+        '<input class="modal-input" id="ms-url" placeholder="t('ui.modal_ph_url')">' +
         '<label class="modal-label">' + t('ui.modal_key') + '</label>' +
-        '<input class="modal-input" id="ms-key" type="password" placeholder="sk-... 或 ak-... 格式，至少 8 位">' +
+        '<input class="modal-input" id="ms-key" type="password" placeholder="t('ui.modal_ph_key')">' +
         '<div class="modal-actions">' +
           '<button class="modal-btn cancel" id="ms-cancel">' + t('ui.cancel') + '</button>' +
           '<button class="modal-btn save" id="ms-save">' + t('ui.save') + '</button>' +
@@ -168,7 +168,7 @@ async function _loadTasksInner() {
     tasks.forEach(t => {
       tasksCache[t.id] = t;  // 缓存含 params 的完整任务对象
       const div = document.createElement('div'); div.className = 'task-item' + (t.id === currentTaskId ? ' active' : ''); div.dataset.id = t.id;
-      div.innerHTML = '<span class="tname"></span><span class="tmenu" title="' + t('ui.rename_title') + '">⋯</span><span class="tdel" title="删除任务">×</span>';
+      div.innerHTML = '<span class="tname"></span><span class="tmenu" title="' + t('ui.rename_title') + '">⋯</span><span class="tdel" title="' + t('ui.delete_title') + '">×</span>';
       div.querySelector('.tname').textContent = t.name || t('ui.unnamed_task');
       div.querySelector('.tname').addEventListener('click', () => switchTask(t.id));
       div.querySelector('.tmenu').addEventListener('click', e => { e.stopPropagation(); taskMenu(t, div); });
@@ -202,10 +202,10 @@ async function _loadTasksInner() {
 
 // 空项目引导示例卡（新建任务/切到空任务时复用，保持与首屏一致）
 const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>' + t('ui.empty_title') + '</h2><p>' + t('ui.empty_desc') + '</p><div class="examples">' +
-  '<button class="example" data-q="开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析">' + t('ui.example_coffee') + '</button>' +
-  '<button class="example" data-q="做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析">' + t('ui.example_saas') + '</button>' +
-  '<button class="example" data-q="快速：奶茶店总投资50万，月租2万">' + t('ui.example_quick') + '</button>' +
-  '<button class="example" data-q="查一下 2024 年中国咖啡行业的毛利率和获客成本基准">' + t('ui.example_benchmark') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_coffee') + "">' + t('ui.example_coffee') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_saas') + "">' + t('ui.example_saas') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_quick') + "">' + t('ui.example_quick') + '</button>' +
+  '<button class="example" data-q="' + t('ws.html.example_q_benchmark') + "">' + t('ui.example_benchmark') + '</button>' +
   '</div></div>';
 
 function clearChat() {
@@ -525,7 +525,7 @@ pcRecalc.addEventListener('click', () => {
       origShown = (f === 'variable_cost_ratio') ? String(Math.round(orig * 100)) + '%' : String(orig);
     }
     const changed = origShown === null || v !== origShown;
-    if (changed) { parts.push(fieldLabel(f) + '改为' + v); lastChanged = { field: f, value: v }; }
+    if (changed) { parts.push(t('ui.change_to', fieldLabel(f), v)); lastChanged = { field: f, value: v }; }
   });
   if (parts.length === 0) { setToast(t('ui.toast.no_param_change')); return; }
   pendingParamChange = lastChanged;   // F3：记录本次改参意图，响应后校验采纳
@@ -539,14 +539,14 @@ pcFields.addEventListener('keydown', (e) => {
     if (inputEl && inputEl.dataset && inputEl.dataset.field) { e.preventDefault();
       const f = inputEl.dataset.field; const v = inputEl.value.trim(); if (!v) return;
       pendingParamChange = { field: f, value: v };
-      input.value = fieldLabel(f) + '改为' + v; drafts[currentCat] = input.value; send();
+      input.value = t('ui.change_to', fieldLabel(f), v); drafts[currentCat] = input.value; send();
     } }
 });
 
 ccRun.addEventListener('click', () => {
   const f = ccField.value; const v = ccValue.value.trim();
   if (!v) return;
-  input.value = '如果' + fieldLabel(f) + '改成' + v; drafts[currentCat] = input.value; send();
+  input.value = t('ui.change_if', fieldLabel(f), v); drafts[currentCat] = input.value; send();
 });
 
 // F6：对比框支持回车提交（含 IME 组合防护）
@@ -709,8 +709,8 @@ function addMessage(role, content, isHtml, cat) {
 }
 
 function parseOpsFromContent(content) {
-  const ops = []; const re = /\*\*方案([AB])\*\*/g; let m;
-  while ((m = re.exec(content)) !== null) { ops.push({ tag: m[1], label: '应用' + m[1] }); }
+  const ops = []; const re = new RegExp(t('ui.option_re'), 'g'); let m;
+  while ((m = re.exec(content)) !== null) { ops.push({ tag: m[1], label: t('ui.apply_option', m[1]) }); }
   return ops; }
 
 // ── 参数面板（只读化）──
@@ -743,7 +743,7 @@ function renderAdvisorPanel(data) {
     html += '<div class="advisor-section">' + t('ui.advisor_actions') + '</div>';
     data.actions.forEach((a, i) => {
       html += '<div class="advisor-action"><div class="advisor-action-text">' + escape(a.preview || '') + '</div>';
-      html += '<div class="advisor-action-btns"><button class="advisor-preview" data-idx="' + i + '">预览</button>';
+      html += '<div class="advisor-action-btns"><button class="advisor-preview" data-idx="' + i + '">' + t('ui.preview') + '</button>';
       html += '<button class="advisor-apply act-btn apply" data-idx="' + i + '">' + t('ui.apply') + '</button></div></div>';
     });
   }
@@ -859,7 +859,7 @@ function updateParamsPanel(params, paramSources, derived) {
 }
 
 function fieldLabel(f) {
-  return tOr('ui.field.' + f, f); }
+  return tOr('ui.field.' + f, tOr('field.label.' + f, f)); }
 function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'number' && Number.isFinite(v)) return (v * 100).toFixed(0) + '%'; return formatNum(v); }
 function formatNum(v) { if (v === null || v === undefined) return '—'; if (typeof v === 'number' && Number.isFinite(v)) return v.toLocaleString(); if (typeof v === 'number' && !Number.isFinite(v)) return '—'; if (String(v).trim() === '') return '—'; return String(v); }
 
@@ -1076,7 +1076,7 @@ async function send() {
     if (sentTaskId !== currentTaskId) { placeholder.remove(); return; }  // 已切任务，丢弃
     placeholder.classList.remove('streaming');
     const isTimeout = (e && e.name === 'AbortError');
-    setMsgBody(placeholder, '<em style="color:#dc2626">' + (isTimeout ? t('ui.req_timeout') : 'Network error: ' + escape(e.message)) + '</em>');
+    setMsgBody(placeholder, '<em style="color:#dc2626">' + (isTimeout ? t('ui.req_timeout') : t('ui.net_error_prefix') + escape(e.message)) + '</em>');
     input.value = text; drafts[currentCat] = text;   // F7：失败保草稿
   }
   finally { clearTimeout(timeoutId); if (activeCtrl === ctrl) activeCtrl = null; busy = false; sendBtn.disabled = false; input.disabled = false; input.focus(); }

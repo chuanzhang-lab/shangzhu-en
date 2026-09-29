@@ -29,10 +29,13 @@ if __name__ == "__main__":
         os.path.isfile(_VENV_PY)
         and os.path.realpath(sys.executable) != os.path.realpath(_VENV_PY)
     ):
-        print(
-            f"[web_server] 检测到非项目 .venv 解释器，自动切换到 .venv 运行：{_VENV_PY}",
-            file=sys.stderr,
-        )
+        # 这条横幅会打在 stderr 上给用户看，所以也得走文案层。
+        # 此刻 src 还没进 sys.path（路径设置在下面），先把路径补上再 import。
+        _SRC_BOOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+        if _SRC_BOOT not in sys.path:
+            sys.path.insert(0, _SRC_BOOT)
+        from i18n import t as _boot_t
+        print(_boot_t("ws.log.venv_switch", path=_VENV_PY), file=sys.stderr)
         os.execv(_VENV_PY, [_VENV_PY, os.path.abspath(__file__), *sys.argv[1:]])
         sys.exit(1)  # 不会到达（os.execv 已替换进程）
 
@@ -66,6 +69,10 @@ if SRC_DIR not in __import__("sys").path:
 from router.intent import detect_intent
 from router.param_extractor import extract_params
 from router.formatter import format_response
+from router import rules
+
+# 文案：展示走 i18n.t()，输入层匹配词走 router.rules（两者不得混放）
+from i18n import get_locale, has as i18n_has, t
 
 # Phase 3：跨轮会话状态（唯一真相源）+ 续算/重置识别 + LLM 接地上下文
 from session_state import (
@@ -226,24 +233,25 @@ async def _advise_with_timeout(*args, timeout=None, **kwargs):
             timeout=advise_timeout,
         )
     except asyncio.TimeoutError:
-        logger.warning("LLM 解读跳过: 超时 %.0fs", advise_timeout)
+        logger.warning(t("ws.log.llm_advise_timeout"), advise_timeout)
         return {"text": "", "ops": [], "_skipped": "timeout"}
 
-# 对比句中常用来引出「假设/变更方案」的引导词
-_COMPARE_MARKERS = ("如果", "假设", "要是", "若", "换成", "改为", "变成",
-                    "提高至", "提升到", "降低至", "降低到", "增加", "减少")
+# 对比句中常用来引出「假设/变更方案」的引导词。
+# 这是**输入层匹配数据**（不是展示文案）：英文部署里若只剩中文词表，
+# 「if rent were 9000」这类对比句永远切不出子句，对比意图静默退化成重算当前参数。
+# 因此走 rules.compare_markers()（locale 感知），不在此处写死。
 
 
-def _safe_json_loads(data: str, context: str = "工具") -> dict:
+def _safe_json_loads(data: str, context: str = "tool") -> dict:
     """安全解析工具返回的 JSON；失败时返回带 error 字段的字典，不抛异常。"""
     try:
         return json.loads(data)
     except json.JSONDecodeError as e:
-        logger.warning(f"{context} 返回非 JSON: {e}")
-        return {"error": f"{context} 返回格式异常", "raw": data[:500]}
+        logger.warning(t("ws.log.tool_not_json", context=context, err=e))
+        return {"error": t("ws.log.tool_bad_format", context=context), "raw": data[:500]}
     except Exception as e:
-        logger.warning(f"{context} 解析失败: {e}")
-        return {"error": f"{context} 解析失败: {e}"}
+        logger.warning(t("ws.log.tool_parse_fail", context=context, err=e))
+        return {"error": t("ws.log.tool_parse_fail", context=context, err=e)}
 
 
 def _extract_alt_clause(user_text: str) -> str:
@@ -251,7 +259,7 @@ def _extract_alt_clause(user_text: str) -> str:
     if not user_text:
         return ""
     # 优先按显式对比标记切分，取最后一段作为变更方案
-    for marker in _COMPARE_MARKERS:
+    for marker in rules.compare_markers():
         idx = user_text.find(marker)
         if idx >= 0:
             return user_text[idx:].strip()
@@ -284,28 +292,28 @@ def _render_guard_banner(guard_info: dict, scan: dict) -> str:
     parts: list = []
     # 历史矛盾（最高优先级）
     for c in guard_info.get("contradictions", []) or []:
-        parts.append(f"⚠️ **参数矛盾**：{c.get('message', '')}")
+        parts.append(t("ws.guard.contradiction", msg=c.get("message", "")))
     # 致命/需确认项
     for issue in guard_info.get("issues", []) or []:
         if issue.get("level") == "critical":
-            parts.append(f"🛑 **需确认**：{issue.get('message', '')}")
+            parts.append(t("ws.guard.critical", msg=issue.get("message", "")))
         elif issue.get("needs_confirmation"):
-            parts.append(f"🟡 **请确认**：{issue.get('message', '')}")
+            parts.append(t("ws.guard.confirm", msg=issue.get("message", "")))
     # 引擎返回里的守门信息（派生一致性等）
     engine_guard = (scan.get("param_sources") or {}).get("_guard", {})
     for issue in (engine_guard.get("issues") or []):
         msg = issue.get("message", "")
         if msg and msg not in " ".join(parts):
-            parts.append(f"🟡 {msg}")
+            parts.append(t("ws.guard.engine", msg=msg))
     # 派生一致性矛盾（规则层先发现，月营收 vs 客流×单价 等）——最高优先级
     derived_issues = scan.get("derived_issues") or []
     for issue in derived_issues:
         msg = issue.get("message", "")
         if msg and msg not in " ".join(parts):
-            parts.append(f"⚠️ **数据冲突**：{msg}")
+            parts.append(t("ws.guard.conflict", msg=msg))
     if not parts:
         return ""
-    return "## ⚠️ 参数守门（先确认，再计算）\n" + "\n".join(parts)
+    return t("ws.guard.header") + "\n".join(parts)
 
 
 def _build_advise_context(tid: str, scan: dict) -> dict:
@@ -353,8 +361,24 @@ def _incr_advise_meta(tid: str, field: str):
     incr_advise_count(tid, field)
 
 
-# 候选方案序号标签：A/B/C/D
+# 候选方案序号标签：A/B/C/D（**数据**，不是文案——语言只影响它外面那层「方案/Option」）
 _OP_LABELS = ["A", "B", "C", "D", "E", "F"]
+
+# 行业兜底键（**数据键**，不是文案）：行业值全程以数据键流转，只在渲染时映射成
+# 展示名。放进 i18n 就等于把数据面和展示面混在一起，两处都会漂。
+_DEFAULT_INDUSTRY = "通用"
+
+
+def _option_name(i: int) -> str:
+    """方案名「方案A / Option A」——与 op_executor 和前端正则同源。
+
+    三处必须一致，否则用户在界面上看到 Option A、回复 Apply A 却不生效：
+    1. 本函数渲染候选块；2. op_executor.parse_apply_command 解析回执；
+    3. 前端 app.js 用 `ui.option_re` 正则从消息里抓出按钮。
+    """
+    if i >= len(_OP_LABELS):
+        return str(i + 1)
+    return t(f"op.option.{_OP_LABELS[i].lower()}")
 
 
 def _render_ops_block(ops: list, base_params: dict, current_scan: dict) -> str:
@@ -369,23 +393,29 @@ def _render_ops_block(ops: list, base_params: dict, current_scan: dict) -> str:
         cur_profit = (current_scan.get("core_metrics") or {}).get("monthly_profit")
     lines = [OP_CONFIRMATION_PREFIX]
     if cur_profit is not None:
-        lines.append(f"当前月利润 **{cur_profit:,.0f} 元**。候选方案预览（引擎重算后）：")
+        lines.append(t("ws.ops.current_profit", v=f"{cur_profit:,.0f}"))
     lines.append("")
     for i, op in enumerate(ops):
         tag = _OP_LABELS[i] if i < len(_OP_LABELS) else str(i + 1)
+        # 「方案A/B」与「应用」都是**会被引擎和前端按字面匹配**的命令词：
+        # op_executor.parse_apply_command 认「应用X」，app.js 用正则抓「**方案X**」。
+        # 两处必须同源，否则英文下用户在界面上看到 Option A 却得回中文才生效。
+        option = _option_name(i)
+        apply_cmd = t("op.cmd.apply")
         preview = preview_op(op, base_params, quick_scan_tool)
         if not preview.get("ok"):
-            lines.append(f"- **方案{tag}** ❌ 拒绝：{preview.get('reason', '')}（{preview.get('label','')}）")
+            lines.append(t("ws.ops.rejected", option=option,
+                           reason=preview.get("reason", ""), label=preview.get("label", "")))
             continue
         p = preview.get("profit_after")
-        profit_str = f"{p:,.0f} 元" if isinstance(p, (int, float)) else "—"
+        profit_str = (t("ws.ops.money", v=f"{p:,.0f}")
+                      if isinstance(p, (int, float)) else t("ws.ops.dash"))
         label = preview.get("label", "")
         chg = preview.get("changes", {})
-        chg_str = "、".join(f"{k}={v}" for k, v in chg.items())
+        chg_str = t("ws.ops.joiner").join(f"{k}={v}" for k, v in chg.items())
         lines.append(
-            f"- **方案{tag}** {label}（{chg_str}）→ 月利润预计 **{profit_str}**"
-            f"  ｜ 回复「**应用{tag}**」生效"
-            f"  ｜ LLM 只提议、引擎算"
+            t("ws.ops.row", option=option, label=label, changes=chg_str,
+              profit=profit_str, apply=apply_cmd, tag=tag)
         )
     return "\n".join(lines)
 
@@ -401,23 +431,23 @@ def _fac_apply_for_step3():
     pass
 
 
-def _infer_sensitivity_variable(drivers: list, params: dict) -> str:
-    """从 scenarios.drivers 推断最应分析的变量。
+def _infer_sensitivity_variable(scenarios: dict, params: dict) -> str:
+    """从 scenarios 推断最应分析的变量。
 
     优先级：客流 > 租金 > 变动成本率 > 人工。
     无 drivers 时默认分析客流（最常见的创业关切）。
+
+    ⚠️ 判定必须靠 **driver_codes**（机器可读的变量名），不能拿关键词去匹配
+    `drivers` 里的展示文案：英文部署下 drivers 是英文，中文关键词命中率恒为 0
+    → 静默退化成「总是分析客流」。这是「改了文案就悄悄丢能力」的典型形态。
     """
-    _DRIVER_TO_VAR = {
-        "客流": "daily_traffic",
-        "月营收": "daily_traffic",  # 营收波动的根源是客流
-        "租金": "monthly_rent",
-        "人工": "employee_count",
-        "变动成本率": "variable_cost_ratio",
-    }
-    for driver in drivers:
-        for keyword, var in _DRIVER_TO_VAR.items():
-            if keyword in driver:
-                return var
+    scenarios = scenarios if isinstance(scenarios, dict) else {}
+    for code in scenarios.get("driver_codes") or []:
+        if code in ("daily_traffic", "monthly_rent", "variable_cost_ratio",
+                    "employee_count", "total_investment"):
+            return code
+    # 兼容旧调用方（只传了 drivers 文案列表）：此时无法按语言可靠匹配，
+    # 直接走下面的默认值，不做关键词猜测（猜错比不猜更糟）。
     # 默认：如果用户有客流数据就分析客流，否则分析租金
     if params.get("daily_traffic") is not None:
         return "daily_traffic"
@@ -459,17 +489,15 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
     rent = params.get("monthly_rent") or 0
 
     if vc_ratio is None:
-        return {"insufficient": True, "message": "变动成本率缺失，无法做弹性分析。", "gaps": ["变动成本率"]}
+        # 变量名（gaps）是**数据**，展示名（message）是文案 —— 两者分开走
+        return {
+            "insufficient": True,
+            "message": t("ws.sens.insufficient_msg"),
+            "gaps": ["variable_cost_ratio"],
+        }
 
-    _VAR_LABELS = {
-        "daily_traffic": "日均客流（杯/天）",
-        "monthly_rent": "月租金（元）",
-        "variable_cost_ratio": "变动成本率（%）",
-        "employee_count": "员工人数（人）",
-        "avg_salary": "人均月薪（元）",
-        "price_per_unit": "客单价（元）",
-    }
-    label = _VAR_LABELS.get(variable, variable)
+    # 变量展示名带单位，且要跟着 locale 走（写死就会在英文输出里嵌中文标签）
+    label = t(f"ws.var_label.{variable}") if i18n_has(f"ws.var_label.{variable}") else variable
 
     # ── 盈亏平衡点求解 ──
     # 利润 = 营收 - 固定成本 - 营收×vc_ratio = 营收×(1-vc_ratio) - 固定成本
@@ -512,17 +540,19 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
             "variable_label": label,
             "current_value": current_value,
             "breakeven_value": None,
-            "interpretation": f"当前参数下无法计算「{label}」的盈亏平衡点（可能缺少关键数据）。",
+            "interpretation": t("ws.sens.no_breakeven", label=label),
         }
 
     # ── 安全边际 ──
     if variable == "variable_cost_ratio":
         # 变动成本率越低越好，margin = 当前值 - 盈亏平衡值（负的margin=已超平衡点）
         margin = breakeven_value - current_value
-        direction = "上升" if margin > 0 else "已超"
+        direction = (t("ws.sens.direction_up") if margin > 0
+                     else t("ws.sens.direction_exceeded"))
     else:
         margin = current_value - breakeven_value
-        direction = "下降" if margin > 0 else "已超"
+        direction = (t("ws.sens.direction_down") if margin > 0
+                     else t("ws.sens.direction_exceeded"))
 
     margin_pct = abs(margin) / current_value if current_value > 0 else 0
 
@@ -548,16 +578,18 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
 
     # ── 解读 ──
     if margin > 0:
-        interp = (
-            f"「{label}」的盈亏平衡点是 {breakeven_value:g}，"
-            f"当前 {current_value:g}，有 {abs(margin):g}（{margin_pct:.0%}）的安全边际。"
-            f"即使{label}{'下降' if variable not in ('variable_cost_ratio',) else '上升'}到 {breakeven_value:g}，项目仍不亏。"
+        _dir = (t("ws.sens.word_up") if variable == "variable_cost_ratio"
+                else t("ws.sens.word_down"))
+        interp = t(
+            "ws.sens.interp_safe", label=label, be=f"{breakeven_value:g}",
+            cur=f"{current_value:g}", margin=f"{abs(margin):g}",
+            pct=f"{margin_pct:.0%}", dir=_dir,
         )
     else:
-        interp = (
-            f"⚠️ 「{label}」当前 {current_value:g}，已{'超过' if variable == 'variable_cost_ratio' else '低于'}"
-            f"盈亏平衡点 {breakeven_value:g}，项目处于亏损状态。"
-        )
+        _verb = (t("ws.sens.verb_exceed") if variable == "variable_cost_ratio"
+                 else t("ws.sens.verb_below"))
+        interp = t("ws.sens.interp_loss", label=label, cur=f"{current_value:g}",
+                   verb=_verb, be=f"{breakeven_value:g}")
 
     return {
         "variable": variable,
@@ -649,9 +681,9 @@ def _route_intent(intent: str, merged_params: dict, user_text: str) -> Optional[
             return {"intent": intent, "data": scan, "params": merged_params}
         filled_params = scan.get("params", merged_params)
         scenarios = scan.get("scenarios", {})
-        # 确定分析哪个变量：从 scenarios.drivers 取第一个，或默认分析客流
-        drivers = scenarios.get("drivers", [])
-        variable = _infer_sensitivity_variable(drivers, filled_params)
+        # 确定分析哪个变量：优先取引擎给的 driver_codes（机器可读），
+        # 回退到「有客流分析客流、否则分析租金」的默认，不猜文案关键词
+        variable = _infer_sensitivity_variable(scenarios, filled_params)
         sens_data = _build_single_variable_sensitivity(filled_params, variable)
         return {"intent": intent, "data": sens_data, "scan": scan, "params": merged_params}
 
@@ -665,18 +697,19 @@ def _route_intent(intent: str, merged_params: dict, user_text: str) -> Optional[
         return {"intent": intent, "data": _safe_json_loads(tool_data, "compare_scenarios"), "params": merged_params}
 
     elif intent == "benchmark":
-        industry = merged_params.get("industry", "通用")
+        # 行业兜底值是**数据键**（引擎按它查模板），只有展示时才映射成展示名
+        industry = merged_params.get("industry") or _DEFAULT_INDUSTRY
         tool_data = benchmark_tool.invoke({"industry": industry})
         return {"intent": intent, "data": _safe_json_loads(tool_data, "search_industry_benchmarks") if isinstance(tool_data, str) else tool_data, "params": merged_params}
 
     elif intent == "market":
-        # market 与 benchmark 共享行业基准数据；提取可选指标关键词提升查询精度
-        industry = merged_params.get("industry", "通用")
+        # market 与 benchmark 共享行业基准数据；提取可选指标关键词提升查询精度。
+        # 关键词是**输入层匹配数据**：拿中文词表去匹配英文提问，命中率恒为 0。
+        industry = merged_params.get("industry") or _DEFAULT_INDUSTRY
         metric = ""
-        metric_keywords = ["毛利率", "获客成本", "增长率", "市场规模",
-                           "复购率", "客单价", "转化率", "渗透率"]
-        for kw in metric_keywords:
-            if kw in user_text:
+        lowered = (user_text or "").lower()
+        for kw in rules.market_metrics():
+            if kw.lower() in lowered:
                 metric = kw
                 break
         tool_data = benchmark_tool.invoke({"industry": industry, "metric": metric})
@@ -740,7 +773,7 @@ class AdviceRequest(BaseModel):
 
 class TaskReq(BaseModel):
     # 安全审查 S7：任务名长度上限（防超大任务名入库）
-    name: str = Field(default="新任务", max_length=100)
+    name: str = Field(default=t("ws.task.new"), max_length=100)
 
 
 class TaskRename(BaseModel):
@@ -750,7 +783,7 @@ class TaskRename(BaseModel):
 # ─── FastAPI 应用 ──────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Web 服务启动：本地工作台模式（仅引擎层 + Engine Steward）")
+    logger.info(t("ws.log.startup"))
     yield
     # R3/R4 修复：服务关闭时释放资源（文件描述符 + 数据库连接）
     store = get_store()
@@ -759,10 +792,10 @@ async def lifespan(app: FastAPI):
     for handler in logger.handlers[:]:
         handler.close()
         logger.removeHandler(handler)
-    logger.info("Web 服务关闭")
+    logger.info(t("ws.log.shutdown"))
 
 
-app = FastAPI(title="创业者工作台", lifespan=lifespan)
+app = FastAPI(title=t("ws.app_title"), lifespan=lifespan)
 
 # CORS：收紧为白名单，避免任意恶意站点跨站操作。
 # 白名单跟随实际服务端口（PORT 环境变量，默认 8081，与 start.sh / argparse 默认值同源），
@@ -800,83 +833,86 @@ if _os.path.isdir(_STATIC_DIR):
 
 
 # ─── 聊天界面 HTML ─────────────────────────────────────────────────────────
+# 文案以 __T[ws.html.xxx]__ 占位，由 index() 在返回前按 locale 替换。
+# 不能把文案写死进模板：HTML 是静态的，写死就等于把语言冻结在中文。
+# 也不能用 f-string —— CSS 的 {} 会和占位符冲突（历史上踩过）。
 CHAT_HTML = """<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="__LOCALE__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>创业者工作台</title>
+<title>__T[ws.html.title]__</title>
 <link rel="stylesheet" href="/static/app.css?v=20260413a">
 </head>
 <body>
 <header>
-  <h1>创业者工作台 <span id="model-name" style="opacity:0.5;font-size:12px;">· __MODEL_NAME__</span></h1>
+  <h1>__T[ws.html.title]__ <span id="model-name" style="opacity:0.5;font-size:12px;">· __MODEL_NAME__</span></h1>
   <div style="display:flex;align-items:center;gap:10px;">
-    <button id="settings-btn" title="LLM 配置">⚙️</button>
-    <span class="meta" id="status" title="点击设置大模型">连接中...</span>
+    <button id="settings-btn" title="__T[ws.html.settings_btn_title]__">⚙️</button>
+    <span class="meta" id="status" title="__T[ws.html.status_hint]__">__T[ws.html.status_connecting]__</span>
   </div>
 </header>
 <div id="layout">
   <aside id="sidebar">
-    <div id="sidebar-head"><span>任务列表</span><button id="new-task">+ 新建</button></div>
+    <div id="sidebar-head"><span>__T[ws.html.sidebar_head]__</span><button id="new-task">__T[ws.html.new_task]__</button></div>
     <div id="task-list"></div>
   </aside>
   <div id="main">
     <div id="chat">
       <div class="empty" id="empty">
-        <h2>商业建模助手</h2>
-        <p>输入你的项目参数，AI 会调用工具给出分析</p>
+        <h2>__T[ui.empty_title]__</h2>
+        <p>__T[ui.empty_desc]__</p>
         <div class="examples">
-          <button class="example" data-q="开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析">📊 餐饮项目分析</button>
-          <button class="example" data-q="做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析">💻 SaaS 模式评估</button>
-          <button class="example" data-q="快速：奶茶店总投资50万，月租2万">⚡ 快速扫描</button>
-          <button class="example" data-q="查一下 2024 年中国咖啡行业的毛利率和获客成本基准">🔍 行业基准</button>
+          <button class="example" data-q="__T[ws.html.example_q_coffee]__">__T[ui.example_coffee]__</button>
+          <button class="example" data-q="__T[ws.html.example_q_saas]__">__T[ui.example_saas]__</button>
+          <button class="example" data-q="__T[ws.html.example_q_quick]__">__T[ui.example_quick]__</button>
+          <button class="example" data-q="__T[ws.html.example_q_benchmark]__">__T[ui.example_benchmark]__</button>
         </div>
       </div>
     </div>
     <div id="cat-bar">
-      <button class="cat-btn active" data-cat="all">全部<span class="cat-badge"></span></button>
-      <button class="cat-btn" data-cat="analyze">分析<span class="cat-badge"></span></button>
-      <button class="cat-btn" data-cat="params">改参<span class="cat-badge"></span></button>
-      <button class="cat-btn" data-cat="decide">决策<span class="cat-badge"></span></button>
-      <button class="cat-btn" data-cat="compare">对比<span class="cat-badge"></span></button>
+      <button class="cat-btn active" data-cat="all">__T[ws.html.cat_all]__<span class="cat-badge"></span></button>
+      <button class="cat-btn" data-cat="analyze">__T[ws.html.cat_analyze]__<span class="cat-badge"></span></button>
+      <button class="cat-btn" data-cat="params">__T[ws.html.cat_params]__<span class="cat-badge"></span></button>
+      <button class="cat-btn" data-cat="decide">__T[ws.html.cat_decide]__<span class="cat-badge"></span></button>
+      <button class="cat-btn" data-cat="compare">__T[ws.html.cat_compare]__<span class="cat-badge"></span></button>
     </div>
     <div id="analyze-status"></div>
     <div id="analyze-controls">
-      <button class="panel-btn" data-q="趋势预测">📈 趋势预测</button>
-      <button class="panel-btn" data-q="现金流怎么样">💧 现金流</button>
-      <button class="panel-btn" data-q="怎么扭亏">💡 扭亏建议</button>
-      <button class="panel-btn" data-q="查一下行业基准">📊 行业基准</button>
-      <button class="panel-btn" data-q="重新分析当前项目">🔄 重新分析</button>
+      <button class="panel-btn" data-q="__T[ws.html.panel_trend]__">__T[ws.html.panel_trend]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.panel_cashflow]__">__T[ws.html.panel_cashflow]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.panel_turnaround]__">__T[ws.html.panel_turnaround]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.panel_benchmark]__">__T[ws.html.panel_benchmark]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.panel_reanalyze]__">__T[ws.html.panel_reanalyze]__</button>
     </div>
     <div id="decide-prompt"></div>
     <div id="decide-controls">
-      <button class="panel-btn" data-q="该不该继续">🤔 该不该继续</button>
-      <button class="panel-btn" data-q="先验证什么">🔍 先验证什么</button>
-      <button class="panel-btn" data-q="还能撑多久">⏳ 还能撑多久</button>
+      <button class="panel-btn" data-q="__T[ws.html.decide_q1]__">__T[ws.html.decide_q1]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.decide_q2]__">__T[ws.html.decide_q2]__</button>
+      <button class="panel-btn" data-q="__T[ws.html.decide_q3]__">__T[ws.html.decide_q3]__</button>
     </div>
     <div id="params-controls">
       <div class="pc-row" id="pc-fields"></div>
-      <div class="pc-row"><button class="pc-recalc">重算</button></div>
+      <div class="pc-row"><button class="pc-recalc">__T[ws.html.recalc]__</button></div>
     </div>
     <div id="compare-controls">
-      <div class="cc-row" id="cc-row-a"><span style="color:#666;">方案A = 当前参数（锁）</span></div>
-      <div class="cc-row" id="cc-row-b"><span>方案B：改</span><select id="cc-field"><option value="monthly_rent">月租金</option><option value="daily_traffic">日均客流</option><option value="price_per_unit">客单价</option><option value="employee_count">员工人数</option><option value="total_investment">总投资</option><option value="avg_salary">人均薪资</option><option value="variable_cost_ratio">变动成本率</option></select><input id="cc-value" placeholder="数值"><button class="cc-run">跑对比</button></div>
+      <div class="cc-row" id="cc-row-a"><span style="color:#666;">__T[ws.html.compare_a]__</span></div>
+      <div class="cc-row" id="cc-row-b"><span>__T[ws.html.compare_b]__</span><select id="cc-field"><option value="monthly_rent">__T[ws.html.compare_monthly_rent]__</option><option value="daily_traffic">__T[ws.html.compare_daily_traffic]__</option><option value="price_per_unit">__T[ws.html.compare_price_per_unit]__</option><option value="employee_count">__T[ws.html.compare_employee_count]__</option><option value="total_investment">__T[ws.html.compare_total_investment]__</option><option value="avg_salary">__T[ws.html.compare_avg_salary]__</option><option value="variable_cost_ratio">__T[ws.html.compare_variable_cost_ratio]__</option></select><input id="cc-value" placeholder="__T[ws.html.compare_value_ph]__"><button class="cc-run">__T[ws.html.compare_run]__</button></div>
     </div>
     <div id="input-area">
-      <textarea id="input" rows="1" placeholder="输入项目参数，或点击上方示例开始…"></textarea>
-      <button id="send">发送</button>
+      <textarea id="input" rows="1" placeholder="__T[ws.html.input_placeholder]__"></textarea>
+      <button id="send">__T[ws.html.send]__</button>
     </div>
   </div>
   <aside id="params-panel">
     <div id="params-head">
       <div id="params-tabs">
-        <button class="params-tab active" data-tab="params">参数</button>
-        <button class="params-tab" data-tab="advisor">顾问</button>
+        <button class="params-tab active" data-tab="params">__T[ws.html.tab_params]__</button>
+        <button class="params-tab" data-tab="advisor">__T[ws.html.tab_advisor]__</button>
       </div>
     </div>
-    <div id="export-btns"><button class="export-btn" id="export-pdf" disabled>📄 PDF</button><button class="export-btn" id="export-excel" disabled>📊 Excel</button></div>
-    <div id="params-list"><p style="color:#999;font-size:13px;padding:12px 0;">输入项目参数后这里会显示</p></div>
+    <div id="export-btns"><button class="export-btn" id="export-pdf" disabled>__T[ws.html.export_pdf]__</button><button class="export-btn" id="export-excel" disabled>__T[ws.html.export_excel]__</button></div>
+    <div id="params-list"><p style="color:#999;font-size:13px;padding:12px 0;">__T[ws.html.params_placeholder]__</p></div>
     <div id="advisor-list" style="display:none;"></div>
   </aside>
 </div>
@@ -889,20 +925,35 @@ CHAT_HTML = """<!DOCTYPE html>
 SETTINGS_MODAL_HTML = """
 <div class="modal-overlay" id="settings-modal" style="display:none;">
   <div class="modal-box">
-    <div class="modal-title">⚙️ LLM 配置</div>
-    <label class="modal-label">模型名称</label>
-    <input class="modal-input" id="cfg-model" placeholder="e.g. your model id">
-    <label class="modal-label">API 端点 (base_url)</label>
+    <div class="modal-title">__T[ws.modal.title]__</div>
+    <label class="modal-label">__T[ws.modal.model]__</label>
+    <input class="modal-input" id="cfg-model" placeholder="__T[ws.modal.model_ph]__">
+    <label class="modal-label">__T[ws.modal.url]__</label>
     <input class="modal-input" id="cfg-base-url" placeholder="https://api.longcat.chat/openai">
-    <label class="modal-label">API Key</label>
+    <label class="modal-label">__T[ws.modal.key]__</label>
     <input class="modal-input" id="cfg-api-key" type="password" placeholder="sk-...">
     <div class="modal-actions">
-      <button class="modal-btn cancel" id="cfg-cancel">取消</button>
-      <button class="modal-btn save" id="cfg-save">保存</button>
+      <button class="modal-btn cancel" id="cfg-cancel">__T[ws.modal.cancel]__</button>
+      <button class="modal-btn save" id="cfg-save">__T[ws.modal.save]__</button>
     </div>
   </div>
 </div>
 """
+
+_T_TOKEN_RE = None
+
+
+def _render_html_template(html: str) -> str:
+    """把 __T[key]__ 占位替换成当前 locale 的文案。
+
+    缺失键会保留成 `[i18n:missing:key]`（t() 的既有约定），
+    绝不留空 —— 空白按钮比乱码更难排查。
+    """
+    global _T_TOKEN_RE
+    if _T_TOKEN_RE is None:
+        import re as _re
+        _T_TOKEN_RE = _re.compile(r"__T\[([^\]]+)\]__")
+    return _T_TOKEN_RE.sub(lambda m: t(m.group(1)), html)
 
 
 # ─── 路由 ──────────────────────────────────────────────────────────────────
@@ -911,7 +962,10 @@ SETTINGS_MODAL_HTML = """
 async def index():
     # 配置单源：模型名运行时注入（占位符替换，避免 f-string 与 CSS 花括号冲突）
     # 动态读取，保证用户通过 /settings/llm 保存后刷新页面即看到新名，无需重启
-    return CHAT_HTML.replace("__MODEL_NAME__", get_model_name())
+    # 文案同样在返回前替换：页面骨架是静态的，语言只能在渲染时决定
+    html = _render_html_template(CHAT_HTML)
+    html = html.replace("__LOCALE__", get_locale())
+    return html.replace("__MODEL_NAME__", get_model_name())
 
 
 @app.get("/i18n.js", response_class=Response)
@@ -961,16 +1015,16 @@ async def set_llm_settings(req: Request):
     try:
         body = await req.json()
     except Exception:
-        return JSONResponse({"error": "请求体需为 JSON"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.body_json")}, status_code=400)
 
     model = body.get("model", "")
     base_url = body.get("base_url", "")
     api_key = body.get("api_key", "")
 
     if not str(model).strip():
-        return JSONResponse({"error": "模型名称不能为空"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.model_empty")}, status_code=400)
     if api_key and len(api_key.strip()) < 8:
-        return JSONResponse({"error": f"API Key 过短（{len(api_key.strip())} 位），至少 8 位"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.key_short", n=len(api_key.strip()))}, status_code=400)
 
     try:
         view = save_llm_config(model, base_url, api_key)
@@ -982,8 +1036,8 @@ async def set_llm_settings(req: Request):
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:
         # 安全审查 S3：非预期异常不透传原文（可能含内部路径），详情只进日志
-        logger.exception("保存模型配置失败")
-        return JSONResponse({"error": "保存失败，请稍后重试或查看服务日志"}, status_code=500)
+        logger.exception(t("ws.err.save_failed"))
+        return JSONResponse({"error": t("ws.err.save_failed_retry")}, status_code=500)
 
     return JSONResponse({"ok": True, **view})
 
@@ -994,16 +1048,16 @@ async def test_llm_settings(req: Request):
     try:
         body = await req.json()
     except Exception:
-        return JSONResponse({"error": "请求体需为 JSON"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.body_json")}, status_code=400)
 
     model = body.get("model", "").strip()
     base_url = body.get("base_url", "").strip()
     api_key = body.get("api_key", "")
 
     if not model:
-        return JSONResponse({"error": "模型名称不能为空"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.model_empty")}, status_code=400)
     if not base_url:
-        return JSONResponse({"error": "接口 URL 不能为空"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.url_empty")}, status_code=400)
     # key 为空时，尝试用现有配置中的 key（保存时"留空=不修改"，测试时需要用实际 key）
     if not api_key:
         try:
@@ -1013,14 +1067,14 @@ async def test_llm_settings(req: Request):
         except Exception:
             pass
     if not api_key:
-        return JSONResponse({"error": "API Key 不能为空"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.key_empty")}, status_code=400)
 
     try:
         result = test_llm_config(model, base_url, api_key)
     except Exception as e:
-        logger.exception("连通性探测失败")
+        logger.exception(t("ws.err.probe_failed"))
         # 安全审查 S3：同上，异常原文不透传
-        return JSONResponse({"ok": False, "error": "探测失败，请稍后重试或查看服务日志"}, status_code=500)
+        return JSONResponse({"ok": False, "error": t("ws.err.probe_failed_retry")}, status_code=500)
 
     return JSONResponse(result)
 
@@ -1057,14 +1111,14 @@ async def delete_task(task_id: str):
     try:
         get_store().delete_task(task_id)
     except Exception as e:
-        logger.error(f"删除任务 {task_id} 失败: {e}")
+        logger.error(t("ws.log.delete_task_failed", tid=task_id, err=e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
     # F6：删除任务时同步清理内存中的 session_state，防 4h TTL 到期前内存泄漏
     try:
         from session_state import reset_state
         reset_state(task_id)
     except Exception as e:
-        logger.warning(f"清理 session_state 失败（不影响删除）: {e}")
+        logger.warning(t("ws.log.clear_session_failed", err=e))
     return {"ok": True, "id": task_id, "deleted": True}
 
 
@@ -1094,7 +1148,7 @@ async def get_advisor(tid: str):
     返回：顾问面板 JSON（judgment / risks / actions / citations）。
     """
     if not tid or not _is_uuid(tid):
-        return JSONResponse({"error": "无效 tid"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.invalid_tid")}, status_code=400)
 
     clean_view = to_llm_view(tid)
     scan = _build_scan_for_advisor(tid)
@@ -1110,7 +1164,7 @@ async def get_advisor(tid: str):
             timeout=_ADVISOR_PANEL_TIMEOUT,
         )
     except Exception as e:
-        logger.warning(f"顾问 LLM 调用失败: {e}")
+        logger.warning(t("ws.log.advisor_llm_failed", err=e))
         advice = {"text": "", "ops": []}
 
     # 格式化 + 数字防火墙
@@ -1127,7 +1181,7 @@ async def post_analysis_advice(req: AdviceRequest):
     """
     tid = req.task_id or req.thread_id or ""
     if not tid:
-        return JSONResponse({"error": "无效 tid", "status": "error"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.invalid_tid"), "status": "error"}, status_code=400)
 
     snap = get_last_analysis(tid)
     if not snap:
@@ -1136,7 +1190,7 @@ async def post_analysis_advice(req: AdviceRequest):
             "text": "",
             "ops": [],
             "ops_block": "",
-            "reason": "暂无本轮分析，请先发送项目参数",
+            "reason": t("ws.err.no_analysis"),
         }, status_code=404)
 
     current_version = get_params_version(tid)
@@ -1148,7 +1202,7 @@ async def post_analysis_advice(req: AdviceRequest):
             "text": "",
             "ops": [],
             "ops_block": "",
-            "reason": "这是上一轮分析，请对最新结果重新生成解读",
+            "reason": t("ws.err.stale_analysis"),
             "analysis_id": snap_id,
             "params_version": current_version,
         })
@@ -1160,7 +1214,7 @@ async def post_analysis_advice(req: AdviceRequest):
             "text": "",
             "ops": [],
             "ops_block": "",
-            "reason": "参数已更新，请对最新分析结果重新生成解读",
+            "reason": t("ws.err.params_changed"),
             "analysis_id": snap_id,
             "params_version": current_version,
         })
@@ -1179,7 +1233,7 @@ async def post_analysis_advice(req: AdviceRequest):
             timeout=_ADVISOR_PANEL_TIMEOUT,
         )
     except Exception as e:
-        logger.warning("按需解读失败: %s", e)
+        logger.warning(t("ws.err.advice_failed", err=e))
         advice = {"text": "", "ops": [], "_skipped": "error"}
 
     advice_text = advice.get("text", "") if isinstance(advice, dict) else (advice or "")
@@ -1221,7 +1275,7 @@ async def post_analysis_advice(req: AdviceRequest):
             "ops_block": ops_block,
             "analysis_id": snap_id,
             "params_version": current_version,
-            "reason": "解读超时，可重试" if status == "timeout" else "解读失败，可重试",
+            "reason": t("ws.err.advice_timeout") if status == "timeout" else t("ws.err.advice_fail"),
         })
 
     return JSONResponse({
@@ -1242,12 +1296,12 @@ async def preview_advisor_action(tid: str, op: str):
     返回：{ok, preview, reason}。
     """
     if not tid or not _is_uuid(tid):
-        return JSONResponse({"error": "无效 tid"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.invalid_tid")}, status_code=400)
 
     try:
         op_dict = json.loads(op)
     except json.JSONDecodeError:
-        return JSONResponse({"error": "op 格式错误"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.bad_op")}, status_code=400)
 
     ok, reason = validate_op(op_dict)
     if not ok:
@@ -1267,7 +1321,7 @@ async def preview_advisor_action(tid: str, op: str):
     return JSONResponse({
         "ok": False,
         "preview": "",
-        "reason": preview.get("reason", "预览失败") if preview else "预览失败",
+        "reason": preview.get("reason") or t("ws.err.preview_failed"),
     })
 
 
@@ -1279,17 +1333,17 @@ async def apply_advisor_action(tid: str, request: Request):
     动作经过 validate_op → apply_op → apply_turn，与对话区同源。
     """
     if not tid or not _is_uuid(tid):
-        return JSONResponse({"error": "无效 tid"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.invalid_tid")}, status_code=400)
 
     try:
         body = await request.body()  # noqa: F821
         data = json.loads(body) if body else {}
     except Exception:
-        return JSONResponse({"error": "请求体格式错误"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.bad_body")}, status_code=400)
 
     op_dict = data.get("op")
     if not op_dict:
-        return JSONResponse({"error": "缺 op"}, status_code=400)
+        return JSONResponse({"error": t("ws.err.missing_op")}, status_code=400)
 
     # 与 /chat「应用 A/B」完全同源：validate_op → apply_op → apply_turn
     ok, reason = validate_op(op_dict)
@@ -1337,7 +1391,7 @@ def _persist_turn(store, tid: str, user_msg: str, content: str) -> None:
                if not k.startswith("_")}
         store.update_params(tid, biz)
     except Exception as e:  # noqa
-        logger.warning(f"持久化本轮失败(不阻断): {e}")
+        logger.warning(t("ws.log.persist_failed", err=e))
 
 
 @app.post("/chat")
@@ -1358,11 +1412,11 @@ async def chat(req: ChatRequest):
         # uuid：按任务 id 查，不存在则新建（归档/误传/首次）
         task = store.get_task(tid)
         if task is None:
-            task = store.create_task("新任务")
+            task = store.create_task(t("ws.task.new"))
             tid = task["id"]
     elif tid in (None, "", "default"):
         # 无有效任务 id（default/空）：新建一个承载会话
-        task = store.create_task("新任务")
+        task = store.create_task(t("ws.task.new"))
         tid = task["id"]
     # else: legacy 非 uuid thread_id（如 "rb"），task=None → 纯内存，不碰 store
     if task is not None and task.get("params"):
@@ -1378,12 +1432,12 @@ async def chat(req: ChatRequest):
                 break
 
         if not last_user_msg:
-            return JSONResponse({"error": "无用户输入", "thread_id": tid}, status_code=400)
+            return JSONResponse({"error": t("ws.err.no_input"), "thread_id": tid}, status_code=400)
 
         if len(last_user_msg) > _MAX_INPUT_LENGTH:
-            logger.warning(f"输入过长: {len(last_user_msg)} 字符 (thread_id={tid})")
+            logger.warning(t("ws.err.input_too_long_log", n=len(last_user_msg), tid=tid))
             return JSONResponse({
-                "error": f"输入过长，请控制在 {_MAX_INPUT_LENGTH} 字符以内",
+                "error": t("ws.err.input_too_long", n=_MAX_INPUT_LENGTH),
                 "thread_id": tid,
             }, status_code=400)
 
@@ -1398,7 +1452,7 @@ async def chat(req: ChatRequest):
             for k, v in _base_params.items()
         )
         intent, confidence = detect_intent(last_user_msg, has_base=has_base)
-        logger.info(f"意图: {intent} (置信度: {confidence:.1f}) | 输入: {last_user_msg[:50]}")
+        logger.info(t("ws.log.intent_log", intent=intent, score=f"{confidence:.1f}", text=last_user_msg[:50]))
 
         # ── 步骤 1.5: 把本句抽出的参数累积进 SessionState（唯一真相源）──
         # Phase 3 关键修复：此前 apply_turn 只在「项目意图」分支内执行，导致
@@ -1461,11 +1515,8 @@ async def chat(req: ChatRequest):
                     new_scan = await asyncio.to_thread(
                         lambda: json.loads(quick_scan_tool.invoke({"params_json": new_json}))
                     )
-                    content = "### ✅ 已应用方案\n\n" + format_response("quick_scan", new_scan)
-                    content += (
-                        "\n\n（LLM 只有提议权，应用由你的「应用」关键词 + op_executor 校验共同触发。"
-                        "派生字段 monthly_labor / monthly_fixed_cost / monthly_profit 由引擎重算，永不直接改。）"
-                    )
+                    content = t("ws.apply.ok_header") + format_response("quick_scan", new_scan)
+                    content += t("ws.apply.ok_note")
                     _persist_turn(store, tid, last_user_msg, content)
                     return JSONResponse({
                         "content": content, "thread_id": tid,
@@ -1476,9 +1527,9 @@ async def chat(req: ChatRequest):
                     })
                 else:
                     _persist_turn(store, tid, last_user_msg,
-                                  f"### ❌ 应用失败\n\n{reason}\n\n候选方案已过期或未过校验。重新描述需求即可。")
+                                  t("ws.apply.fail_header") + f"{reason}" + t("ws.apply.fail_note"))
                     return JSONResponse({
-                        "content": f"### ❌ 应用失败\n\n{reason}\n\n候选方案已过期或未过校验。重新描述需求即可。",
+                        "content": t("ws.apply.fail_header") + f"{reason}" + t("ws.apply.fail_note"),
                         "thread_id": tid, "mode": "apply", "intent": "apply", "ok": False,
                     })
 
@@ -1490,7 +1541,7 @@ async def chat(req: ChatRequest):
                     _route_intent, intent, merged, last_user_msg
                 )
             except Exception as e:
-                logger.exception(f"工具调用失败 (intent={intent})")
+                logger.exception(t("ws.log.tool_call_failed", intent=intent))
                 routed = None
 
             if routed is not None:
@@ -1544,7 +1595,7 @@ async def chat(req: ChatRequest):
                 })
 
             # 业务意图绝不漏给自由 agent（避免编造）；工具兜不住时给友好提示
-            _fallback_content = "抱歉，这条业务请求暂时无法生成结构化分析。请补充项目参数后重试（例如：月营收、总投资、人工成本）。"
+            _fallback_content = t("ws.fallback.business")
             _persist_turn(store, tid, last_user_msg, _fallback_content)
             return JSONResponse({
                 "content": _fallback_content,
@@ -1573,8 +1624,9 @@ async def chat(req: ChatRequest):
         user_text = last_user_msg or ""
         if grounding:
             user_text = (
-                "[项目真实背景，请勿编造未出现的店铺名/投资额等具体数字]\n"
-                f"{grounding}\n\n用户问题：{user_text}"
+                t("ws.llm.grounding_prefix")
+                + f"{grounding}"
+                + t("ws.llm.question_prefix") + user_text
             )
         advice_obj = {"text": "", "ops": []}
         try:
@@ -1582,16 +1634,13 @@ async def chat(req: ChatRequest):
             advise_context = _build_advise_context(tid, scan)
             advice_obj = await _advise_with_timeout(scan, user_text, clean_view, advise_context)
         except Exception as e:  # noqa
-            logger.warning(f"LLM 解读跳过: {e}")
+            logger.warning(t("ws.log.llm_advise_skip", err=e))
         advice_text = advice_obj.get("text", "") if isinstance(advice_obj, dict) else (advice_obj or "")
         ops_proposals = advice_obj.get("ops", []) if isinstance(advice_obj, dict) else []
         content = advice_text
         if not content:
             # 无 API key 或无可解读内容时的友好降级（仍不引入自由 agent）
-            content = (
-                "本工作台专注创业项目结构化分析。请告诉我项目参数"
-                "（如月营收、总投资、人工成本、客单价），我来帮你测算收支平衡、跑道与利润。"
-            )
+            content = t("ws.fallback.chitchat")
         if ops_proposals:
             base_params = snapshot.get("params", {}) if isinstance(snapshot, dict) else {}
             ops_block = _render_ops_block(ops_proposals, base_params, scan)
@@ -1609,10 +1658,10 @@ async def chat(req: ChatRequest):
         })
     except Exception as e:
         # S1 修复：错误信息不泄露内部细节（堆栈/路径/版本号），仅内部日志记录
-        logger.exception("chat 失败 (thread_id=%s): %s", tid, e)
+        logger.exception(t("ws.log.chat_failed"), tid, e)
         return JSONResponse(
             {
-                "error": "服务内部错误，请稍后重试或联系开发者",
+                "error": t("ws.err.internal"),
                 "thread_id": tid,
             },
             status_code=500,
@@ -1623,21 +1672,21 @@ async def chat(req: ChatRequest):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="创业者工作台 — 本地 Web 服务 (A)")
-    parser.add_argument("-p", "--port", type=int, default=8081, help="HTTP 端口")
-    parser.add_argument("--host", default="127.0.0.1", help="监听地址")
+    parser = argparse.ArgumentParser(description=t("ws.cli.desc"))
+    parser.add_argument("-p", "--port", type=int, default=8081, help=t("ws.cli.port_help"))
+    parser.add_argument("--host", default="127.0.0.1", help=t("ws.cli.host_help"))
     args = parser.parse_args()
 
     # 启动前确保输出目录存在（报告/Excel 本地降级写入）
     os.makedirs(os.path.join(SCRIPT_DIR, "output"), exist_ok=True)
     os.makedirs(os.path.join(SCRIPT_DIR, "logs"), exist_ok=True)
 
-    llm_status = "已配置" if has_api_key() else "未配置（Engine Steward 将静默跳过）"
+    llm_status = t("ws.banner.llm_ready") if has_api_key() else t("ws.banner.llm_missing")
     print("=" * 50)
-    print("创业者工作台 Web 版")
-    print(f"地址: http://{args.host}:{args.port}")
-    print(f"模型: {MODEL_NAME}")
-    print(f"版本: {APP_VERSION}")
-    print(f"LLM:  {llm_status}")
+    print(t("ws.banner.title"))
+    print(t("ws.banner.addr", host=args.host, port=args.port))
+    print(t("ws.banner.model", name=MODEL_NAME))
+    print(t("ws.banner.version", v=APP_VERSION))
+    print(t("ws.banner.llm", s=llm_status))
     print("=" * 50)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

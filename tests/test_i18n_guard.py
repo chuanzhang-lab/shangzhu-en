@@ -231,6 +231,7 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "param_advisor.py"),
     os.path.join("src", "tools", "pitfall_detector.py"),
     os.path.join("src", "tools", "report_generator.py"),
+    "web_server.py",
 ]
 
 # 白名单：**非展示文案**，展示层/语义层必须按原样匹配，因此不能外置。
@@ -258,6 +259,10 @@ ENGINE_DATA_LITERALS = {
     "日售", "日均", "更新", "更新一下", "月收", "月租", "月薪", "每天", "水电", "流水",
     "清空", "现在", "盈利", "租金", "营收", "薪资", "补上", "补充", "调一下", "调整",
     "那如果", "重开", "重新分析", "重新开始", "重新来", "重新算", "重新评估", "重算", "重置", "铺租",
+    # web_server：行业兜底键。行业值全程以**数据键**流转（引擎按它查模板），
+    # 只在渲染时才映射成展示名（i18n.industry_name）。放进文案层就等于把
+    # 数据面和展示面混在一起，两处都会漂。
+    "通用",
 }
 
 

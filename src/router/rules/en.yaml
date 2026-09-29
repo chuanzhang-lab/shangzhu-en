@@ -535,3 +535,38 @@ intent_priority:
   market: 50
   quick_scan: 10
   chitchat: 0
+
+# ── Compare / hypothesis markers: split the "option B" clause out of user text ──
+# Input-layer matching data (NOT display copy): with a Chinese-only list an
+# English deployment never splits the clause and "compare" silently degrades.
+compare_markers:
+  - "if "
+  - suppose
+  - assume
+  - assuming
+  - "what if"
+  - change
+  - changed
+  - switch to
+  - raise
+  - raise to
+  - lower
+  - lower to
+  - increase
+  - decrease
+
+# ── Industry metric keywords (market intent precision) ────────────────────
+market_metrics:
+  - gross margin
+  - gross profit margin
+  - customer acquisition cost
+  - cac
+  - growth rate
+  - market size
+  - tam
+  - repeat purchase rate
+  - repurchase rate
+  - average order value
+  - unit price
+  - conversion rate
+  - penetration rate

@@ -714,6 +714,15 @@ ui:
   no_response: （无响应）
   req_timeout: 请求超时（60s），请重试
   net_error: 网络错误，可重试
+  option_re: '\*\*方案([AB])\*\*'
+  apply_option: 应用{0}
+  change_to: '{0}改为{1}'
+  change_if: 如果{0}改成{1}
+  delete_title: 删除任务
+  net_error_prefix: '网络错误: '
+  modal_ph_model: 如 deepseek-v4-flash
+  modal_ph_url: 如 https://api.deepseek.com/v1
+  modal_ph_key: sk-... 或 ak-... 格式，至少 8 位
 # ─── cost_attribution（成本归因）────────────────────────────────────────────
 # 分量名（ca.comp.*）必须翻译：formatter 把它作为参数塞进英文句子 component_row，
 # 留中文就会在英文输出里嵌中文（混血输出）。
@@ -1095,3 +1104,160 @@ rg:
     status_col_eval: "评估"
     pit_col_level: "级别"
     pit_col_risk: "风险"
+
+# ─── web_server（界面 / 接口 / 日志）───────────────────────────────────────
+# 聊天界面骨架用 __T[key]__ 占位，由 index() 在返回前按 locale 替换——
+# HTML 是静态模板，不能把文案写死在里面（否则英文部署下界面露中文）。
+ws:
+  html:
+    title: 创业者工作台
+    settings_btn_title: LLM 配置
+    status_connecting: 连接中...
+    status_hint: 点击设置大模型
+    sidebar_head: 任务列表
+    new_task: "+ 新建"
+    cat_all: 全部
+    cat_analyze: 分析
+    cat_params: 改参
+    cat_decide: 决策
+    cat_compare: 对比
+    panel_trend: 📈 趋势预测
+    panel_cashflow: 💧 现金流
+    panel_turnaround: 💡 扭亏建议
+    panel_benchmark: 📊 行业基准
+    panel_reanalyze: 🔄 重新分析
+    decide_q1: 🤔 该不该继续
+    decide_q2: 🔍 先验证什么
+    decide_q3: ⏳ 还能撑多久
+    recalc: 重算
+    compare_a: 方案A = 当前参数（锁）
+    compare_b: 方案B：改
+    compare_total_investment: 总投资
+    compare_monthly_rent: 月租金
+    compare_daily_traffic: 日均客流
+    compare_price_per_unit: 客单价
+    compare_employee_count: 员工人数
+    compare_avg_salary: 人均薪资
+    compare_variable_cost_ratio: 变动成本率
+    compare_value_ph: 数值
+    compare_run: 跑对比
+    input_placeholder: 输入项目参数，或点击上方示例开始…
+    send: 发送
+    tab_params: 参数
+    tab_advisor: 顾问
+    export_pdf: 📄 PDF
+    export_excel: 📊 Excel
+    params_placeholder: 输入项目参数后这里会显示
+    example_q_coffee: 开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析
+    example_q_saas: 做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析
+    example_q_quick: 快速：奶茶店总投资50万，月租2万
+    example_q_benchmark: 查一下 2024 年中国咖啡行业的毛利率和获客成本基准
+  modal:
+    title: ⚙️ LLM 配置
+    model: 模型名称
+    model_ph: 例如你的模型 id
+    url: API 端点 (base_url)
+    key: API Key
+    cancel: 取消
+    save: 保存
+  task:
+    new: 新任务
+  log:
+    llm_advise_timeout: "LLM 解读跳过: 超时 %.0fs"
+    tool_not_json: "{context} 返回非 JSON: {err}"
+    tool_bad_format: "{context} 返回格式异常"
+    tool_parse_fail: "{context} 解析失败: {err}"
+    tool_call_failed: "工具调用失败 (intent={intent})"
+    llm_advise_skip: "LLM 解读跳过: {err}"
+    chat_failed: "chat 失败 (thread_id=%s): %s"
+    persist_failed: "持久化本轮失败(不阻断): {err}"
+    delete_task_failed: "删除任务 {tid} 失败: {err}"
+    clear_session_failed: "清理 session_state 失败（不影响删除）: {err}"
+    advisor_llm_failed: "顾问 LLM 调用失败: {err}"
+    venv_switch: "[web_server] 检测到非项目 .venv 解释器，自动切换到 .venv 运行：{path}"
+    intent_log: "意图: {intent} (置信度: {score}) | 输入: {text}"
+    startup: Web 服务启动：本地工作台模式（仅引擎层 + Engine Steward）
+    shutdown: Web 服务关闭
+  err:
+    body_json: 请求体需为 JSON
+    model_empty: 模型名称不能为空
+    key_short: "API Key 过短（{n} 位），至少 8 位"
+    save_failed: 保存模型配置失败
+    save_failed_retry: 保存失败，请稍后重试或查看服务日志
+    url_empty: 接口 URL 不能为空
+    key_empty: API Key 不能为空
+    probe_failed: 连通性探测失败
+    probe_failed_retry: 探测失败，请稍后重试或查看服务日志
+    invalid_tid: 无效 tid
+    no_analysis: 暂无本轮分析，请先发送项目参数
+    stale_analysis: 这是上一轮分析，请对最新结果重新生成解读
+    params_changed: 参数已更新，请对最新分析结果重新生成解读
+    advice_failed: "按需解读失败: {err}"
+    preview_failed: 预览失败
+    advice_timeout: 解读超时，可重试
+    advice_fail: 解读失败，可重试
+    bad_body: 请求体格式错误
+    missing_op: 缺 op
+    bad_op: op 格式错误
+    no_input: 无用户输入
+    input_too_long_log: "输入过长: {n} 字符 (thread_id={tid})"
+    input_too_long: "输入过长，请控制在 {n} 字符以内"
+    internal: 服务内部错误，请稍后重试或联系开发者
+  banner:
+    title: 创业者工作台 Web 版
+    addr: "地址: http://{host}:{port}"
+    model: "模型: {name}"
+    version: "版本: {v}"
+    llm: "LLM:  {s}"
+    llm_ready: 已配置
+    llm_missing: 未配置（Engine Steward 将静默跳过）
+  cli:
+    desc: 创业者工作台 — 本地 Web 服务 (A)
+    port_help: HTTP 端口
+    host_help: 监听地址
+  guard:
+    contradiction: "⚠️ **参数矛盾**：{msg}"
+    critical: "🛑 **需确认**：{msg}"
+    confirm: "🟡 **请确认**：{msg}"
+    engine: "🟡 {msg}"
+    conflict: "⚠️ **数据冲突**：{msg}"
+    header: "## ⚠️ 参数守门（先确认，再计算）\n"
+  ops:
+    current_profit: "当前月利润 **{v} 元**。候选方案预览（引擎重算后）："
+    rejected: "- **{option}** ❌ 拒绝：{reason}（{label}）"
+    row: "- **{option}** {label}（{changes}）→ 月利润预计 **{profit}**  ｜ 回复「**{apply}{tag}**」生效  ｜ LLM 只提议、引擎算"
+    money: "{v} 元"
+    dash: "—"
+    joiner: "、"
+  apply:
+    ok_header: "### ✅ 已应用方案\n\n"
+    ok_note: "\n\n（LLM 只有提议权，应用由你的「应用」关键词 + op_executor 校验共同触发。派生字段 monthly_labor / monthly_fixed_cost / monthly_profit 由引擎重算，永不直接改。）"
+    fail_header: "### ❌ 应用失败\n\n"
+    fail_note: "\n\n候选方案已过期或未过校验。重新描述需求即可。"
+  fallback:
+    business: 抱歉，这条业务请求暂时无法生成结构化分析。请补充项目参数后重试（例如：月营收、总投资、人工成本）。
+    chitchat: 本工作台专注创业项目结构化分析。请告诉我项目参数（如月营收、总投资、人工成本、客单价），我来帮你测算收支平衡、跑道与利润。
+  llm:
+    grounding_prefix: "[项目真实背景，请勿编造未出现的店铺名/投资额等具体数字]\n"
+    question_prefix: "\n\n用户问题："
+  sens:
+    insufficient_msg: 变动成本率缺失，无法做弹性分析。
+    insufficient_gap: 变动成本率
+    no_breakeven: "当前参数下无法计算「{label}」的盈亏平衡点（可能缺少关键数据）。"
+    direction_up: 上升
+    direction_down: 下降
+    direction_exceeded: 已超
+    interp_safe: "「{label}」的盈亏平衡点是 {be}，当前 {cur}，有 {margin}（{pct}）的安全边际。即使{label}{dir}到 {be}，项目仍不亏。"
+    interp_loss: "⚠️ 「{label}」当前 {cur}，已{verb}盈亏平衡点 {be}，项目处于亏损状态。"
+    verb_exceed: 超过
+    verb_below: 低于
+    word_down: 下降
+    word_up: 上升
+  var_label:
+    daily_traffic: 日均客流（杯/天）
+    monthly_rent: 月租金（元）
+    variable_cost_ratio: 变动成本率（%）
+    employee_count: 员工人数（人）
+    avg_salary: 人均月薪（元）
+    price_per_unit: 客单价（元）
+  app_title: 创业者工作台

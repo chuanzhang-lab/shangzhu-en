@@ -1186,16 +1186,25 @@ def _build_scenarios(params: dict, src: dict) -> dict:
     best_profit, best_runway = _recompute_outputs(bc)
 
     drivers = []
+    # drivers 是**展示文案**，driver_codes 是**机器可读的变量名**：
+    # 下游（web_server 选弹性分析变量）必须靠 code，靠中文关键词去匹配
+    # driver 字符串在英文部署下命中率恒为 0（静默退化成「默认分析客流」）。
+    driver_codes = []
     if vc_code in (CANDIDATE, DERIVED):
         drivers.append(t("wf.scenario.driver_vc_guess"))
+        driver_codes.append("variable_cost_ratio")
     elif vc_code == MISSING:
         drivers.append(t("wf.scenario.driver_vc_missing"))
+        driver_codes.append("variable_cost_ratio")
     if rev_code == DERIVED:
         drivers.append(t("wf.scenario.driver_rev_guess"))
+        driver_codes.append("daily_traffic")
     if labor_code == MISSING:
         drivers.append(t("wf.scenario.driver_labor_missing"))
+        driver_codes.append("employee_count")
     if cash_code == MISSING:
         drivers.append(t("wf.scenario.driver_cash_missing"))
+        driver_codes.append("total_investment")
 
     # D2：变动成本率缺失 → best/worst/base 均 None，上下游按「未知」处理而非崩溃/假数
     def _round_or_none(v):
@@ -1209,6 +1218,7 @@ def _build_scenarios(params: dict, src: dict) -> dict:
         },
         "runway": {"best": best_runway, "base": base_runway, "worst": worst_runway},
         "drivers": drivers,
+        "driver_codes": driver_codes,
         "has_uncertainty": bool(drivers),
     }
 

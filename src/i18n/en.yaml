@@ -716,6 +716,15 @@ ui:
   no_response: (no response)
   req_timeout: Request timed out (60s); retry
   net_error: Network error; retry
+  option_re: '\*\*Option ([AB])\*\*'
+  apply_option: 'Apply {0}'
+  change_to: '{0} set to {1}'
+  change_if: 'If {0} changed to {1}'
+  delete_title: Delete task
+  net_error_prefix: 'Network error: '
+  modal_ph_model: e.g. deepseek-v4-flash
+  modal_ph_url: e.g. https://api.deepseek.com/v1
+  modal_ph_key: sk-... or ak-... format, at least 8 chars
 # ─── cost attribution ──────────────────────────────────────────────────────
 ca:
   gap:
@@ -1096,3 +1105,160 @@ rg:
     status_col_eval: "Assessment"
     pit_col_level: "Level"
     pit_col_risk: "Risk"
+
+# ─── web_server (UI / API / logs) ──────────────────────────────────────────
+# The chat shell keeps __T[key]__ placeholders, substituted by index() per locale.
+# Copy must never be baked into the static HTML, or an English deploy leaks Chinese.
+ws:
+  html:
+    title: Founder Workbench
+    settings_btn_title: LLM settings
+    status_connecting: Connecting...
+    status_hint: Click to configure the model
+    sidebar_head: Tasks
+    new_task: "+ New"
+    cat_all: All
+    cat_analyze: Analyze
+    cat_params: Params
+    cat_decide: Decide
+    cat_compare: Compare
+    panel_trend: 📈 Trend forecast
+    panel_cashflow: 💧 Cash flow
+    panel_turnaround: 💡 Turnaround ideas
+    panel_benchmark: 📊 Benchmarks
+    panel_reanalyze: 🔄 Re-analyze
+    decide_q1: 🤔 Should I continue
+    decide_q2: 🔍 What to validate first
+    decide_q3: ⏳ How long can it last
+    recalc: Recalculate
+    compare_a: Option A = current parameters (locked)
+    compare_b: "Option B: change"
+    compare_total_investment: Total investment
+    compare_monthly_rent: Monthly rent
+    compare_daily_traffic: Daily traffic
+    compare_price_per_unit: Unit price
+    compare_employee_count: Headcount
+    compare_avg_salary: Average salary
+    compare_variable_cost_ratio: Variable cost ratio
+    compare_value_ph: Number
+    compare_run: Run comparison
+    input_placeholder: Enter project parameters, or click an example above…
+    send: Send
+    tab_params: Parameters
+    tab_advisor: Advisor
+    export_pdf: 📄 PDF
+    export_excel: 📊 Excel
+    params_placeholder: Enter project parameters to show here
+    example_q_coffee: Open a coffee shop, monthly rent 15000, 3 employees, average salary 5000, 50 customers per day, average price 25. Detailed analysis
+    example_q_saas: Build a SaaS tool, target customers are SMEs, priced at 99 per month, expected 1000 users in the first year. Detailed analysis
+    example_q_quick: "Quick: milk tea shop, total investment 500k, monthly rent 20k"
+    example_q_benchmark: Look up 2024 China coffee industry benchmarks for gross margin and customer acquisition cost
+  modal:
+    title: ⚙️ LLM settings
+    model: Model name
+    model_ph: e.g. your model id
+    url: API endpoint (base_url)
+    key: API Key
+    cancel: Cancel
+    save: Save
+  task:
+    new: New task
+  log:
+    llm_advise_timeout: "LLM interpretation skipped: timeout %.0fs"
+    tool_not_json: "{context} returned non-JSON: {err}"
+    tool_bad_format: "{context} returned an unexpected format"
+    tool_parse_fail: "{context} parse failed: {err}"
+    tool_call_failed: "Tool call failed (intent={intent})"
+    llm_advise_skip: "LLM interpretation skipped: {err}"
+    chat_failed: "chat failed (thread_id=%s): %s"
+    persist_failed: "Persisting this turn failed (non-blocking): {err}"
+    delete_task_failed: "Failed to delete task {tid}: {err}"
+    clear_session_failed: "Clearing session_state failed (delete unaffected): {err}"
+    advisor_llm_failed: "Advisor LLM call failed: {err}"
+    venv_switch: "[web_server] non-project .venv detected, switching to .venv: {path}"
+    intent_log: "intent: {intent} (confidence: {score}) | input: {text}"
+    startup: Web service starting — local workbench mode (engine layer + Engine Steward only)
+    shutdown: Web service stopped
+  err:
+    body_json: Request body must be JSON
+    model_empty: Model name cannot be empty
+    key_short: "API key too short ({n} chars), minimum 8"
+    save_failed: Failed to save model configuration
+    save_failed_retry: Save failed; retry later or check the service log
+    url_empty: Endpoint URL cannot be empty
+    key_empty: API Key cannot be empty
+    probe_failed: Connectivity probe failed
+    probe_failed_retry: Probe failed; retry later or check the service log
+    invalid_tid: Invalid tid
+    no_analysis: No analysis for this turn yet; send project parameters first
+    stale_analysis: This is the previous turn's analysis; regenerate on the latest results
+    params_changed: Parameters changed; regenerate the interpretation on the latest results
+    advice_failed: "On-demand interpretation failed: {err}"
+    preview_failed: Preview failed
+    advice_timeout: Interpretation timed out; retry
+    advice_fail: Interpretation failed; retry
+    bad_body: Malformed request body
+    missing_op: Missing op
+    bad_op: Malformed op
+    no_input: No user input
+    input_too_long_log: "Input too long: {n} chars (thread_id={tid})"
+    input_too_long: "Input too long; keep it under {n} characters"
+    internal: Internal server error; retry later or contact the developer
+  banner:
+    title: Founder Workbench — Web
+    addr: "Address: http://{host}:{port}"
+    model: "Model: {name}"
+    version: "Version: {v}"
+    llm: "LLM:  {s}"
+    llm_ready: configured
+    llm_missing: not configured (Engine Steward will skip silently)
+  cli:
+    desc: Founder Workbench — local web service (A)
+    port_help: HTTP port
+    host_help: Listen address
+  guard:
+    contradiction: "⚠️ **Parameter conflict**: {msg}"
+    critical: "🛑 **Needs confirmation**: {msg}"
+    confirm: "🟡 **Please confirm**: {msg}"
+    engine: "🟡 {msg}"
+    conflict: "⚠️ **Data conflict**: {msg}"
+    header: "## ⚠️ Parameter gatekeeping (confirm first, then compute)\n"
+  ops:
+    current_profit: "Current monthly profit **{v} CNY**. Candidate preview (recomputed by the engine):"
+    rejected: "- **{option}** ❌ rejected: {reason} ({label})"
+    row: "- **{option}** {label} ({changes}) → estimated monthly profit **{profit}**  ｜ reply \"**{apply}{tag}**\" to apply  ｜ LLM only proposes, the engine computes"
+    money: "{v} CNY"
+    dash: "—"
+    joiner: ", "
+  apply:
+    ok_header: "### ✅ Option applied\n\n"
+    ok_note: "\n\n(The LLM only has the right to propose. Applying is triggered by your \"apply\" keyword plus op_executor validation. Derived fields monthly_labor / monthly_fixed_cost / monthly_profit are recomputed by the engine and never edited directly.)"
+    fail_header: "### ❌ Apply failed\n\n"
+    fail_note: "\n\nThe candidate has expired or failed validation. Just restate your request."
+  fallback:
+    business: "Sorry, this business request could not produce a structured analysis. Add project parameters and retry (for example: monthly revenue, total investment, labor cost)."
+    chitchat: This workbench focuses on structured analysis of startup projects. Tell me the project parameters (monthly revenue, total investment, labor cost, unit price) and I will model break-even, runway and profit.
+  llm:
+    grounding_prefix: "[Real project context — do not invent shop names, investment amounts or other specific figures that never appeared]\n"
+    question_prefix: "\n\nUser question: "
+  sens:
+    insufficient_msg: Variable cost ratio is missing; elasticity analysis is not possible.
+    insufficient_gap: Variable cost ratio
+    no_breakeven: "Cannot compute the break-even point of \"{label}\" with the current parameters (key data may be missing)."
+    direction_up: rise
+    direction_down: fall
+    direction_exceeded: already exceeded
+    interp_safe: "The break-even point of \"{label}\" is {be}; current is {cur}, leaving a safety margin of {margin} ({pct}). Even if {label} {dir} to {be}, the project still does not lose money."
+    interp_loss: "⚠️ \"{label}\" is currently {cur}, already {verb} the break-even point {be}; the project is loss-making."
+    verb_exceed: above
+    verb_below: below
+    word_down: falls
+    word_up: rises
+  var_label:
+    daily_traffic: Daily traffic (cups/day)
+    monthly_rent: Monthly rent (CNY)
+    variable_cost_ratio: Variable cost ratio (%)
+    employee_count: Headcount (people)
+    avg_salary: Average monthly salary (CNY)
+    price_per_unit: Unit price (CNY)
+  app_title: Founder Workbench

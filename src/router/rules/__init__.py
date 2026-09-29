@@ -48,6 +48,8 @@ def _empty_pack() -> Dict[str, Any]:
         "intents": [],
         "intent_priority": {},
         "number_units": {},
+        "compare_markers": [],
+        "market_metrics": [],
     }
 
 
@@ -80,6 +82,8 @@ def _load(locale: str) -> Dict[str, Any]:
             ],
             "intent_priority": raw.get("intent_priority") or {},
             "number_units": raw.get("number_units") or {},
+            "compare_markers": raw.get("compare_markers") or [],
+            "market_metrics": raw.get("market_metrics") or [],
         }
     except FileNotFoundError:
         logger.error("rules: 规则文件缺失 locale=%s path=%s", locale, path)
@@ -138,3 +142,20 @@ def number_units(locale: Optional[str] = None) -> Dict[str, int]:
     顺序即优先级：缩写写法（「1万5」）由第一个命中的单位处理。
     """
     return _pack(locale)["number_units"]
+
+
+def compare_markers(locale: Optional[str] = None) -> List[str]:
+    """引出「假设/变更方案」的引导词（用于从用户文本里切出方案 B 子句）。
+
+    这是**输入层匹配数据**，不是展示文案：英文部署里若只剩中文词表，
+    「如果…改成…」这类对比句永远切不出子句，对比意图静默退化成重算当前参数。
+    """
+    return _pack(locale)["compare_markers"]
+
+
+def market_metrics(locale: Optional[str] = None) -> List[str]:
+    """行业指标关键词（毛利率/获客成本/…），用于 market 意图的精度提升。
+
+    同样是输入层匹配数据：拿中文词表去匹配英文提问，命中率恒为 0。
+    """
+    return _pack(locale)["market_metrics"]
