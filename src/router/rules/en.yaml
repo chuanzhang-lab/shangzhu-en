@@ -697,3 +697,18 @@ cashflow_markers: [cash flow, cashflow, cash situation, cash details,
   will i run out, do i have enough money, enough cash, how much do i spend,
   monthly spending, spending details, money left at month end,
   how much am i short]
+
+# decision sub-type markers (intent.decide_type_of, order = priority)
+decision_subtypes:
+  turnaround: [turn around, turn it around, revive, how to fix, how to adjust,
+    how to optimize, what to change, fix it, save the business]
+  validate_first: [validate first, what to validate, validate what, what to test first]
+  go_no_go: [should i open, should i start, worth opening, worth starting,
+    go or no go, worth doing, should i do it, should i launch]
+  continue_stop: [should i continue, should i keep going, should i stop,
+    should i close, should i shut down, close or not, still viable,
+    keep going or not, should i quit]
+  runway: [how long can i last, how long can cash last, how long will cash last,
+    runway, how long can i survive, cash runway, how many months can i last]
+  choose: [which one, which is better, which should i choose, how to choose,
+    which option, compare, or should i]

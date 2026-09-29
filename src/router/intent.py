@@ -221,24 +221,15 @@ def decide_type_of(text: str) -> str:
 
     返回 turnaround / validate_first / go_no_go / continue_stop / runway / choose。
     兜底：无法归类时给 turnaround（默认高频）。
+
+    标记词走规则层（locale 分桶）：英文部署若只剩中文词表，所有英文决策问句
+    都会落回默认 turnaround（静默错配成错误的分析类型）。
     """
     if not text:
         return "turnaround"
-    t = text.strip()
-    # 怎么扭亏/怎么救/调整方向 → turnaround（note: 这类通常走 suggest，兜底在这）
-    if any(k in t for k in ("扭亏", "救活", "怎么改", "怎么调", "怎么优化", "改什么")):
-        return "turnaround"
-    if any(k in t for k in ("先验证", "验证什么", "验证哪")):
-        return "validate_first"
-    if any(k in t for k in ("该不该开", "要不要开", "能不能开", "值得开", "该开吗",
-                            "划不划算", "值不值", "要不要做", "该不该做", "能不能做")):
-        return "go_no_go"
-    if any(k in t for k in ("该不该继续", "要不要继续", "能不能继续", "该继续吗",
-                            "要不要撤", "要不要停", "关不关", "该不该关", "要不要关",
-                            "继续下去", "还行不行")):
-        return "continue_stop"
-    if any(k in t for k in ("撑多久", "能扛多久", "资金够撑", "现金够撑", "还能撑")):
-        return "runway"
-    if any(k in t for k in ("选哪个", "好还是", "哪个好", "怎么选", "还是", "对比")):
-        return "choose"
+    low = text.strip().lower()
+    for subtype, markers in rules.decision_subtypes().items():
+        for k in markers:
+            if k.lower() in low:
+                return subtype
     return "turnaround"

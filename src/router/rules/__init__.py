@@ -70,6 +70,7 @@ def _empty_pack() -> Dict[str, Any]:
         "weak_compare_markers": [],
         "decision_markers": [],
         "cashflow_markers": [],
+        "decision_subtypes": {},
     }
 
 
@@ -129,6 +130,7 @@ def _load(locale: str) -> Dict[str, Any]:
             "weak_compare_markers": raw.get("weak_compare_markers") or [],
             "decision_markers": raw.get("decision_markers") or [],
             "cashflow_markers": raw.get("cashflow_markers") or [],
+            "decision_subtypes": raw.get("decision_subtypes") or {},
         }
     except FileNotFoundError:
         logger.error("rules: 规则文件缺失 locale=%s path=%s", locale, path)
@@ -261,3 +263,12 @@ def labor_pair_patterns(locale: Optional[str] = None) -> List[Dict[str, Any]]:
     每项形如 {"re": <compiled>, "count": <组号>, "salary": <组号>}。
     """
     return _pack(locale)["labor_pair_patterns"]
+
+
+def decision_subtypes(locale: Optional[str] = None) -> Dict[str, List[str]]:
+    """决策子类型 → 标记词映射（intent.decide_type_of 用，顺序即优先级）。
+
+    turnaround / validate_first / go_no_go / continue_stop / runway / choose。
+    英文部署若只剩中文词表，所有英文决策问句都会落回默认 turnaround（静默错配）。
+    """
+    return _pack(locale)["decision_subtypes"]

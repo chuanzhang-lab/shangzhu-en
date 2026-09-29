@@ -234,6 +234,7 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "project_manager.py"),
     os.path.join("src", "storage", "local_store.py"),
     os.path.join("src", "llm_advisor.py"),
+    os.path.join("src", "router", "intent.py"),
     "web_server.py",
 ]
 
@@ -269,6 +270,11 @@ ENGINE_DATA_LITERALS = {
     # project_manager：city 是输入层**数据**匹配正则（中文地点后缀 市/区/县），
     # 与行业关键词同类，改它会破坏城市抽取；英文抽取走后续 rules.city_patterns。
     r"在(\w+(?:市|区|县))",
+    # intent.py：_ZH_COMPARE_RES 是中文**语言结构**正则（好…还是 / 还是…好 /
+    # 方案[abAB]），英文版用 vs / "a or b" 等 rules 标记，此三行只服务中文输入。
+    r"好\s*[，,]?\s*还是",
+    r"还是\s*[^，。？！]*好",
+    r"方案\s*[abAB]",
 }
 
 

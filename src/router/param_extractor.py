@@ -476,8 +476,6 @@ def _find_number(text: str, units, strict: bool = False,
 
 # ─── 主入口 ───────────────────────────────────────────────────────────────
 
-_LABOR_VERB = r"(?:改为|改成|调成|调到|调为|换成|变为|变成|设为|定为|调成|调整?为?|改|调|换)?\s*"
-
 
 def _extract_labor_pair(text: str) -> Tuple[Optional[float], Optional[float]]:
     """从人力连写短语同时抽出人数与人均薪资。
