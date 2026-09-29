@@ -114,11 +114,16 @@ def test_is_decision_scan():
 
 
 def test_system_decision_no_tendency():
-    """决策模式系统提示禁止倾向/命令/判决措辞，且不替用户拍板。"""
+    """决策模式系统提示禁止倾向/命令/判决措辞，且不替用户拍板。
+
+    提示词已外置到 i18n 的 llm.system_decision（随 locale），此处回归中文原句。
+    """
+    from i18n import t
+    decision = t("llm.system_decision")
     banned_dir = "禁止一切倾向/命令/判决类措辞"
-    assert banned_dir in llm_advisor._SYSTEM_DECISION
-    assert "不替用户拍板" in llm_advisor._SYSTEM_DECISION
-    assert "把决定权交还给他" in llm_advisor._SYSTEM_DECISION
+    assert banned_dir in decision
+    assert "不替用户拍板" in decision
+    assert "把决定权交还给他" in decision
 
 
 # ─── 独立运行入口（无需 pytest）──────────────────────────────────────────

@@ -21,6 +21,10 @@ _MARKERS = {
         "tam_huge": ["万亿", "千亿", "所有人", "全部", "任何人", "全民", "全球"],
         # 「声称无竞争对手」的信号词
         "no_competitor": ["没有竞争", "没有对手", "无竞争", "蓝海", "空白市场", "独一无二"],
+        # LLM 输出里的「风险句」起始词（advisor_formatter 用它从解读文本抽风险段）
+        "risk": ["风险", "注意", "警告", "警惕", "小心", "谨防"],
+        # 引擎来源标注里的「冲突」信号（fixed_cost_sum_conflict 的文案、staff_out_of_range 的 [矛盾] 标记）
+        "conflict": ["矛盾", "冲突"],
     },
     "en": {
         "tam_huge": [
@@ -32,6 +36,11 @@ _MARKERS = {
             "no rival", "no rivals", "blue ocean", "untapped market",
             "no one else", "nobody else", "unique in the market",
         ],
+        "risk": [
+            "risk", "warning", "caution", "beware", "danger",
+            "watch out", "be careful", "alert", "heads up",
+        ],
+        "conflict": ["conflict", "contradict", "conflicts with", "mismatch"],
     },
 }
 
@@ -42,3 +51,18 @@ def tam_huge_markers() -> list:
 
 def no_competitor_markers() -> list:
     return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["no_competitor"])
+
+
+def risk_markers() -> list:
+    """LLM 输出风险句起始词（随 locale；英文部署匹配英文 LLM 输出的 risk/warning…）。"""
+    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["risk"])
+
+
+def conflict_markers() -> list:
+    """引擎来源标注里的「冲突」信号词（随 locale）。
+
+    用于 _emit_anomaly_report 检测参数矛盾：fixed_cost_sum_conflict 的展示文案把
+    「与显式总数矛盾/conflicts with explicit total」写进字段来源串（其 _codes 仍是
+    user/derived），所以不能只看状态码，还得匹配文案里的冲突信号。
+    """
+    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["conflict"])

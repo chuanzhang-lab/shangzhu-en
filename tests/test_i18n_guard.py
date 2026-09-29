@@ -233,6 +233,7 @@ CONVERTED_MODULES = [
     os.path.join("src", "tools", "report_generator.py"),
     os.path.join("src", "tools", "project_manager.py"),
     os.path.join("src", "storage", "local_store.py"),
+    os.path.join("src", "llm_advisor.py"),
     "web_server.py",
 ]
 

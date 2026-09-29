@@ -26,6 +26,8 @@ import requests
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 # HTTP 客户端上限：配置 timeout 不得超过此值（防 300s 拖垮并发）。
 # 各入口由 web_server wait_for 分层：闲聊 steward 8s，顾问/按需解读 30s。
@@ -122,76 +124,8 @@ def _resolve_llm_config_path() -> str:
 
 LLM_CONFIG_PATH = _resolve_llm_config_path()
 
-_SYSTEM = """你是「创业者商业建模工作台」的**交互主持人**——用户的私人创业分析顾问。
-
-你的核心角色是**翻译 + 追问 + 推荐**：
-### 1. 翻译（把数字变成决策）
-- 把引擎输出的结构化数据（月利润、跑道、盈亏平衡点）翻译成用户能理解的语言
-- 不只是报数字，还要解释**为什么重要**："月利润 5000，跑道 5 个月偏紧——一般建议至少 6 个月缓冲"
-- 把数字翻译成画面感："每月落袋 5000，够覆盖..."
-
-### 2. 追问（引导用户补参数）
-- 缺核心参数时，追问 1-2 个最关键的（月租、客流、客单价、员工数）
-- 每轮追问都给"先用默认值算一下"选项："月租多少？没概念的话先用 8000 算一下"
-- 追问有明确目标，不是漫无目的
-
-### 3. 推荐（从引擎给的动作列表里选）
-- 参数充足时，推荐下一步最该看的分析（从引擎提供的 available_actions 里选）
-- 每轮最多推荐一个动作，结尾问"要不要看看？"
-- 连续两轮推荐后，第三轮起不再推荐，等用户指令
-
-## 铁律（不可破）
-- 你看到的「结构化分析结果 + 当前会话状态 + 本轮变更」即唯一真相。绝不声称引擎错了、绝不与历史原文对账。
-- **任何面向用户的数字必须来自结构化输出，绝不在体内做算术**
-- **绝不评价参数好坏**："月租 1 万偏高" ❌ → "月租 1 万占成本 40%，比行业平均高 5 个百分点" ✅
-- **绝不替用户做决定**："我建议你提价" ❌ → "要不要看看提价的影响？" ✅
-- 绝不修改派生字段（monthly_labor / monthly_fixed_cost / monthly_profit 等靠引擎重算，不让人改）。
-- **绝不自行分析趋势/做推断**：所有分析是引擎的事
-
-## 编排能力（Tier 1，受代码校验后由用户确认）
-- 用户给模糊目标时，在回复末尾输出 ```ops 块，给骨架只给方向不给死值：
-
-  ```ops
-  [
-    {"propose": "try", "label": "提价3元", "changes": {"price_per_unit": 18}, "reason": "看提价能否扭亏"},
-    {"propose": "try", "label": "客流+10/天", "changes": {"daily_traffic": 60}, "reason": "看客流提升能否扭亏"}
-  ]
-  ```
-
-  或单值改动：
-
-  ```ops
-  [
-    {"propose": "set", "field": "avg_salary", "value": 3000, "reason": "用户明确要求改为3000元"}
-  ]
-  ```
-
-  web 端会逐条算预览，把「方案X→月利润Y」回贴给你看，用户回「应用X」才生效。你只提议，不执行。
-
-- 编排只针对「基础字段」。派生字段、模板配置、行业默认 一律不可在 ops 里出现。
-- 用户已明确给出精确参数时（如「人工改为2*3000」），抽取器会自动处理掉，**不要输出 ops**，只解读后果即可。
-
-语气：简洁、直接、不寒暄、不喊口号。一次最多给一个真正的下一步追问。
-"""
-
-
-# L2 决策模式系统提示（D5/D6：选项+风险+作废条件，绝不含倾向/判决/命令）
-_SYSTEM_DECISION = """你是「验证期决策工作台」的决策解说员——只把结构化决策讲清楚，不替用户拍板。
-
-输入是规则层算好的决策结果（客观结论 + 候选调整 + 先验证什么）。你的任务：
-1) 用人话转述「客观结论」的数字与含义（月利润、距盈亏平衡、跑道）。
-2) 把每个候选调整讲成「选项 + 代价/风险」，不要预言哪个一定好。
-3) 把「先验证什么」的最小实验讲成可执行的一步。
-4) 若用户给了自己的底线（现金、最长可亏月数、能接受的回本周期），只在转述里体现，不下判决。
-
-铁律（不可破，命中即违规）：
-- 禁止一切倾向/命令/判决类措辞（"我建议你开/关"、"你应该提价"、"千万别继续"这类一律不准）。
-- 禁止说「我建议关店 / 我建议继续 / 你该提价」这类代替用户拍板的话。
-- 禁止在体内做任何算术；所有数字必须来自输入的结构化结果。
-- 我不执行任何 ops 的写入；如需调整，说明「可回『应用X』试这一项」，绝不替用户决定要不要应用。
-- 用户问「那你说我到底该不该」，你可以重申客观数字 + 反问他的底线（现金能撑多久/可接受风险），把决定权交还给他。
-"""
-
+# 系统提示词（交互主持人 / 决策解说员）已外置到 src/i18n/{zh,en}.yaml 的 llm.system /
+# llm.system_decision —— 随 locale 取，英文部署下 LLM 才能用英文回复。
 
 def _is_decision_scan(scan: dict) -> bool:
     """识别结构化决策结果（decision_engine.decide 产物）。"""
@@ -251,31 +185,31 @@ def _build_brief(scan: dict, changes: dict = None) -> str:
 
     # 本轮变更置顶——这是用户当下最在意的，也是避免 LLM 翻历史原文的关键
     if changes:
-        lines.append("本轮已更新的参数：")
+        lines.append(t("llm.brief.changes_header"))
         for k, d in changes.items():
             kind = d.get("kind", "changed")
             frm = d.get("from")
             to = d.get("to")
             if kind == "added" and to is not None and not str(to).startswith("_"):
-                lines.append(f"  - {k}: 新增={to}")
+                lines.append(t("llm.brief.added", k=k, to=to))
             elif kind == "changed" and to is not None and not str(to).startswith("_"):
-                lines.append(f"  - {k}: {frm} → {to}")
+                lines.append(t("llm.brief.changed", k=k, frm=frm, to=to))
             elif kind == "removed":
-                lines.append(f"  - {k}: 已删除（原 {frm}）")
+                lines.append(t("llm.brief.removed", k=k, frm=frm))
         lines.append("")
 
-    pt = scan.get("project_type") or scan.get("industry_name") or "未知行业"
-    lines.append(f"项目类型：{pt}")
+    pt = scan.get("project_type") or scan.get("industry_name") or t("llm.brief.unknown_industry")
+    lines.append(t("llm.brief.project_type", pt=pt))
 
     if scan.get("insufficient"):
-        lines.append("状态：参数不足（已暂停完整分析）")
+        lines.append(t("llm.brief.insufficient"))
         gaps = scan.get("gaps", [])
         if gaps:
-            lines.append("待补字段：" + "、".join(gaps))
+            lines.append(t("llm.brief.gaps", gaps=t("llm.brief.sep").join(gaps)))
     else:
         cm = scan.get("core_metrics", {})
         if cm:
-            lines.append("核心指标：")
+            lines.append(t("llm.brief.core_metrics"))
             for k in ("monthly_revenue", "monthly_fixed_cost", "monthly_profit", "runway_months"):
                 if k in cm:
                     lines.append(f"  - {k}: {cm[k]}")
@@ -283,9 +217,10 @@ def _build_brief(scan: dict, changes: dict = None) -> str:
         params = scan.get("params") or {}
         if params.get("monthly_labor") is not None:
             lines.append(
-                f"  - 人工裸薪: {params.get('monthly_labor_cash')} "
-                f"含负担: {params.get('monthly_labor')} "
-                f"(负担率 {params.get('labor_burden_rate')})"
+                t("llm.brief.labor",
+                  cash=params.get("monthly_labor_cash"),
+                  labor=params.get("monthly_labor"),
+                  rate=params.get("labor_burden_rate"))
             )
 
     # 情景区间
@@ -293,26 +228,26 @@ def _build_brief(scan: dict, changes: dict = None) -> str:
     if sc and sc.get("has_uncertainty"):
         mp = sc.get("monthly_profit", {})
         lines.append(
-            f"情景区间：月利润 乐观 {mp.get('best')} / 中性 {mp.get('base')} / 保守 {mp.get('worst')}"
+            t("llm.brief.scenario", best=mp.get("best"), base=mp.get("base"), worst=mp.get("worst"))
         )
         drivers = sc.get("drivers") or []
         if drivers:
-            lines.append("不确定来源：" + "、".join(drivers))
+            lines.append(t("llm.brief.drivers", drivers=t("llm.brief.sep").join(drivers)))
 
     # 叙事（已含风险杠杆，直接复用）
     if scan.get("narrative"):
-        lines.append("风险聚焦：" + scan["narrative"])
+        lines.append(t("llm.brief.narrative", narrative=scan["narrative"]))
 
     # 假设清单
     asm = scan.get("assumptions") or []
     if asm:
-        lines.append("当前假设：")
+        lines.append(t("llm.brief.assumptions"))
         for a in asm:
-            lines.append(f"  - {a.get('field')}: {a.get('value')} 来源={a.get('source')}")
+            lines.append(t("llm.brief.assumption_line", field=a.get("field"), value=a.get("value"), source=a.get("source")))
 
     # 置信概览
     if scan.get("confidence"):
-        lines.append(f"置信概览：{scan['confidence']}")
+        lines.append(t("llm.brief.confidence", confidence=scan["confidence"]))
 
     return "\n".join(lines)
 
@@ -325,20 +260,28 @@ def _emit_anomaly_report(scan: dict):
     """
     src = scan.get("param_sources") or {}
     anomalies = []
+    # 冲突信号在展示文案里（fixed_cost_sum_conflict 的 _codes 仍是 user/derived），
+    # 且随 locale（中文「矛盾」/英文「conflicts with」），故用 locale 分桶词表匹配，
+    # 不能只查状态码、也不能只匹配中文「矛盾」（英文下会静默失效——M4 同类事故）。
+    from tools.pitfall_markers import conflict_markers
+    _conflict_kws = conflict_markers()
     for k, v in src.items():
-        if isinstance(v, str) and "矛盾" in v:
+        if not isinstance(v, str):
+            continue  # 跳过 _codes / _guard 等结构化元数据
+        lower = v.lower()
+        if any(kw.lower() in lower for kw in _conflict_kws):
             anomalies.append({"field": k, "source": v})
     # 极端固定成本（疑似抽取误抓，如被误抓成 1.0）
     fc = (scan.get("params") or {}).get("monthly_fixed_cost")
     if isinstance(fc, (int, float)) and fc == 1.0:
-        anomalies.append({"field": "monthly_fixed_cost", "source": f"异常值 {fc}（疑似抽取误抓）"})
+        anomalies.append({"field": "monthly_fixed_cost", "source": f"abnormal value {fc} (likely extraction mis-parse)"})
     if not anomalies:
         return None
     report = {
         "type": "AnomalyReport",
         "detected_at": "runtime",
         "anomalies": anomalies,
-        "proposed_fix": "核对用户输入与抽取器，确认组件聚合(C1)优先级或显式总数处理",
+        "proposed_fix": "Cross-check user input and the extractor; confirm component-aggregation (C1) priority or explicit-total handling",
         "should_cover_test": "tests/test_phase4_workbench.py",
     }
     logger.warning("Engine anomaly detected: %s", json.dumps(report, ensure_ascii=False))
@@ -472,29 +415,27 @@ def advise(scan: dict, user_text: str = "", session_snapshot: dict = None, conte
     grounding = ""
     if clean_snap:
         try:
-            grounding = "【当前会话状态（不含历史原文）】\n" + json.dumps(
+            grounding = t("llm.prompt.grounding_header") + json.dumps(
                 clean_snap, ensure_ascii=False
             ) + "\n\n"
         except (TypeError, ValueError):
             grounding = ""
 
     is_decision = _is_decision_scan(scan_ro)
-    system = _SYSTEM_DECISION if is_decision else _SYSTEM
+    system = t("llm.system_decision") if is_decision else t("llm.system")
     if is_decision:
         user_prompt = (
-            f"【用户原始输入】{user_text}\n\n"
-            f"{grounding}"
-            f"【结构化决策结果】\n{brief}\n\n"
-            "请按系统提示词的「决策解说员」职责输出：客观数字 + 选项代价 + 反问用户底线。"
-            "**严禁**出现倾向/命令/判决词（建议你/你应该/必须/别…），命中即违规。"
-            "不必输出 ```ops 块；候选调整已由规则层给出。"
+            t("llm.prompt.user_input", text=user_text)
+            + grounding
+            + t("llm.prompt.decision_result", brief=brief)
+            + t("llm.prompt.decision_instr")
         )
     else:
         user_prompt = (
-            f"【用户原始输入】{user_text}\n\n"
-            f"{grounding}"
-            f"【结构化分析结果】\n{brief}\n\n"
-            "请基于以上给出解读与建议。若有需要编排的候选方案，按系统提示词输出 ```ops 块。"
+            t("llm.prompt.user_input", text=user_text)
+            + grounding
+            + t("llm.prompt.analysis_result", brief=brief)
+            + t("llm.prompt.analysis_instr")
         )
     # 主持人模式：根据 context 调整策略
     meta = {"asked_question": False, "made_recommendation": False}
@@ -517,12 +458,11 @@ def advise(scan: dict, user_text: str = "", session_snapshot: dict = None, conte
         defaults_hint = ""
         for p in priority_params:
             if p in has_default:
-                defaults_hint += f"- {p} 的默认值为 {has_default[p]}\n"
+                defaults_hint += t("llm.prompt.default_line", p=p, v=has_default[p])
         strategy_hints.append(
-            f"【追问】还缺以下核心参数：{', '.join(priority_params)}。"
-            f"请追问这些参数（最多问 1-2 个），并告诉用户可以用默认值先算一下。\n"
-            f"{defaults_hint}"
-            f"示例：\"月租大概多少？没概念的话先用 8000 算一下。\""
+            t("llm.prompt.ask",
+              params=", ".join(priority_params),
+              defaults=defaults_hint)
         )
         meta["asked_question"] = True
     elif recommendation_count < 2 and available_actions:
@@ -530,16 +470,13 @@ def advise(scan: dict, user_text: str = "", session_snapshot: dict = None, conte
         # 排除「重新扫描(quick_scan)」与「对比(compare_scenarios)」，取第一个真正的下一步分析
         actionable = [a for a in available_actions if a not in ("quick_scan", "compare_scenarios")]
         pick = actionable[0] if actionable else "quick_scan"
-        strategy_hints.append(
-            f"【推荐】参数已充足。下一步最该看的是：{pick}。"
-            f"结尾问\"要不要看看？\"，不要强推。"
-        )
+        strategy_hints.append(t("llm.prompt.recommend", pick=pick))
         meta["made_recommendation"] = True
     else:
-        strategy_hints.append("【静默】不要推荐新动作，直接等用户指令。结尾说\"有什么想了解的直接说\"。")
+        strategy_hints.append(t("llm.prompt.silent"))
 
     # 绝不分析的硬约束
-    strategy_hints.append("【禁止分析】所有数字必须来自引擎输出。禁止自行做算术、推断趋势、评价参数好坏。只翻译数字含义和解释影响。")
+    strategy_hints.append(t("llm.prompt.no_analyze"))
 
     strategy_block = "\n\n".join(strategy_hints)
 
@@ -557,7 +494,7 @@ def advise(scan: dict, user_text: str = "", session_snapshot: dict = None, conte
             return {"text": clean_text.strip(), "ops": ops, "meta": meta}
         return {"text": raw_text, "ops": [], "meta": meta}
     except Exception as e:  # noqa
-        logger.warning(f"LLM 解读失败，跳过: {e}")
+        logger.warning(t("llm.log.advise_fail") + f": {e}")
         return {"text": "", "ops": [], "meta": meta}
 
 
@@ -576,7 +513,7 @@ def _parse_ops(text: str) -> list:
         try:
             ops = json.loads(body)
         except json.JSONDecodeError as e:
-            logger.warning(f"ops 块 JSON 解析失败: {e}")
+            logger.warning(t("llm.log.ops_parse_fail") + f": {e}")
             continue
         if isinstance(ops, dict):
             out.append(ops)
@@ -657,7 +594,7 @@ def save_llm_config(model: str, base_url: str, api_key: str) -> dict:
     with _config_write_lock:
         key_raw = (api_key or "").strip()
         if key_raw and len(key_raw) < 8:
-            raise ValueError(f"API Key 过短（{len(key_raw)} 位），至少 8 位")
+            raise ValueError(t("llm.err.key_too_short", n=len(key_raw)))
 
         path = _resolve_llm_config_path()
         # 基底：读现有文件（保留 sp/tools 等非 config 字段）
@@ -721,15 +658,15 @@ def _validate_llm_url(base_url: str) -> Optional[str]:
 
     u = urlparse((base_url or "").strip())
     if u.scheme != "https":
-        return f"仅允许 https 协议（当前: {u.scheme or '无'}）"
+        return t("llm.err.only_https", scheme=(u.scheme or "none"))
     host = u.hostname or ""
     if not host:
-        return "URL 缺少主机名"
+        return t("llm.err.no_host")
     # 回环/内网字面量
     try:
         ip = ipaddress.ip_address(host)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return f"禁止探测内网/保留地址: {host}"
+            return t("llm.err.banned_ip", host=host)
         return None  # 公网 IP 直接放行
     except ValueError:
         pass  # 是域名，继续检查
@@ -737,7 +674,7 @@ def _validate_llm_url(base_url: str) -> Optional[str]:
     _BANNED_HOSTS = ("localhost", "localhost.localdomain", "metadata.google.internal",
                      "169.254.169.254", "instance-data")
     if host.lower() in _BANNED_HOSTS or host.lower().endswith(".internal") or host.lower().endswith(".local"):
-        return f"禁止探测内网域名: {host}"
+        return t("llm.err.banned_domain", host=host)
     return None
 
 def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
@@ -755,11 +692,11 @@ def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
     # SSRF 防护：探测前校验目标
     reject = _validate_llm_url(base_url)
     if reject:
-        return {"ok": False, "status_code": None, "error": f"目标地址被拒绝：{reject}", "latency_ms": 0}
+        return {"ok": False, "status_code": None, "error": t("llm.err.target_rejected", reason=reject), "latency_ms": 0}
     try:
         from requests import post, exceptions
     except ImportError:
-        return {"ok": False, "status_code": None, "error": "requests 库不可用，跳过连通性探测", "latency_ms": 0}
+        return {"ok": False, "status_code": None, "error": t("llm.err.requests_missing"), "latency_ms": 0}
 
     # 绕过代理：将 API 域名加入 NO_PROXY
     from urllib.parse import urlparse
@@ -788,13 +725,13 @@ def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
         if resp.status_code == 200:
             return {"ok": True, "status_code": 200, "error": "", "latency_ms": latency}
         # 安全审查 S6：不回显响应体（防借探测接口读取内网服务内容），只回状态码
-        return {"ok": False, "status_code": resp.status_code, "error": f"HTTP {resp.status_code}（服务端返回非 200）", "latency_ms": latency}
+        return {"ok": False, "status_code": resp.status_code, "error": t("llm.err.http_non_200", code=resp.status_code), "latency_ms": latency}
     except exceptions.Timeout:
         latency = int((_time.time() - t0) * 1000)
-        return {"ok": False, "status_code": None, "error": f"探测超时（>5s）", "latency_ms": latency}
+        return {"ok": False, "status_code": None, "error": t("llm.err.probe_timeout"), "latency_ms": latency}
     except exceptions.ConnectionError as e:
         latency = int((_time.time() - t0) * 1000)
-        return {"ok": False, "status_code": None, "error": f"连接失败: {e}", "latency_ms": latency}
+        return {"ok": False, "status_code": None, "error": t("llm.err.conn_fail", e=e), "latency_ms": latency}
     except Exception as e:  # noqa: BLE001
         latency = int((_time.time() - t0) * 1000)
-        return {"ok": False, "status_code": None, "error": f"探测异常: {e}", "latency_ms": latency}
+        return {"ok": False, "status_code": None, "error": t("llm.err.probe_error", e=e), "latency_ms": latency}

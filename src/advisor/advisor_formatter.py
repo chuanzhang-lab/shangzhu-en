@@ -17,6 +17,7 @@ import re
 from typing import Any, Optional
 from i18n import t
 from source_tags import CANDIDATE, DERIVED, code_of, mark
+from tools.pitfall_markers import risk_markers
 
 
 def validate_no_computed_numbers(text: str, clean_view: dict) -> str:
@@ -116,21 +117,23 @@ def _build_citations_from_text(text: str, clean_view: dict,
 def _parse_risks_from_text(text: str) -> list:
     """从 LLM 文本中解析风险段落。
 
-    匹配以"风险"、"注意"、"警告"、"警惕"开头的句子。
+    匹配以「风险/注意/警告/警惕」（或英文 risk/warning/caution…）开头的句子。
+    词表随 locale 分桶（英文部署匹配英文 LLM 输出，否则风险面板静默为空）。
     """
     risks = []
     if not text:
         return risks
 
-    # 按行匹配风险关键词
-    risk_keywords = ["风险", "注意", "警告", "警惕", "警惕", "小心", "谨防"]
+    # 按行匹配风险关键词（大小写不敏感，覆盖英文 LLM 的首字母大写）
+    risk_keywords = risk_markers()
     lines = text.split("\n")
     for line in lines:
         line = line.strip()
         if not line:
             continue
+        lower = line.lower()
         for kw in risk_keywords:
-            if kw in line:
+            if kw.lower() in lower:
                 risks.append({"text": line})
                 break
     return risks
