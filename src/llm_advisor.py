@@ -28,7 +28,11 @@ from langchain_openai import ChatOpenAI
 
 from i18n import t
 
-logger = logging.getLogger(__name__)
+# 必须挂到 "web.*" 命名空间：web_server 把 handler 装在 logging.getLogger("web") 上。
+# 用 __name__ 会得到一个与 "web" 无血缘的 logger（"llm_advisor"），继承不到任何
+# handler → 只走 lastResort 打一行到 stderr，**日志文件里查无此项**。LLM 401 这类
+# 故障因此在排查时完全隐形（症状：点 AI 解读一片空白，日志却干净得像没事）。
+logger = logging.getLogger("web.llm_advisor")
 # HTTP 客户端上限：配置 timeout 不得超过此值（防 300s 拖垮并发）。
 # 各入口由 web_server wait_for 分层：闲聊 steward 8s，顾问/按需解读 30s。
 _LLM_TIMEOUT = 45

@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Tuple, Optional
 from param_guard import guard_extracted, validate_field, LEVEL_CRITICAL
 from i18n import t
 
-logger = logging.getLogger(__name__)
+# 挂在 "web." 名下才能继承 web_server 配置的 handler，日志才会落盘。
+#（同 llm_advisor：用 __name__ 会得到一个孤立 logger，只走 stderr lastResort。）
+logger = logging.getLogger("web.op_executor")
 
 
 # 基础字段白名单：用户/LLM 可改的原子参数。派生字段一律不在内。
