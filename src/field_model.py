@@ -285,39 +285,6 @@ PURE_INPUT_FIELDS: set = set(INPUT_SPECS.keys())
 OVERRIDABLE_FIELDS: set = {name for name, spec in DERIVED_SPECS.items() if spec.get("kind") == "override"}
 PURE_DERIVED_FIELDS: set = {name for name, spec in DERIVED_SPECS.items() if spec.get("kind") == "derived"}
 
-# B 类字段依赖关系：当 A 类依赖字段变化时，清掉 B 类用户覆盖
-B_FIELD_DEPENDENCIES: dict = {
-    "monthly_revenue": ["daily_traffic", "price_per_unit"],
-    "variable_cost_ratio": ["unit_variable_cost", "price_per_unit", "gross_margin"],
-    "monthly_profit": ["monthly_revenue", "monthly_fixed_cost", "monthly_variable_cost"],
-    "gross_margin": ["variable_cost_ratio"],
-}
-
-
-def clear_stale_overrides(old_params: dict, new_params: dict, user_overrides: dict) -> dict:
-    """当 A 类依赖字段变化时，清掉旧 B 类用户值。
-
-    参数：
-        old_params: 历史参数
-        new_params: 本轮新参数
-        user_overrides: 当前 B 类字段用户覆盖 {field: value}
-
-    返回：
-        更新后的 user_overrides（已清除失效覆盖）
-    """
-    for b_field, deps in B_FIELD_DEPENDENCIES.items():
-        if b_field not in user_overrides:
-            continue
-        for dep in deps:
-            old_val = old_params.get(dep)
-            new_val = new_params.get(dep)
-            if old_val != new_val:
-                # 依赖变化 → 清掉 B 类用户覆盖
-                del user_overrides[b_field]
-                break
-    return user_overrides
-
-
 # ── 统一字段注册表 ──────────────────────────────────────────────────────
 
 def field_label(name: str) -> str:

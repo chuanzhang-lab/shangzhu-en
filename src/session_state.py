@@ -121,7 +121,6 @@ def infer_focus_fields(text: str) -> Optional[List[str]]:
 def _new_state() -> dict:
     return {
         "params": {},           # A 类 + C 类字段
-        "user_overrides": {},   # B 类字段用户覆盖（临时，依赖变化自动清除）
         "industry": None,
         "raw_text": "",
         "turn": 0,
@@ -274,13 +273,14 @@ def apply_turn_guarded(thread_id: str, new_params: dict, new_raw: str = "",
     返回 (state, guard_info)。同时记录本轮变更（_last_changes），供 LLM brief 用，
     让 LLM 基于「变化」讲解，而不是去翻历史原文（这是上一轮「对账幻觉」的根因）。
 
-    B 类字段覆盖失效：当 A 类依赖字段变化时，自动清掉旧 B 类用户覆盖，回退公式推算。
+    B 类字段（用户可直述也可公式推的那类）：**用户说过的值永不被静默清除**。
+    改客单价后究竟是「率不变、单位成本跟着变」还是「单位成本不变、率变」，
+    系统猜不准；猜错就是静默丢弃用户明确说过的数——财务工具最恶劣的失败模式。
+    矛盾一律交给一致性规则提示，由用户确认，不在这里替他选。
     """
     with _LOCK:
         st = get_state(thread_id)
         old_params = dict(st.get("params") or {})
-
-        from field_model import OVERRIDABLE_FIELDS, clear_stale_overrides
 
         # ── 第一步：所有字段统一走守门（归一化 + 校验 + 矛盾检测）──
         # B 类字段（如 variable_cost_ratio=6000）必须也经过 validate_params 归一化
@@ -292,27 +292,7 @@ def apply_turn_guarded(thread_id: str, new_params: dict, new_raw: str = "",
             is_continuation=continuation
         )
 
-        # ── 第二步：从已验证的 merged 中分离 B 类字段 ──
-        old_overrides = dict(st.get("user_overrides") or {})
-        # 新轮带来的 B 类字段（已归一化/修正）→ 加入 user_overrides
-        new_b_fields = {k: v for k, v in merged.items()
-                        if k in OVERRIDABLE_FIELDS and v is not None}
-        if new_b_fields:
-            old_overrides.update(new_b_fields)
-
-        # 依赖变化 → 清掉失效覆盖
-        non_b_params = {k: v for k, v in (new_params or {}).items()
-                        if k not in OVERRIDABLE_FIELDS}
-        updated_overrides = clear_stale_overrides(old_params, non_b_params, old_overrides)
-        st["user_overrides"] = updated_overrides
-
-        # B 类字段被清除时，从 merged 中移除旧值
-        # （merged 是刚算出的新 params，若不清除失效 B 类字段会残留为假 override）
-        removed_b_fields = set(old_overrides.keys()) - set(updated_overrides.keys())
-        for bf in removed_b_fields:
-            merged.pop(bf, None)
-
-        # B 类字段同时保留在 params 中（历史/展示/推算输入都需要）
+        # B 类字段保留在 params 中（历史/展示/推算输入都需要），不做任何清除
         st["params"] = merged
         if industry:
             st["industry"] = industry

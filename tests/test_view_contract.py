@@ -120,3 +120,27 @@ def test_core_param_fields_cover_all_extracted_numeric_fields():
         p = extract_params(s) or {}
         missing |= {k for k in p if not k.startswith("_")} - _CORE_PARAM_FIELDS
     assert not missing, f"抽取层产出了核心清单不认的字段：{sorted(missing)}"
+
+
+# ── 死机制删除契约：用户说过的率永不被静默清除 ────────────────────────────
+
+def test_user_stated_ratio_survives_dependency_change():
+    """先说「率60%」，后改「客单价30」——率必须保留，不能被静默清掉。
+
+    这条钉死的是已删除的「清覆盖」机制不再回来：
+    clear_stale_overrides + B_FIELD_DEPENDENCIES 此前设计意图是「依赖变化时
+    清掉旧 B 类用户覆盖」，实测发现它从 Initial commit 起就从未工作过
+    （del user_overrides[b_field] 原地删了传入的同一个 dict，diff 恒为空集）。
+    即使修好它，它也是在替用户猜——财务工具最恶劣的失败模式。故删除而非修复。
+
+    矛盾改由一致性规则提示（test_unit_cost_vs_stated_ratio_flagged 已覆盖）。
+    """
+    import session_state as ss
+    tid = "vc-stale"
+    st, _ = ss.apply_turn_guarded(tid, {"price_per_unit": 25.0,
+                                        "variable_cost_ratio": 0.6}, "T1")
+    st, _ = ss.apply_turn_guarded(tid, {"price_per_unit": 30.0}, "T2")
+    p2 = {k: v for k, v in st["params"].items() if not k.startswith("_")}
+    assert p2.get("variable_cost_ratio") == 0.6, "用户说过的率被静默清掉了"
+    # state 不再保留这个曾经装死机制的键
+    assert "user_overrides" not in st
