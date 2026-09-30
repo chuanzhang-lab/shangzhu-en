@@ -119,7 +119,10 @@ def _finalize(intent: str, score: float, text: str,
         return ("quick_scan", max(score, 0.9))
     if intent in ("quick_scan", "chitchat") and _looks_like_decision_question(text):
         return ("decide", max(score, 0.9))
-    if intent in ("quick_scan", "chitchat") and _looks_like_cashflow_question(text):
+    # 「现金流预测」会先被 trend 命中（"预测"是趋势词），若只从 quick_scan/chitchat
+    # 升级，这类问句就停在 trend 上，用户要的现金流明细表永远给不出 —— 表现得
+    # 像功能缺失，实为升级通路漏了 trend。含现金流标记时应让更具体的 cashflow 抢占。
+    if intent in ("quick_scan", "chitchat", "trend") and _looks_like_cashflow_question(text):
         return ("cashflow", max(score, 0.9))
     return (intent, score)
 
