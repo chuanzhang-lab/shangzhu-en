@@ -705,6 +705,15 @@ def _route_intent(intent: str, merged_params: dict, user_text: str) -> Optional[
         if scan.get("insufficient"):
             return {"intent": intent, "data": scan, "params": merged_params}
         filled_params = scan.get("params", merged_params)
+        # 出口 params 只含**输入字段**，派生值在 core_metrics 里；归因靠 monthly_revenue
+        # 算变动成本/总成本，缺了就永远回落成「补充：月营收」，功能形同不可用。
+        _cm = scan.get("core_metrics") or {}
+        if filled_params.get("monthly_revenue") is None and _cm.get("monthly_revenue") is not None:
+            filled_params["monthly_revenue"] = _cm["monthly_revenue"]
+        # 同 sensitivity 的陷阱：出口 vcr 是展示串 "60%"，乘进 Variable_cost 会崩
+        _vcr = _as_ratio(filled_params.get("variable_cost_ratio"))
+        if _vcr is not None:
+            filled_params["variable_cost_ratio"] = _vcr
         # 注入参数来源标注（供归因展示"来自用户/默认/推算"）
         filled_params["_param_sources"] = scan.get("param_sources", {})
         attr_data = _build_cost_attribution(filled_params)

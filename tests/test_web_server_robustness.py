@@ -318,3 +318,23 @@ def test_sensitivity_intent_returns_analysis_not_fallback():
     body = r.json()
     assert "抱歉，这条业务请求暂时无法生成结构化分析" not in body.get("content", ""), body
     assert "敏感度" in body.get("content", "") or "安全边际" in body.get("content", ""), body
+
+
+def test_attribution_intent_returns_decomposition_not_missing_gap():
+    """端到端：成本归因不得恒报「补充：月营收」。
+
+    月营收是**派生值**，只存在于 scan.core_metrics；出口 params 没有它，
+    归因又只从 params 取 → 只要 pixelizer 不补，该意图永远不可用。
+    """
+    tid = "rb-attribution-reg"
+    _chat([{"role": "user",
+            "content": "开奶茶店，月租金1万，日售50杯，单价15，变动成本率60%，员工2人工资各5000"}],
+          tid=tid)
+
+    r = _chat([{"role": "user", "content": "成本归因拆解"}], tid=tid)
+    assert r.status_code == 200
+    body = r.json()
+    content = body.get("content", "")
+    assert "补充：月营收" not in content, f"归因仍缺月营收: {content[:200]}"
+    # 应给出真实分解数据
+    assert "成本归因" in content or "占比" in content, content[:200]
