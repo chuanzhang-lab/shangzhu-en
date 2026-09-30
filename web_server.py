@@ -483,6 +483,34 @@ def _as_ratio(value: Any) -> Optional[float]:
     return None
 
 
+def _project_view_params(params: Optional[dict]) -> dict:
+    """把「引擎现算值」并入返回给前端的 params（只投影，不写回 session）。
+
+    解决两件各自独立的事：
+
+    1. 派生值在 session params 里根本不存在。例如用户给了「每份成本 12 元 + 客单价 15」，
+       变动成本率明明能算成 0.8，但 session 只存了那两个物理量；前端参数面板的
+       `if (lastParams[f] == null) return` 会直接不渲染这个字段 —— 用户能看到报表里
+       写着「变动成本率 80%」，却在参数面板里找不到、也改不了它。
+    2. 会话里已有的用户直述值优先，**不覆盖**（base.get(k) is None 才补），
+       所以「用户说率 55% 但物理量推算是 33%」时，返回的仍是用户说的 55%。
+
+    投影用 derive() 而不是手写 `unit_var / price`：率是多路推导，
+    derive() 是引擎的唯一计算点，能覆盖所有路；这里只做「附加入响应」。
+    """
+    base = dict(params or {})
+    try:
+        from field_model import derive as _derive
+        vals, _ = _derive(dict(base))
+    except Exception:  # 投影是增强，绝不能因为它把整个响应打断
+        logger.debug(t("ws.log.project_view_skipped"))
+        return base
+    for key in ("variable_cost_ratio",):
+        if base.get(key) is None and vals.get(key) is not None:
+            base[key] = vals[key]
+    return base
+
+
 def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
     """单一变量弹性分析：找到指定变量的盈亏平衡点。
 
@@ -1627,7 +1655,7 @@ async def chat(req: ChatRequest):
                     "thread_id": tid,
                     "mode": "structured",
                     "intent": intent,
-                    "params": routed.get("params", {}),
+                    "params": _project_view_params(routed.get("params") or merged),
                     "ops_available": bool(ops_proposals),
                     "param_sources": (routed.get("data") or {}).get("param_sources", {}),
                     "derived": (routed.get("data") or {}).get("derived", []),
@@ -1647,6 +1675,9 @@ async def chat(req: ChatRequest):
                 "thread_id": tid,
                 "mode": "structured",
                 "intent": intent,
+                # 兜底响应也必须带 params：前端 F3 校验拿不到 params 会提示
+                # 「未采纳（当前为-）」，而参数其实已写入 session —— 纯误导。
+                "params": _project_view_params(merged),
             })
 
         # ── 步骤 3: chitchat → 走 Engine Steward（只读、看清净背景当对话伙伴）──
@@ -1700,6 +1731,9 @@ async def chat(req: ChatRequest):
             "thread_id": tid,
             "mode": "steward",
             "intent": "chitchat",
+            # 同业务兜底：chitchat 也带 params。本轮补参（如「水电费改为500」）虽被
+            # 判成闲聊，参数已进 session，不带 params 会让前端显示「未采纳」。
+            "params": _project_view_params(snapshot.get("params", {})),
         })
     except Exception as e:
         # S1 修复：错误信息不泄露内部细节（堆栈/路径/版本号），仅内部日志记录

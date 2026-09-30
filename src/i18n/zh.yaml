@@ -248,6 +248,7 @@ field:
     revenue_vs_traffic: "月营收 {rev} 与「日均{traffic}×单价{price}×{days}天」推算 {implied} 差异超 50%，请确认口径"
     cost_unsustainable: "总成本 {total} 超月营收 {rev} 10 倍，参数组合物理上不可持续"
     vcr_vs_gross_margin: "毛利率 {gm}% 与变动成本率 {vcr}% 矛盾（按变动成本率推算毛利率应为 {implied}%）；当前按变动成本率口径计算，若应以毛利率为准请只保留其一"
+    vcr_vs_unit_cost: "变动成本率 {vcr}% 与「每份成本 {uvc} 元 ÷ 客单价 {price} 元」推算的 {implied}% 不一致；当前按你直述的变动成本率计算，请确认以哪个口径为准"
 
   # 冲突处置 ops
   op:
@@ -1178,6 +1179,7 @@ ws:
     intent_log: "意图: {intent} (置信度: {score}) | 输入: {text}"
     startup: Web 服务启动：本地工作台模式（仅引擎层 + Engine Steward）
     shutdown: Web 服务关闭
+    project_view_skipped: "params 视图投影跳过（derive 求值失败），按原始 params 返回"
   err:
     body_json: 请求体需为 JSON
     model_empty: 模型名称不能为空

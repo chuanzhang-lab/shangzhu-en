@@ -250,6 +250,7 @@ field:
     revenue_vs_traffic: "Monthly revenue {rev} differs by more than 50% from {implied} implied by daily {traffic} × price {price} × {days} days — please confirm the definition"
     cost_unsustainable: "Total cost {total} is more than 10× monthly revenue {rev}; this parameter combination is not physically sustainable"
     vcr_vs_gross_margin: "Gross margin {gm}% contradicts variable cost ratio {vcr}% (the ratio implies a gross margin of {implied}%); currently calculated on the variable-cost-ratio basis — keep only one if gross margin should govern"
+    vcr_vs_unit_cost: "Variable cost ratio {vcr}% contradicts {implied}% implied by unit cost {uvc} ÷ price {price}; currently calculated on your stated ratio — please confirm which basis is correct"
 
   # Conflict-resolution ops
   op:
@@ -1178,6 +1179,7 @@ ws:
     venv_switch: "[web_server] non-project .venv detected, switching to .venv: {path}"
     intent_log: "intent: {intent} (confidence: {score}) | input: {text}"
     startup: Web service starting — local workbench mode (engine layer + Engine Steward only)
+    project_view_skipped: "params view projection skipped (derive failed), returning raw params"
     shutdown: Web service stopped
   err:
     body_json: Request body must be JSON
