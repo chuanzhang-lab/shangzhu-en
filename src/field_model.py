@@ -520,10 +520,38 @@ def _rule_vcr_vs_gross_margin(params: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _rule_vcr_vs_unit_cost(params: Dict[str, Any]) -> Optional[str]:
+    """用户同时给出「每份成本 ÷ 客单价」与「变动成本率」，两者不一致时提示。
+
+    与 `_rule_vcr_vs_gross_margin` 是同一类问题：变动成本率有三个可互相校验的
+    口径（物理量除法、1−毛利率、用户直述），此前只校验了「率 vs 毛利率」这一对，
+    「每份成本12元 + 客单价15（⇒80%）」与「率75%」并存的矛盾完全静默——
+    引擎悄悄选了率，用户以为两个数都被采纳了。
+
+    不会误报：率本身是从 unit_var÷price 推出来时两者恒等，差值恒为 0。
+    只提示，不改值（改值交给 conflict_resolution_ops 让用户确认）。
+    """
+    vcr = params.get("variable_cost_ratio")
+    uvc = params.get("unit_variable_cost")
+    price = params.get("price_per_unit")
+    if not all(isinstance(x, (int, float)) for x in (vcr, uvc, price)):
+        return None
+    if not price:
+        return None
+    implied = float(uvc) / float(price)
+    # 容差 2 个百分点（与 _rule_vcr_vs_gross_margin 同口径），避开浮点噪声
+    if abs(implied - float(vcr)) > 0.02:
+        return t("field.rule.vcr_vs_unit_cost",
+                 vcr=f"{float(vcr) * 100:.0f}", uvc=f"{float(uvc):g}",
+                 price=f"{float(price):g}", implied=f"{implied * 100:.0f}")
+    return None
+
+
 CONSISTENCY_RULES: List[Callable[[Dict[str, Any]], Optional[str]]] = [
     _rule_revenue_vs_traffic_price,
     _rule_cost_structure,
     _rule_vcr_vs_gross_margin,
+    _rule_vcr_vs_unit_cost,
 ]
 
 

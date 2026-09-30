@@ -309,6 +309,12 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
         # 输入解析：兼容 40(%) 与 0.4(比例) 两种写法（单位归一，不是公式）
         p["variable_cost_ratio"] = vc / 100 if vc > 1 else vc
         st.set_tag(src, "variable_cost_ratio", USER, "user.bare")
+        # 用户直给率时，物理量（每份成本）**仍要留在 p 里**，否则「每份成本12元 ÷
+        # 客单价15 = 80%」与「率 75%」的矛盾在 consistency_issues 眼里根本不存在
+        # —— 一侧事实被丢掉后，剩下的永远自洽。率是显式值、优先级不变（derive()
+        # 的 B 类覆盖仍选它），这里只负责让矛盾可见，不参与取值。
+        if user_unit_var is not None:
+            p["unit_variable_cost"] = float(user_unit_var)
     else:
         # D2：取消「输入伪造型默认」。没给/推不出 → 缺失，不静默用行业模板填进
         # 计算图（会撑起假硬利润）；作假设候选待确认。
