@@ -146,3 +146,37 @@ def test_dedup_utilities_vs_other_fixed():
     p2 = extract_params("水电2000、杂费1000")
     assert p2.get("utilities") == 2000.0
     assert p2.get("other_fixed") == 1000.0, "分别给出时应各自保留"
+
+
+# ── F5: labor_pair 支持「各 / 每人」修饰词 ──────────────────────────────
+def test_fix_labor_pair_each_keyword():
+    """「人工2人各5000」必须同时抽出人数与薪资。
+
+    缺「各」字的后果不是少一个字段：avg_salary 漏抽 → monthly_labor 算不出
+    → 人工成本整体不进固定成本（实测月利润 -1,000 vs 正确的 -11,000）。
+    """
+    for text, exp_n, exp_s in [
+        ("人工2人各5000", 2.0, 5000.0),
+        ("2人各5000", 2.0, 5000.0),
+        ("员工2人各8000", 2.0, 8000.0),
+        ("人工3人各7000", 3.0, 7000.0),
+        ("2人每人5000", 2.0, 5000.0),
+        ("人工2人各5000元", 2.0, 5000.0),
+    ]:
+        p = extract_params(text)
+        assert p.get("employee_count") == exp_n, f"{text}: employee_count={p.get('employee_count')}"
+        assert p.get("avg_salary") == exp_s, f"{text}: avg_salary={p.get('avg_salary')}"
+
+
+def test_reg_labor_pair_without_each_still_works():
+    """补「各」不得破坏既有不含修饰词的写法。"""
+    assert extract_params("2人8000").get("avg_salary") == 8000.0
+    assert extract_params("人工2人8000").get("avg_salary") == 8000.0
+    assert extract_params("人工3500*2").get("avg_salary") == 3500.0
+
+
+def test_reg_labor_pair_no_false_positive():
+    """无人工语义的输入不得被误抽成人数/薪资。"""
+    p = extract_params("日售50杯")
+    assert p.get("employee_count") is None, p
+    assert p.get("avg_salary") is None, p
