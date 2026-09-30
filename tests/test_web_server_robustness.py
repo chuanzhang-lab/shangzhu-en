@@ -6,6 +6,8 @@
 import os
 import sys
 
+import pytest
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -247,6 +249,8 @@ def test_analysis_advice_success_timeout_and_stale():
                  "content": "奶茶店月租金1.2万员工3人工资各5000客单价15日售50杯"}],
                tid=tid)
     assert r2.status_code == 200
+
+    # 参数变更后，旧 analysis_id 的 advice 必须判 stale（不得返回旧解读）
     stale = _client.post("/analysis/advice", json={
         "thread_id": tid,
         "analysis_id": meta["analysis_id"],
@@ -255,3 +259,62 @@ def test_analysis_advice_success_timeout_and_stale():
     assert stale.status_code == 200
     assert stale.json()["status"] == "stale"
     assert not stale.json().get("text")
+
+
+# ── 敏感度分析：展示串 vs 数值 的等价性守护（原崩溃区，零覆盖区）────────────
+# 背景：quick_scan 出口把 variable_cost_ratio 渲染成 "60%"，消费方拿去做算术会抛
+# TypeError；同函数内 DAYS_PER_MONTH 的延迟导入位置又会引发 UnboundLocalError。
+# 这两个缺陷曾让 sensitivity 意图 100% 返回 fallback 文案（崩溃被伪装成业务兜底）。
+
+_BASE = {
+    "monthly_rent": 10000.0, "daily_traffic": 50.0, "price_per_unit": 15.0,
+    "variable_cost_ratio": 0.6, "monthly_fixed_cost": 20000.0,
+    "monthly_revenue": 22500.0, "avg_salary": 5000.0, "employee_count": 2.0,
+}
+_VARS = ["daily_traffic", "monthly_rent", "variable_cost_ratio",
+         "price_per_unit", "employee_count"]
+
+
+def test_as_ratio_normalizes_all_forms():
+    """'60%' / 60 / 0.6 / '0.6' 都必须归一到 0~1；不可解析返回 None。"""
+    for raw, exp in [("60%", 0.6), (60, 0.6), ("0.6", 0.6), (0.6, 0.6)]:
+        got = ws._as_ratio(raw)
+        assert got is not None and abs(got - exp) < 1e-9, f"{raw!r} -> {got}"
+    for bad in [None, "abc", "％", True, object()]:
+        assert ws._as_ratio(bad) is None, f"{bad!r} 应返回 None"
+
+
+def test_single_var_sensitivity_equal_for_str_and_float():
+    """同一种业务含义，展示串输入必须与数值输入得到完全一致的结果。"""
+    for var in _VARS:
+        with_float = ws._build_single_variable_sensitivity(dict(_BASE), var)
+        with_str = ws._build_single_variable_sensitivity(
+            {**_BASE, "variable_cost_ratio": "60%"}, var)
+        assert with_float.get("breakeven_value") == pytest.approx(
+            with_str.get("breakeven_value")), f"{var}: 展示串与数值结果不一致"
+
+
+def test_single_var_sensitivity_daily_traffic_breakeven():
+    """DAYS_PER_MONTH 前置引用不得再抛 UnboundLocalError。
+
+    保本客流 = 20000 / (15 × 30 × 0.4) ≈ 111.1
+    """
+    r = ws._build_single_variable_sensitivity(dict(_BASE), "daily_traffic")
+    assert r["breakeven_value"] == pytest.approx(111.1, abs=0.1), r
+    assert len(r["sensitivity_curve"]) == 11
+    assert r["interpretation"]
+
+
+def test_sensitivity_intent_returns_analysis_not_fallback():
+    """端到端：sensitivity 意图不得再退化为「无法生成结构化分析」兜底文案。"""
+    tid = "rb-sensitivity-reg"
+    seed = _chat([{"role": "user",
+                   "content": "开奶茶店，月租金1万，日售50杯，单价15，变动成本率60%，员工2人工资各5000"}],
+                 tid=tid)
+    assert seed.status_code == 200
+
+    r = _chat([{"role": "user", "content": "做个敏感度分析"}], tid=tid)
+    assert r.status_code == 200
+    body = r.json()
+    assert "抱歉，这条业务请求暂时无法生成结构化分析" not in body.get("content", ""), body
+    assert "敏感度" in body.get("content", "") or "安全边际" in body.get("content", ""), body

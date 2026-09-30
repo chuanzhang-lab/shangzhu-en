@@ -456,6 +456,33 @@ def _infer_sensitivity_variable(scenarios: dict, params: dict) -> str:
     return "daily_traffic"
 
 
+def _as_ratio(value: Any) -> Optional[float]:
+    """把 variable_cost_ratio 的各种形态归一到 0~1 比例，无法解析返回 None。
+
+    存在原因：quick_scan 的出口 params 把该字段渲染成展示串（"60%"），而内部
+    计算用的是 float 0.6 —— 数值契约与展示契约混在同一 dict。消费方若直接拿去
+    做算术会抛 `TypeError: unsupported operand type(s) for -: 'int' and 'str'`。
+    与其在每个消费点各写一遍，统一由这里收口。
+
+    '60%' → 0.6 | 60 → 0.6 | '0.6' → 0.6 | 0.6 → 0.6 | None/垃圾 → None
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        s = value.strip().rstrip("%").replace("％", "").strip()
+        try:
+            n = float(s)
+        except ValueError:
+            return None
+        return n / 100.0 if n > 1 else n
+    if isinstance(value, (int, float)):
+        n = float(value)
+        return n / 100.0 if n > 1 else n
+    return None
+
+
 def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
     """单一变量弹性分析：找到指定变量的盈亏平衡点。
 
@@ -481,9 +508,15 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
             "interpretation": "客流降至 67 杯/天时盈亏平衡，当前 100 杯/天有 33% 的安全边际。",
         }
     """
+    # 必须在**函数体开头**导入：DAYS_PER_MONTH 在下面的分支里就要用，
+    # 若像旧代码那样在 for 循环内 import，它会成为本函数的局部变量，
+    # 而上面的分支（513/535 行）在赋值前引用 → UnboundLocalError。
+    from field_model import monthly_revenue_from_traffic, DAYS_PER_MONTH
+
     revenue = params.get("monthly_revenue") or 0
     fixed_cost = params.get("monthly_fixed_cost") or 0
-    vc_ratio = params.get("variable_cost_ratio")
+    # 引擎出口可能给展示串（"60%"）也可能给 float(0.6)，统一收口成比例数值
+    vc_ratio = _as_ratio(params.get("variable_cost_ratio"))
     daily_traffic = params.get("daily_traffic") or 0
     price = params.get("price_per_unit") or 0
     rent = params.get("monthly_rent") or 0
@@ -506,6 +539,10 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
     # → daily_traffic = 固定成本 / (price × 30 × (1-vc_ratio))
 
     current_value = params.get(variable) or 0
+    # 同一处陷阱：vcr 的 raw 值是展示串（"60%"），直接拿来算 margin 会崩
+    #（见 _as_ratio 的存在说明）。
+    if variable == "variable_cost_ratio":
+        current_value = _as_ratio(current_value) or 0
     breakeven_value = None
 
     if variable == "daily_traffic":
@@ -563,8 +600,7 @@ def _build_single_variable_sensitivity(params: dict, variable: str) -> dict:
         v = breakeven_value * (1 + pct) if breakeven_value > 0 else 0
         if variable == "daily_traffic":
             # 月营收公式唯一出处在 field_model（曾在本文件手写 `v * price * 30`，
-            # 与保本侧的 365 口径并存 → 见 F1）
-            from field_model import monthly_revenue_from_traffic, DAYS_PER_MONTH
+            # 与保本侧的 365 口径并存 → 见 F1）。DAYS_PER_MONTH 已在函数首行导入。
             rev = monthly_revenue_from_traffic(v, price)
             profit = rev * (1 - vc_ratio) - fixed_cost
         elif variable == "monthly_rent":
