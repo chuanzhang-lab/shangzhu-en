@@ -44,10 +44,18 @@ _INTENT_PRIORITY = rules.intent_priority("zh")
 # 核心「数值型」项目字段——命中任一即视为「用户在供给/修改参数」。
 # 注意：不含 industry（纯行业词如「餐饮」不应强制走 quick_scan，否则会
 # 劫持 benchmark/market 类提问）。仅数值字段才强制作重算。
+# 清单必须是「抽取层可能产出」的**全集**——否则抽得出、却不被认作改参，
+# 整句落进 chitchat：参数虽仍会写进 session（步骤 1.5 每轮都 merge），
+# 但响应走 steward 而不出仪表盘，用户看到的是「说了没反应」。
+# 新增抽取字段时，务必同步这里（枚举式消费方不会自己跟上）。
 _CORE_PARAM_FIELDS = {
     "monthly_revenue", "monthly_rent", "total_investment", "price_per_unit",
     "daily_traffic", "employee_count", "avg_salary", "monthly_expense",
     "variable_cost_rate", "variable_cost_ratio", "founder_count", "city",
+    # 成本口径三件套：毛利/单位变动成本是用户最常直接给的成本事实
+    "gross_margin", "unit_variable_cost", "monthly_profit",
+    # 固定成本组件：用户补「水电/包装/佣金/其他」时应立刻重算，而不是去闲聊
+    "utilities", "packaging", "commission", "other_fixed",
 }
 
 
