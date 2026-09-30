@@ -1255,7 +1255,11 @@ def _build_narrative(params: dict, src: dict, scenarios: dict, pit_total: int) -
 
     uncertain.sort(key=lambda k: _LEVER_PRIORITY.get(k, 9))
     top = uncertain[0]
-    lead = t(_LEVER_NAME.get(top, top))
+    # 回退到 field.label.* 而不是裸字段名：_LEVER_NAME 只覆盖一半的 MATERIAL_FIELDS
+    #（daily_traffic/price_per_unit/avg_salary/monthly_rent 都没有杠杆名），
+    # `t(top)` 会让 i18n 报 missing key 并把 "[i18n:missing:daily_traffic]" 顶给用户，
+    # 同时刷爆 ERROR 日志。
+    lead = t(_LEVER_NAME.get(top) or f"field.label.{top}")
 
     sp = scenarios.get("monthly_profit", {})
     if sp.get("base") is None:

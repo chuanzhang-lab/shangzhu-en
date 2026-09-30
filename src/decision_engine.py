@@ -122,7 +122,10 @@ def _veto_for_type(ev: dict, decision_type: str, accepted_hypotheses: dict = Non
         gaps.append("variable_cost_ratio")
 
     gaps = list(dict.fromkeys(gaps))
-    labels = [t(_GAP_LABELS.get(g, g)) for g in gaps]
+    # 回退到 field.label.* 而非裸字段名：gaps 来自 policy 的 required_user_fields，
+    # 新增字段时若忘了同步 _GAP_LABELS，t(字段名) 会把 "[i18n:missing:xxx]"
+    # 当成「要补什么」直接显示给用户。
+    labels = [t(_GAP_LABELS.get(g) or f"field.label.{g}") for g in gaps]
     if gaps:
         return {
             "verdict": "insufficient",
@@ -177,7 +180,10 @@ def _options_from_suggest(suggest_data: dict, current_params: dict, base_conf: d
         op = {
             "propose": "set", "field": field, "value": s.get("suggested"),
             "changes": {field: s.get("suggested")},
-            "label": t(label_map.get(field, field)),
+            # 回退到 field.label.* 而非裸字段名：label_map 未覆盖的 target_param
+            #（如 multiple）会让 t(field) 报 missing key，把 "[i18n:missing:xxx]"
+            # 直接显示给用户。
+            "label": t(label_map.get(field) or f"field.label.{field}"),
             "_delta": s.get("expected_profit_delta", 0),
         }
         from op_executor import validate_op

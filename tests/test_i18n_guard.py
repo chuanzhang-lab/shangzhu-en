@@ -363,3 +363,62 @@ def test_i18n_module_has_no_reverse_dependency_on_business_modules():
         assert not re.search(rf"^\s*(import|from)\s+.*{name}", src, re.M), (
             f"src/i18n/__init__.py 反向依赖了业务模块 {name}——依赖方向必须是 业务 → i18n"
         )
+
+
+# ── 「回退到裸字段名」反模式护栏 ───────────────────────────────────────────
+# 事故原型：`t(_LEVER_NAME.get(top, top))`——map 未覆盖的键回退成**字段名本身**，
+# 于是 i18n 报 missing key 并把 "[i18n:missing:daily_traffic]" 直接顶给用户，
+# 同时每次渲染刷一条 ERROR 日志（真的会刷爆：一次 quick_scan 最多 11 条）。
+# 这类写法静态看完全合法，只有跑到未覆盖分支才暴露，必须钉死。
+
+def _bare_fallback_get_in_t(src_root: str):
+    """找出所有 `t(<dict>.get(x, x))` —— 第二参数与第一参数同名即裸回退。"""
+    import ast as _ast
+
+    offenders = []
+    for dirpath, _dirs, files in os.walk(src_root):
+        for fn in files:
+            if not fn.endswith(".py"):
+                continue
+            path = os.path.join(dirpath, fn)
+            try:
+                tree = _ast.parse(_read(path), filename=path)
+            except SyntaxError:
+                continue
+            for nd in _ast.walk(tree):
+                if not (isinstance(nd, _ast.Call) and isinstance(nd.func, _ast.Name)
+                        and nd.func.id == "t" and nd.args):
+                    continue
+                arg = nd.args[0]
+                if not (isinstance(arg, _ast.Call) and isinstance(arg.func, _ast.Attribute)
+                        and arg.func.attr == "get" and len(arg.args) == 2):
+                    continue
+                a, b = arg.args
+                if isinstance(a, _ast.Name) and isinstance(b, _ast.Name) and a.id == b.id:
+                    offenders.append((os.path.relpath(path, ROOT), nd.lineno, a.id))
+    return offenders
+
+
+def test_no_bare_field_name_fallback_into_t():
+    """t(D.get(x, x)) 一律禁止——回退值必须指向真实存在的 i18n 键。"""
+    offenders = []
+    for target in (os.path.join(ROOT, "src"), os.path.join(ROOT, "scripts")):
+        offenders += _bare_fallback_get_in_t(target)
+    assert not offenders, (
+        "以下位置把 dict.get(x, x) 的结果直接喂给 t()——键不在 map 里时 "
+        "会用裸字段名查 i18n，渲染出 [i18n:missing:xxx] 并刷 ERROR 日志：\n"
+        + "\n".join(f"  {f}:{ln} -> t(....get({n}, {n}))" for f, ln, n in offenders)
+    )
+
+
+def test_lever_labels_never_render_as_missing():
+    """风险聚焦头条的每一项、以及建议标签，都不得渲染出 missing 标记。"""
+    from tools import workflow_engine as we
+
+    for field in we._MATERIAL_FIELDS:
+        key = we._LEVER_NAME.get(field) or f"field.label.{field}"
+        out = i18n.t(key)
+        assert not out.startswith("[i18n:missing:"), (
+            f"字段 {field} 的杠杆名不可解析（回退键 {key} 也不存在）：{out}"
+            f"——用户会看到 [{key}] 这样的乱码"
+        )
