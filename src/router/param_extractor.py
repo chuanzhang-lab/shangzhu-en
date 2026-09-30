@@ -234,7 +234,17 @@ def _split_segments(text: str) -> List[str]:
     # ⚠️ 英文千分位「300,000」里的逗号**不是**分隔符：原 `[,，;。；]+` 会把
     # 「Total investment $300,000」切成 "$300" + "000"，抽成 300（静默差 1000 倍）。
     # 只切「非数字包围」的逗号，数字之间的逗号保留。
-    return re.split(r"(?:[，;。；]|,(?![0-9])|(?<![0-9]),)+", text)
+    #
+    # ⚠️ ASCII 句点必须按「句子边界」切（后随空白或串尾才算）：
+    # 中文 `。` 一直在切分集里，英文 `.` 却不在 → 整段多子句共享第一个数字。
+    # 实测事故：①「8000 rent.」句点成了 truthy 假 after 侧，8000 抽不到；
+    # ②「rent 8000 yuan. I have 2 employees」里 employee_count 兜底抓到
+    #   相邻子句的 8000（>max_value 200）→ 员工数整条丢失。
+    # 小数保护：「3.5」「3.50 」句点后是数字 → 不切，行为不变。
+    # 「!?！？」同类句子终结符一并纳入（数字中不可能出现，无小数风险）。
+    return re.split(
+        r"(?:[，;。；!?！？]|\.(?=\s|$)|,(?![0-9])|(?<![0-9]),)+", text
+    )
 
 
 def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:

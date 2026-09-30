@@ -80,6 +80,41 @@ def test_each_paid_per_month_is_salary_not_unit_price(en):
     assert "price_per_unit" not in p
 
 
+def test_trailing_period_does_not_kill_number_before_keyword(en):
+    """「8000 rent.」句点不能吃掉数字在关键词前的抽取。
+
+    根因：ASCII 句点不在切段集里，句尾句点成了 truthy 假 after 侧，
+    `elif not after_text` 的 before 回退永不触发。中文 `。` 一直会切段，
+    故此缺陷只在英文输入暴露。
+    """
+    assert _params("8000 rent.")["monthly_rent"] == 8000.0
+    assert _params("i paid 8000 rent.")["monthly_rent"] == 8000.0
+    # 数字在关键词后 + 句尾句点：不得回归
+    assert _params("rent 8000.")["monthly_rent"] == 8000.0
+
+
+def test_multiclausal_sentence_keeps_each_param_in_its_own_clause(en):
+    """多子句英文整句：各参数归各子句，员工数不得被相邻子句的 8000 挤掉。
+
+    根因：句点不切段 → 「…8000 yuan. I have 2 employees」整段共享，
+    employee_count 兜底抓到最左的 8000（>max_value 200）→ 整条丢弃。
+    """
+    p = _params(
+        "I want to open a noodle shop. Monthly rent is 8000 yuan. "
+        "I have 2 employees, each paid 5000 per month."
+    )
+    assert p.get("monthly_rent") == 8000.0
+    assert p.get("employee_count") == 2.0
+    assert p.get("avg_salary") == 5000.0
+
+
+def test_decimal_point_is_never_a_sentence_boundary(en):
+    """小数点不是句子边界：「3.5」必须原样抽出，不得切成 3 + 5。"""
+    assert _params("price per cup 3.5")["price_per_unit"] == 3.5
+    # 千分位逗号保护回归：不得切出 $300 + 000
+    assert _params("Total investment $300,000")["total_investment"] == 300000.0
+
+
 def test_variable_cost_percent_is_normalised_to_ratio(en):
     """55% 必须归一化成 0.55，不能是 55，也不能被当成营收。
 
@@ -132,6 +167,15 @@ def test_chinese_extraction_still_works(zh):
     assert is_continuation("把租金改成9000")
     assert is_reset_command("重新开始")
     assert infer_focus_fields("租金多少") == ["monthly_rent"]
+
+
+def test_chinese_sentence_terminators_split_clauses(zh):
+    """中文回归：句号/问号切段后各子句独立抽取，小数点不受影响。"""
+    p = _params("月租金8000。员工2人，每人工资5000")
+    assert p.get("monthly_rent") == 8000.0
+    assert p.get("employee_count") == 2.0
+    assert p.get("avg_salary") == 5000.0
+    assert _params("客单价3.5元")["price_per_unit"] == 3.5
 
 
 def test_rule_packs_have_parallel_shape():
