@@ -43,19 +43,34 @@ print(f"  餐饮 cost_structure: {cs}")
 assert cs and abs(sum(cs.values()) - 1.0) < 1e-6, "成本结构占比未归一"
 print("  ✅ 行业成本结构占比已输出且归一")
 
-print("\n=== 验证4：劳动负担率对用户显式人工生效；未给人工不虚构 ===")
-print("\n=== 验证4：劳动负担率对用户显式人工生效；未给人工不虚构 ===")
-# 用户显式给 3人×7000 → 真实成本含 40% 雇主负担 → 人工=29400，固定=12000+29400=41400
+print("\n=== 验证4：劳动负担率「用户显式给才生效」，未给则不臆测 ===")
+# 设计决策（被 tests/test_phase4_workbench.py 显式锁定）：
+#   劳动负担率**不取行业模板默认值**（曾为 0.40），用户未提供即视为 0%，
+#   人工按裸薪计入 —— 小微企业很多并不给员工缴社保，臆测 40% 会高估成本。
+# 因此这里验证的是「两条路径各自成立」，而不是「模板值自动生效」。
 du = scan({"industry": "餐饮", "employee_count": 3, "avg_salary": 7000,
                       "daily_traffic": 120, "price_per_unit": 35,
                       "total_investment": 300000, "monthly_rent": 12000})
-print(f"  用户给 3人×7000 → 含社保负担后人工=29400，固定成本含此")
-assert abs(du["params"]["monthly_fixed_cost"] - (12000 + 29400)) < 1, f"{du['params']['monthly_fixed_cost']}"
+print("  用户给 3人×7000（未给 burden）→ 负担率=0，人工=裸薪 21000，固定=33000")
+assert du["params"].get("labor_burden_rate") == 0.0, du["params"].get("labor_burden_rate")
+assert abs(du["params"].get("monthly_labor") - 21000) < 1, du["params"].get("monthly_labor")
+assert abs(du["params"]["monthly_fixed_cost"] - (12000 + 21000)) < 1, f"{du['params']['monthly_fixed_cost']}"
+
+# 显式给出劳动负担率 → 必须参与计算（×1.4）
+db = scan({"industry": "餐饮", "employee_count": 3, "avg_salary": 7000,
+                      "daily_traffic": 120, "price_per_unit": 35,
+                      "total_investment": 300000, "monthly_rent": 12000,
+                      "labor_burden": 0.4})
+print("  同上但显式 labor_burden=0.4 → 人工=29400(21000×1.4)，固定=41400")
+assert db["params"].get("labor_burden_rate") == 0.4, db["params"].get("labor_burden_rate")
+assert abs(db["params"].get("monthly_labor") - 29400) < 1, db["params"].get("monthly_labor")
+assert abs(db["params"]["monthly_fixed_cost"] - (12000 + 29400)) < 1, f"{db['params']['monthly_fixed_cost']}"
+
 # 仅给行业、不给人 → 保守原则：不虚构人工，固定成本仅含租金=12000
 dt = scan({"industry": "餐饮", "daily_traffic": 120, "price_per_unit": 35,
                       "total_investment": 300000, "monthly_rent": 12000})
 print(f"  仅行业(未给人) → 不虚构人工，固定成本=12000")
 assert abs(dt["params"]["monthly_fixed_cost"] - 12000) < 1, f"{dt['params']['monthly_fixed_cost']}"
-print("  ✅ 用户人工真实叠加社保负担(×1.4)；未提供人工时不虚构")
+print("  ✅ 未给负担率时按裸薪(0%)；显式给定则 ×(1+burden)；未提供人工时不虚构")
 
 print("\n全部增强验证通过 ✅")
