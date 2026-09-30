@@ -177,8 +177,9 @@ def test_engine_rejects_absurd_ratio():
     d = _scan({"industry": "餐饮", "monthly_rent": 1500, "daily_traffic": 50,
                "price_per_unit": 15, "variable_cost_ratio": 60})
     assert not d.get("error"), d
-    vc = d["params"].get("variable_cost_ratio", "")
-    assert vc == "60%", vc  # 60% 正常渲染
+    vc = d["params"].get("variable_cost_ratio")
+    # 出口是数值契约（0~1），不是展示串；百分比渲染归前端
+    assert isinstance(vc, (int, float)) and abs(vc - 0.6) < 1e-9, vc
     profit = d.get("core_metrics", {}).get("monthly_profit")
     assert profit is not None and abs(profit) < 1e6, f"利润仍失真: {profit}"
 

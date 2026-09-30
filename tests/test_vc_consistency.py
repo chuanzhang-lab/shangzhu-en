@@ -27,6 +27,50 @@ def test_extract_vc_without_rate_word_gives_ratio():
     assert d.get("variable_cost_rate") is None
 
 
+# ── 出口契约护栏：params 必须是数值，展示串不许回流 ──────────────────────
+# 事故原型：出口把 vcr 渲染成 f"{v*100:.0f}%" 塞回 params，与数值字段混在同一 dict。
+# 后果三连：① 消费方做算术抛 TypeError（sensitivity / cost_attribution 都崩过）
+# ② 前端 `typeof v === 'number'` 格式化分支全成死代码
+# ③ app.js 改参回填 Math.round('60%'*100) = NaN → 未改的 vcr 被误判为「已改动」
+# 展示串应由前端按 locale 渲染，引擎出口只吐数值。
+
+_NUMERIC_PARAMS = (
+    "total_investment", "monthly_rent", "daily_traffic", "price_per_unit",
+    "employee_count", "avg_salary", "variable_cost_ratio",
+    "monthly_labor_cash", "monthly_labor", "labor_burden_rate",
+    "monthly_fixed_cost", "funding_amount",
+)
+
+
+def test_scan_params_exports_numbers_not_display_strings():
+    """quick_scan 出口的数值字段必须是数值/None，绝不许是 "60%" 这类展示串。"""
+    p = {"industry": "餐饮", "monthly_rent": 10000, "daily_traffic": 50,
+         "price_per_unit": 15, "employee_count": 2, "avg_salary": 5000,
+         "variable_cost_ratio": 0.6, "total_investment": 200000}
+    d = json.loads(quick_scan.invoke({"params_json": json.dumps(p, ensure_ascii=False)}))
+    params = d.get("params") or {}
+    for key in _NUMERIC_PARAMS:
+        if key not in params:
+            continue
+        v = params[key]
+        assert v is None or isinstance(v, (int, float)) and not isinstance(v, bool), (
+            f"出口 params['{key}'] = {v!r}（{type(v).__name__}）——"
+            f"数值字段被渲染成了展示串，消费方做算术会崩、前端格式化分支会失效"
+        )
+    # 关键字段必须真的在（防止用「跳过检查」骗过本测试）
+    assert params.get("variable_cost_ratio") is not None
+
+
+def test_scan_params_vcr_is_ratio_scale():
+    """vcr 必须是 0~1 比例，不是 0~100（否则毛利率会算出荒谬值）。"""
+    p = {"industry": "餐饮", "monthly_rent": 10000, "daily_traffic": 50,
+         "price_per_unit": 15, "employee_count": 2, "avg_salary": 5000,
+         "variable_cost_ratio": 0.6}
+    d = json.loads(quick_scan.invoke({"params_json": json.dumps(p, ensure_ascii=False)}))
+    vcr = d["params"]["variable_cost_ratio"]
+    assert 0 <= vcr <= 1, f"出口 vcr={vcr} 不在 0~1 区间（疑似按百分比输出）"
+
+
 def test_extract_vc_variants_all_normalized():
     """多种措辞都归一化到 0~1：成本率40%、可变成本率30%、食材成本占45%。"""
     assert extract_params("成本率40%").get("variable_cost_ratio") == 0.4

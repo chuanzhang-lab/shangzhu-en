@@ -1479,10 +1479,14 @@ def quick_scan(params_json: str) -> str:
                 "price_per_unit": params["price_per_unit"],
                 "employee_count": params["employee_count"],
                 "avg_salary": params["avg_salary"],
-                "variable_cost_ratio": (
-                    f"{params['variable_cost_ratio']*100:.0f}%"
-                    if params['variable_cost_ratio'] is not None else t("wf.common.unknown")
-                ),
+                # 数值契约：出口 params 只给**数值**（0~1），展示串由前端按 locale 格式化。
+                # 旧实现拼成 f"{v*100:.0f}%" 混进同一 dict，后果有三：
+                #   1) 消费方做算术 → TypeError（sensitivity/cost_attribution 都崩过）
+                #   2) 前端 `typeof v === 'number'` 格式化分支全部落空，成为死代码
+                #   3) app.js 改参回填 `Math.round('60%'*100)` = NaN → 未改的 vcr
+                #      被误判为「已改动」而重复提交
+                # 缺失保持 None（前端统一渲染为「—」），不在这里伪造"未知"文案。
+                "variable_cost_ratio": params["variable_cost_ratio"],
                 "available_cash": round(params["available_cash"], 0) if params["available_cash"] is not None else None,
                 # 人工分解（裸薪 / 含社保）——让合计不再是黑箱
                 "monthly_labor_cash": (

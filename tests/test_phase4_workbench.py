@@ -425,7 +425,8 @@ def test_p46_t9_fixed_sum_and_derived_ratio():
     merged, d = _oracle_replay(["T1", "T_rent12", "T9"])
     assert d["params"]["monthly_fixed_cost"] == 22060, d["params"]["monthly_fixed_cost"]
     assert "组件求和" in d["param_sources"]["monthly_fixed_cost"]
-    assert d["params"]["variable_cost_ratio"] == "80%", d["params"]["variable_cost_ratio"]
+    # 出口为数值契约（0~1）；百分比展示由前端格式化，不要在这里断言展示串
+    assert abs(d["params"]["variable_cost_ratio"] - 0.8) < 1e-9, d["params"]["variable_cost_ratio"]
     assert "推导" in d["param_sources"]["variable_cost_ratio"]
 
 
@@ -442,7 +443,7 @@ def test_p46_t10_whatif_routed_to_compare():
 def test_p46_t11_explicit_ratio_wins_preserved_fixed():
     """T11：变动率75%[用户] 优先于推导0.80；fixed=22060 保留（C1 不丢组件）。"""
     merged, d = _oracle_replay(["T1", "T_rent12", "T9", "T11"])
-    assert d["params"]["variable_cost_ratio"] == "75%", d["params"]["variable_cost_ratio"]
+    assert abs(d["params"]["variable_cost_ratio"] - 0.75) < 1e-9, d["params"]["variable_cost_ratio"]
     assert d["param_sources"]["variable_cost_ratio"].startswith("[用户]")
     assert d["params"]["monthly_fixed_cost"] == 22060, d["params"]["monthly_fixed_cost"]
 
