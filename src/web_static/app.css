@@ -132,6 +132,8 @@
   .psrc-user { background: #dbeafe; color: #1e40af; }
   .psrc-derived { background: #f0f0f1; color: #666; }
   .psrc-missing { background: #fee2e2; color: #b91c1c; }
+  /* 有值但不完整（缺核心组件 → 成本被低估）：琥珀色，比「推算」更刺眼 */
+  .psrc-incomplete { background: #fef3c7; color: #92400e; }
   .param-section { font-size: 11px; font-weight: 600; color: #999; padding: 8px 0 4px 0; text-transform: uppercase; }
   .empty { margin: auto; text-align: center; color: #999; font-size: 14px; }
   .empty h2 { font-size: 18px; color: #1a1a1a; margin-bottom: 8px; }

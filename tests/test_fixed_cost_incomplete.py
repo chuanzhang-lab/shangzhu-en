@@ -166,6 +166,29 @@ def test_incomplete_text_must_not_read_as_conflict():
         reset_locale()
 
 
+def _read(path):
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_frontend_maps_incomplete_code():
+    """前端必须认得 incomplete，否则参数面板会把它兜成「推算」（静默误导店主）。
+
+    后端标了 incomplete，前端 `srcCodeOf` 若不认，就落进 else 分支显示「推算」——
+    等于告诉店主「这个数算全了」，后端改了也白改。
+    """
+    root = os.path.join(os.path.dirname(__file__), "..")
+    js = _read(os.path.join(root, "src", "web_static", "app.js"))
+    assert "'incomplete'" in js, "srcCodeOf 未返回 incomplete 码"
+    assert "[不完整]" in js and "[Incomplete]" in js, "缺 _codes 的历史存档回退分支"
+    assert "ui.src_incomplete" in js, "参数面板未接入 incomplete 文案"
+    css = _read(os.path.join(root, "src", "web_static", "app.css"))
+    assert ".psrc-incomplete" in css, "缺 incomplete 配色"
+    for loc in ("zh", "en"):
+        assert "src_incomplete:" in _read(
+            os.path.join(root, "src", "i18n", f"{loc}.yaml")), loc
+
+
 @pytest.mark.parametrize("loc,expect", [("zh", "[不完整]"), ("en", "[Incomplete]")])
 def test_mark_resolves_in_both_locales(loc, expect):
     """两个 locale 的标记键都必须存在（缺键会渲染成 [i18n:missing:...]）。"""

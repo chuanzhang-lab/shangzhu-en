@@ -699,6 +699,9 @@ ui:
   src_user: User
   src_missing: Missing
   src_derived: Derived
+  # Has a value but is incomplete (missing a core component → cost understated).
+  # Must not render as "Derived": that tells the owner the figure is complete.
+  src_incomplete: Incomplete
   apply: Apply
   preview: Preview
   modal_title: Model settings

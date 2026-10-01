@@ -845,8 +845,10 @@ function updateParamsPanel(params, paramSources, derived) {
       let srcHtml = '';
       if (src) {
         const code = srcCodeOf(paramSources, f, src);
-        const srcClass = (code === 'user') ? 'psrc-user' : (code === 'missing') ? 'psrc-missing' : 'psrc-derived';
-        const srcLabel = (code === 'user') ? t('ui.src_user') : (code === 'missing') ? t('ui.src_missing') : t('ui.src_derived');
+        const srcClass = (code === 'user') ? 'psrc-user' : (code === 'missing') ? 'psrc-missing'
+          : (code === 'incomplete') ? 'psrc-incomplete' : 'psrc-derived';
+        const srcLabel = (code === 'user') ? t('ui.src_user') : (code === 'missing') ? t('ui.src_missing')
+          : (code === 'incomplete') ? t('ui.src_incomplete') : t('ui.src_derived');
         srcHtml = '<span class="psrc ' + srcClass + '">' + srcLabel + '</span>';
       }
       const hl = (f === recentlyUpdatedField) ? ' just-updated' : '';   // F3 变更高亮
@@ -872,6 +874,7 @@ function srcCodeOf(paramSources, f, src) {
   if (codes[f]) return codes[f];
   if (String(src).indexOf('[User]') === 0 || String(src).indexOf('[用户]') === 0) return 'user';
   if (String(src).indexOf('[Missing]') === 0 || String(src).indexOf('[缺失]') === 0) return 'missing';
+  if (String(src).indexOf('[Incomplete]') === 0 || String(src).indexOf('[不完整]') === 0) return 'incomplete';
   return 'derived';
 }
 function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'number' && Number.isFinite(v)) return (v * 100).toFixed(0) + '%'; return formatNum(v); }

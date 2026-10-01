@@ -695,6 +695,9 @@ ui:
   src_user: 用户
   src_missing: 缺失
   src_derived: 推算
+  # 有值但不完整（缺核心组件 → 成本被低估）。不能显示成「推算」：
+  # 那等于告诉店主「这个数是算全了的」。
+  src_incomplete: 不完整
   apply: 应用
   preview: 预览
   modal_title: 大模型设置
