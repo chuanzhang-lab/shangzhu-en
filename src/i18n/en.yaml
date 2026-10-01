@@ -46,6 +46,10 @@ fmt:
     error: "## ⚠️ Calculation failed\n\n{error}\n\nPlease check your inputs (rent, traffic, unit price, etc.)."
     title: "## 📊 {project_type} analysis{suffix}"
     conflict_header: "## ⚠️ Data conflicts (please confirm the definitions)"
+    # Shown when fixed cost misses a core component (e.g. labor not provided → counted as 0).
+    # {detail} is the engine-produced source string (naming the missing component);
+    # it is not re-written here, so the two cannot drift apart.
+    cost_incomplete_note: "> ⚠️ **Incomplete cost**: {detail}. Profit, break-even traffic and runway all skew optimistic — fill the gap before trusting the numbers."
     core_header: "## Core metrics"
     core_table_header: "| Metric | Value | Status |"
     vc_gap_note1: "> 📌 **Variable cost ratio not provided — profit and break-even are not settled yet.**"
@@ -274,6 +278,7 @@ src:
     candidate: "[Candidate]"
     missing: "[Missing]"
     conflict: "[Conflict]"
+    incomplete: "[Incomplete]"
   comp:
     rent: Rent
     labor: Labor
@@ -281,6 +286,8 @@ src:
     packaging: Packaging
     commission: Commission
     other: Other fixed
+  # Joiner for missing component names (locale-dependent): "、" in zh, ", " in en
+  comp_join: ", "
   user:
     bare: "[User]"
     explicit_total: "[User] Explicit total (components not given)"
@@ -318,6 +325,12 @@ src:
   labor_burdened: "{mark} Base pay {cash} × (1 + {burden} burden)"
   fixed_cost_sum: "{mark} Component sum ({comp})"
   fixed_cost_sum_conflict: "{mark} Component sum ({comp}) conflicts with explicit total {total} → to clarify"
+  # Missing a core component (rent/labor) → the sum is necessarily too low.
+  # Must NOT be labelled as a complete derivation.
+  # Deliberately avoids "conflict/contradict/mismatch": those are the match words of
+  # pitfall_markers.conflict, and using them would make AnomalyReport misreport
+  # "incomplete" as "self-contradictory".
+  fixed_cost_sum_incomplete: "{mark} Component sum ({comp}); {missing} not provided → cost understated"
 wf:
   mode:
     custom: Custom (sufficient user parameters; industry template skipped)
@@ -333,6 +346,7 @@ wf:
     missing: Missing
     candidate: Candidate
     derived: Derived
+    incomplete: Incomplete
   framework:
     revenue_known: "Monthly revenue = {rev} CNY (known)"
     revenue_unknown: "Monthly revenue: unknown (needs monthly revenue or daily traffic × unit price)"

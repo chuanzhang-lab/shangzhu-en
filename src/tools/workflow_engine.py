@@ -25,7 +25,7 @@ from langchain.tools import tool
 
 from i18n import industry_name, t
 import source_tags as st
-from source_tags import CANDIDATE, CONFLICT, DERIVED, MISSING, USER
+from source_tags import CANDIDATE, CONFLICT, DERIVED, INCOMPLETE, MISSING, USER
 
 from tools.financial_calculator import (
     _calc_breakeven,
@@ -520,6 +520,10 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
 
     # ── 固定成本业务规则：组件求和 + 最弱环 + 显式总数矛盾 + 利润反推 ──
     explicit_total = raw_params.get("monthly_expense", 0)
+    # 固定成本的**核心组件**：缺了就会系统性低估成本（人工通常占固定成本 3~5 成）。
+    # utilities/packaging/commission/other 是可选细项，用户没提往往就是真没有，
+    # 它们缺失**不算**不完整，否则「不完整」会天天报警、变成噪音。
+    _CORE_FIXED_COMPONENTS = ("rent", "labor")
     # (组件名文案键, 值, 状态码)；值为 None 或状态码为空 → 该组件不参与求和
     component_specs = [
         ("rent", p.get("monthly_rent") if st.code_of(src, "monthly_rent") == USER else None,
@@ -542,7 +546,11 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
             total_code = DERIVED
         else:
             total_code = USER
+        present_keys = {k for k, _, _ in present_specs}
+        missing_core = [k for k in _CORE_FIXED_COMPONENTS if k not in present_keys]
         if explicit_total and explicit_total > 0:
+            # 用户给了权威总数：要么吻合（总数即完整口径，不标不完整），
+            # 要么矛盾（「待澄清」比「不完整」更急需用户介入，矛盾优先）。
             if abs(comp_sum - explicit_total) <= 1:
                 p["monthly_fixed_cost"] = comp_sum
                 st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum",
@@ -552,6 +560,18 @@ def _fill_params(raw_params: dict, _skip_guard: bool = False) -> tuple[dict, dic
                 st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum_conflict",
                            mark=st.mark(total_code), comp=comp_src,
                            total=f"{explicit_total:g}")
+        elif missing_core:
+            # 无权威总数 + 核心组件缺失 → 算出来的只是**部分**成本，系统性偏低。
+            # 值照旧（不虚构缺失项），但标注必须是 incomplete：
+            # 标 derived 等于宣称「算全了」，下游再也看不出被低估。
+            p["monthly_fixed_cost"] = comp_sum
+            st.set_tag(
+                src, "monthly_fixed_cost", INCOMPLETE, "fixed_cost_sum_incomplete",
+                mark=st.mark(INCOMPLETE), comp=comp_src,
+                missing=t("src.comp_join").join(
+                    t(f"src.comp.{k}") for k in missing_core
+                ),
+            )
         else:
             p["monthly_fixed_cost"] = comp_sum
             st.set_tag(src, "monthly_fixed_cost", total_code, "fixed_cost_sum",
@@ -784,7 +804,8 @@ def _check_sufficiency(params: dict, param_sources: dict) -> dict:
 
 
 # 状态码 → 假设类型文案键（缺失/候选/推算）
-_KIND_KEY_BY_CODE = {MISSING: "missing", CANDIDATE: "candidate", DERIVED: "derived"}
+_KIND_KEY_BY_CODE = {MISSING: "missing", CANDIDATE: "candidate", DERIVED: "derived",
+                     INCOMPLETE: "incomplete"}
 
 
 def _build_assumptions(params: dict, param_sources: dict) -> list:

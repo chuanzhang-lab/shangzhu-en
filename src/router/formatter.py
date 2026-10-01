@@ -16,6 +16,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from i18n import has, industry_name, t
+from source_tags import INCOMPLETE
 
 # 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
 # 这三个是 formatter.py 里仅有的中文字面量，护栏测试按白名单放行。
@@ -210,6 +211,16 @@ def _fmt_scan(data: Dict) -> str:
         lines.append(t("fmt.scan.conflict_header"))
         for i in derived_issues:
             lines.append(f"> {i.get('message', '')}")
+        lines.append("")
+
+    # 成本被低估警告：固定成本缺核心组件（典型：人工未提供 → 引擎按 0 计）。
+    # 后果不是「数字小一点」，而是利润虚高、保本客流虚低、跑道虚长 —— 全部偏乐观。
+    # 只写在「参数来源」表的某一行里，店主根本看不到，必须在结论之前显式声明。
+    # 判定走 **状态码**（_codes），不碰展示文案：文案随 locale 变，英文下会静默失配。
+    _codes = params_src.get("_codes") or {}
+    if _codes.get("monthly_fixed_cost") == INCOMPLETE:
+        lines.append(t("fmt.scan.cost_incomplete_note",
+                       detail=params_src.get("monthly_fixed_cost", "")))
         lines.append("")
 
     # 核心指标

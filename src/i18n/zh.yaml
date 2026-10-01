@@ -45,6 +45,10 @@ fmt:
     error: "## ⚠️ 计算失败\n\n{error}\n\n请检查参数是否正确（如月租、客流、单价等）。"
     title: "## 📊 {project_type}分析{suffix}"
     conflict_header: "## ⚠️ 数据冲突（请确认口径）"
+    # 固定成本缺核心组件（如人工未提供 → 按 0 计）时的前置警告。
+    # {detail} 是引擎产出的完整来源串（含缺哪个组件），不在这里重写一遍，
+    # 避免两处文案漂移。
+    cost_incomplete_note: "> ⚠️ **成本不完整**：{detail}。利润、保本客流、跑道全部偏乐观，补齐后再看结论。"
     core_header: "## 核心指标"
     core_table_header: "| 指标 | 数值 | 状态 |"
     vc_gap_note1: "> 📌 **变动成本率未提供，利润与保本结论还不能定。**"
@@ -272,6 +276,7 @@ src:
     candidate: "[候选]"
     missing: "[缺失]"
     conflict: "[矛盾]"
+    incomplete: "[不完整]"
   comp:
     rent: 租金
     labor: 人工
@@ -279,6 +284,8 @@ src:
     packaging: 包装
     commission: 提成
     other: 其他固定
+  # 多个缺失组件名的连接符（语言相关）：zh 用「、」，en 用 ", "
+  comp_join: "、"
   user:
     bare: "[用户]"
     explicit_total: "[用户] 显式总数(组件未给出)"
@@ -316,6 +323,10 @@ src:
   labor_burdened: "{mark} 裸薪{cash}×(1+{burden}负担)"
   fixed_cost_sum: "{mark} 组件求和({comp})"
   fixed_cost_sum_conflict: "{mark} 组件求和({comp})，与显式总数{total}矛盾→待澄清"
+  # 缺核心组件（租金/人工）→ 合计必然偏低。绝不能标成「推算完整」。
+  # 刻意不用「矛盾/冲突」字样：那两个词是 pitfall_markers.conflict 的匹配词，
+  # 用了会让 AnomalyReport 把「不完整」误报成「自相矛盾」。
+  fixed_cost_sum_incomplete: "{mark} 组件求和({comp})，缺{missing}→成本被低估"
 wf:
   mode:
     custom: 自定义（用户参数充足，跳过行业模板）
@@ -331,6 +342,7 @@ wf:
     missing: 缺失
     candidate: 候选
     derived: 推算
+    incomplete: 不完整
   framework:
     revenue_known: "月营收 = {rev} 元（已知）"
     revenue_unknown: 月营收：未知（需 月营收 或 日均客流×客单价）
