@@ -14,7 +14,7 @@
 
 可靠性约定（对齐 i18n 与项目「缺失不冒充」哲学）：
 - 进程内缓存，禁止每次调用读盘；
-- 目标语言规则缺失/损坏 → **回退中文规则**并记 ERROR（保住能力，不丢功能）；
+- 目标语言规则缺失/损坏 → **回退默认语言规则**并记 ERROR（保住能力，不丢功能）；
 - 绝不抛异常中断抽取链路。
 """
 
@@ -27,14 +27,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from i18n import get_locale
+from i18n import DEFAULT_LOCALE, get_locale
 
 # 挂到 web.* 家族，继承已配置的 handler（否则降级日志只会走 lastResort 打到
 # stderr，日志文件里查无此项——历史教训）。
 logger = logging.getLogger("web.router.rules")
 
 _RULES_DIR = Path(__file__).resolve().parent  # 本包目录：{zh,en}.yaml 与 __init__.py 同级
-DEFAULT_LOCALE = "zh"
 
 _cache: Dict[str, Dict[str, Any]] = {}
 
@@ -142,7 +141,7 @@ def _load(locale: str) -> Dict[str, Any]:
 
 
 def _pack(locale: Optional[str] = None) -> Dict[str, Any]:
-    """取当前规则包；目标语言无内容时回退中文（保住抽取能力）。"""
+    """取当前规则包；目标语言无内容时回退默认语言（保住抽取能力）。"""
     loc = locale or get_locale()
     pack = _load(loc)
     if not pack["fields"] and loc != DEFAULT_LOCALE:

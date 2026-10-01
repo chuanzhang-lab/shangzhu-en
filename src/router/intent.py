@@ -31,14 +31,10 @@ from . import rules
 # 匹配顺序不变：先匹配更具体的（report/suggest/compare），后匹配宽泛的
 # （quick_scan/chitchat）——由 intent_priority 与 yaml 书写顺序共同保证。
 #
-# 此处保留 **zh 快照**绑定供向后兼容；实际路由走 rules.intent_rules()。
-_RULES = rules.intent_rules("zh")
+# 此处不保留 zh 快照绑定（曾是死代码，见 git 历史）；路由走 rules.intent_rules()。
 
 
-# 意图优先级（数字越大越优先）
 # 意图优先级（数字越大越优先）——数据化到 rules/{zh,en}.yaml 的 intent_priority。
-# 保留 zh 快照绑定供向后兼容；实际路由走 rules.intent_priority()。
-_INTENT_PRIORITY = rules.intent_priority("zh")
 
 
 # 核心「数值型」项目字段——命中任一即视为「用户在供给/修改参数」。

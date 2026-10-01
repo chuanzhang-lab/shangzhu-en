@@ -3,7 +3,7 @@
 设计约定（详见 docs/PLAN_I18N_EN.md）：
 
 1. 文案外置到 `src/i18n/{zh,en}.yaml`，业务代码只按键取值，不再硬编码中文。
-   语言是**部署级 profile**（环境变量 `SHANGZHU_LOCALE`，默认 `zh`），
+   语言是**部署级 profile**（环境变量 `SHANGZHU_LOCALE`，默认 `en`），
    不做运行时 UI 切换 —— 运行时切会让已抽取参数进入混合语言状态，
    与项目「缺失不冒充 0」是同一类隐患。
 
@@ -11,8 +11,8 @@
    这样将来若要支持「每会话一种语言」，无需改动任何函数签名。
 
 3. 缺失处理遵循「缺失不冒充」哲学，绝不静默返回空串：
-   - 目标语言缺键 → 回退中文；
-   - 中文也缺 → 返回显式标记 `[i18n:missing:<key>]`，日志 ERROR。
+   - 目标语言缺键 → 回退默认语言（en）；
+   - 默认语言也缺 → 返回显式标记 `[i18n:missing:<key>]`，日志 ERROR。
    文案层永不抛异常中断业务链路（format 失败时返回未填充原文并记 ERROR）。
 
 4. 资源在首次使用时加载并进程内缓存，禁止每次调用读盘。
@@ -32,8 +32,10 @@ import yaml
 logger = logging.getLogger("web.i18n")
 
 _LANG_DIR = Path(__file__).resolve().parent
-DEFAULT_LOCALE = "zh"
-SUPPORTED_LOCALES = ("zh", "en")
+# 部署级默认语言。此处是 SSOT：rules 层的 DEFAULT_LOCALE 从这里导入，
+# 不得再各自定义一份（曾有两处定义，会漂移）。
+DEFAULT_LOCALE = "en"
+SUPPORTED_LOCALES = ("en", "zh")
 _ENV_KEY = "SHANGZHU_LOCALE"
 
 # None 表示「未显式设置」，此时回退到环境变量（部署级 profile）
@@ -46,7 +48,7 @@ _MISSING_PREFIX = "[i18n:missing:"
 
 
 def _env_locale() -> str:
-    """读部署级 locale 配置；非法值一律回退中文（不静默用错语言）。"""
+    """读部署级 locale 配置；非法值一律回退默认语言（不静默用错语言）。"""
     raw = (os.environ.get(_ENV_KEY) or "").strip().lower()
     if raw in SUPPORTED_LOCALES:
         return raw
@@ -56,7 +58,7 @@ def _env_locale() -> str:
 
 
 def get_locale() -> str:
-    """当前 locale：会话级覆盖 > 部署级环境变量 > zh。"""
+    """当前 locale：会话级覆盖 > 部署级环境变量 > 默认语言（en）。"""
     return _locale_ctx.get() or _env_locale()
 
 
@@ -145,7 +147,7 @@ def industry_name(key: str) -> str:
 def t(key: str, **kwargs: Any) -> str:
     """取文案。
 
-    回退链：当前 locale → 中文 → 显式缺失标记。
+    回退链：当前 locale → 默认语言（en）→ 显式缺失标记。
     任何情况下都不抛异常、不返回空串。
     """
     locale = get_locale()

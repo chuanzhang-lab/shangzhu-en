@@ -35,9 +35,11 @@ from . import rules
 #    ——「宠物医院」同时含「宠物」和「医院」，宠物必须排在医疗前面。
 # 由 test_cov_f4_every_template_industry_is_reachable 守住 12 行业可达。
 #
-# 此处保留 **zh 快照**绑定（该测试 import 本名 + 向后兼容）；
+# 此处保留模块级常量（test_finance_correctness.py import 本名做行业可达性护栏）；
 # 实际抽取走 rules.industry_keywords()，按当前 locale 取。
-INDUSTRY_KEYWORDS = rules.industry_keywords("zh")
+# 行业键在 zh/en 两套规则中完全一致（同名同序），故本常量的键集合
+# 不随 locale 变；此处无参调用只为尊重部署语言，不钉死 zh。
+INDUSTRY_KEYWORDS = rules.industry_keywords()
 
 
 def _detect_industry(text: str) -> Optional[str]:
@@ -199,8 +201,7 @@ def _parse_number(raw: str) -> Optional[float]:
 # ─── 字段抽取模式 ──────────────────────────────────────────────────────────
 # 数据化：16 个字段的模式已迁到 src/router/rules/{zh,en}.yaml。
 # 引擎（position 搜索 / 单位换算 / 量纲护栏）只有一份，语言差异只在数据文件。
-# 此处保留 zh 快照绑定供向后兼容；实际抽取走 rules.field_patterns()。
-_FIELD_PATTERNS = rules.field_patterns("zh")
+# 抽取主路径走 rules.field_patterns()（无参 = 按当前 locale 取），见 extract_params。
 
 
 # ─── 文本分段 ─────────────────────────────────────────────────────────────
@@ -208,8 +209,8 @@ _FIELD_PATTERNS = rules.field_patterns("zh")
 
 # 无标点连写时，在字段关键词前插入分隔，避免「投资30万租金8000」整段共享第一个「万」
 # 数据化：整条正则迁到 rules/{zh,en}.yaml 的 boundary.pattern（含 lookahead，
-# 拆成词表即变语义，故整条存储）。实际使用走 rules.boundary_re() 按 locale 取。
-_BOUNDARY_RE = rules.boundary_re("zh")
+# 拆成词表即变语义，故整条存储）。抽取时走 rules.boundary_re() 无参调用，
+# 按当前 locale 取规则。
 _KW_WINDOW = 24  # 关键词邻域：禁止用整段 after_text 的第一个「万」
 
 

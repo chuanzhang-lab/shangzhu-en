@@ -125,17 +125,22 @@ def test_placeholder_parity_between_zh_and_en():
         )
 
 
-def test_t_returns_zh_default_and_en_after_set_locale():
-    """默认 zh；set_locale('en') 后取英文；reset 后回到部署级默认。"""
+def test_t_returns_en_default_and_zh_after_set_locale(monkeypatch):
+    """默认 en；set_locale('zh') 后取中文；reset 后回到部署级默认。
+
+    monkeypatch 删掉 SHANGZHU_LOCALE，隔离外部部署环境的干扰 —— 否则
+    有人在 zh 部署下跑测试就会挂（本用例断言的是「未设环境变量时默认 en」）。
+    """
+    monkeypatch.delenv("SHANGZHU_LOCALE", raising=False)
     i18n.reload()
     i18n.reset_locale()
-    assert i18n.get_locale() == "zh"
-    assert i18n.t("fmt.traffic_unit.fallback") == "单/天"
-    i18n.set_locale("en")
     assert i18n.get_locale() == "en"
     assert i18n.t("fmt.traffic_unit.fallback") == "units/day"
-    i18n.reset_locale()
+    i18n.set_locale("zh")
+    assert i18n.get_locale() == "zh"
     assert i18n.t("fmt.traffic_unit.fallback") == "单/天"
+    i18n.reset_locale()
+    assert i18n.t("fmt.traffic_unit.fallback") == "units/day"
 
 
 def test_t_missing_key_is_explicit_never_empty():
@@ -207,12 +212,13 @@ def test_en_bench_and_industry_names_are_fully_translated():
             )
 
 
-def test_t_invalid_locale_falls_back_to_zh():
-    """非法 locale 不生效（不能静默用错语言）。"""
+def test_t_invalid_locale_falls_back_to_default(monkeypatch):
+    """非法 locale 不生效（不能静默用错语言），回退部署级默认语言。"""
+    monkeypatch.delenv("SHANGZHU_LOCALE", raising=False)
     i18n.reload()
     i18n.reset_locale()
     i18n.set_locale("klingon")
-    assert i18n.get_locale() == "zh"
+    assert i18n.get_locale() == "en"
 
 
 # 已完成文案外置的模块（M2 起逐个加入，改一个加一个）
