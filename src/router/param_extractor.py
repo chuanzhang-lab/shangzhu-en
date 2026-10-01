@@ -213,6 +213,20 @@ def _parse_number(raw: str) -> Optional[float]:
 # 按当前 locale 取规则。
 _KW_WINDOW = 24  # 关键词邻域：禁止用整段 after_text 的第一个「万」
 
+# 千分位分隔符：仅在「数字,3位数字」且后面不再是数字时才是分隔符（"2,800" / "10,000"）。
+# 为什么在这里统一归一、而不是让每条正则各写一遍：售价那条路径认得逗号（能抽出 2800），
+# 人力那条不认（labor_pair 正则把 "2,800" 截成 "2"，再被合理性门禁判废 → 人数与薪资
+# 双双丢失）。同一个数字形态在两处能力不一致，就是这类静默丢参的来源。
+# 归一前置后，所有正则看到的都是无分隔符数字。
+_THOUSANDS_SEP_RE = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+
+
+def _strip_thousands_separators(text: str) -> str:
+    """去掉数字里的千分位逗号（"2,800" → "2800"），其余逗号一律不动。"""
+    if not text or "," not in text:
+        return text
+    return _THOUSANDS_SEP_RE.sub("", text)
+
 
 def _inject_field_boundaries(text: str) -> str:
     """在字段关键词前插入逗号，把无标点连写切成可独立抽取的段。"""
@@ -359,18 +373,21 @@ def _has_number_with_unit(text: str, units) -> bool:
 
 
 def _has_context_word(text: str, words) -> bool:
-    """text 开头附近是否出现指定语境词（reject_context 护栏用）。
+    """text 邻域内是否出现指定语境词（reject_context 护栏用）。
 
-    只检查 text 前 10 个字符（关键词与数字之间的区域），避免跨段误判。
-    例如「每天」后紧跟「营业额」→ 是日营收，不是客流；
-    但「每天卖80杯，营业额不错」里「营业额」在逗号后，属于下一分句，不应触发。
+    传进来的 text 已经是**有界邻域**（before/after_text 都被 _KW_WINDOW=24 截过），
+    所以整体检查就是「关键词邻域」，不会退化成跨段误判——那个风险来自无界的整段文本
+    （「每天卖80杯，营业额不错」里「营业额」在逗号后，属于下一分句，本就不会进邻域）。
+
+    旧实现只看 text[:10]，把邻域里的语境词硬生生截断：
+    "I have 2 employees at $2,800 each" 的 before_text = "e 2 employees at $2,800 "，
+    head[:10] = "e 2 employ" —— "employees" 就在邻域里却没被看到，护栏失效，
+    于是 2800 被判为 price_per_unit（薪资凭空变成客单价，污染收入侧）。
     """
     if not text:
         return False
-    # 只看关键词到第一个数字之间的区域（最多前 10 字）
-    head = text[:10]
     for w in words:
-        if w in head:
+        if w in text:
             return True
     return False
 
@@ -880,6 +897,9 @@ def extract_params(text: str) -> Dict:
     """
     params: Dict = {}
     text = text.strip()
+    # 千分位先归一（"2,800" → "2800"）：否则人力连写正则只捕获到 "2"，
+    # 被合理性门禁判废后人数与薪资双双丢失。见 _strip_thousands_separators 注释。
+    text = _strip_thousands_separators(text)
     # 无标点连写先切段，避免「投资30万租金8000」共享第一个「万」
     text = _inject_field_boundaries(text)
 
@@ -906,6 +926,12 @@ def extract_params(text: str) -> Dict:
         params["employee_count"] = lab_count
     if lab_salary is not None:
         params["avg_salary"] = lab_salary
+        # 去噪：逗号把「人数 / 薪资」切成两个分句时（"2 employees, 2800 each"），
+        # 通用售价规则只看得到后半句 "2800 each"，会把薪资认成 price_per_unit。
+        # 专用人力正则更精确 → 同一个数字有了更准确的归属，丢弃售价侧噪声
+        #（与下方 variable_cost_rate vs ratio 的「精确优先」同一惯例）。
+        if params.get("price_per_unit") == lab_salary:
+            params.pop("price_per_unit", None)
 
     # ── 补充抽取：变动成本率（「食材成本占营业额45%」「成本率40%」）──
     _extract_cost_ratio(text, params)

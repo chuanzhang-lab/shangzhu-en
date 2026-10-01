@@ -682,6 +682,13 @@ labor_pair_patterns:
   - regex: '(\d+)\s*(?:employees|employee|staff|people|persons|person|workers|worker)\s*[*×xX]\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
     count_group: 1
     salary_group: 2
+  # Comma-separated: "2 employees, 2800 each" — 逗号把人数与薪资切成两个分句，
+  # 上面第一条要求两者相邻，匹配不到；而 "2800 each" 落进售价规则 → 薪资变成客单价。
+  # 误抓由 _plausible_labor 兜底（薪资须 500~500000）："2 employees, 80 customers"
+  # 这类会取到 80 → 判废 → 退回原行为，不会污染。
+  - regex: '(\d+)\s*(?:employees|employee|staff|people|persons|person|workers|worker)\s*[,，]\s*(?:salary|wage|pay|each|a month|per month|monthly)?\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
+    count_group: 1
+    salary_group: 2
 
 
 # ── L2 intent reinforcement markers (intent.py strong-compare / decision / cashflow) ──
