@@ -7,8 +7,11 @@ import json
 import sys
 import os
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from i18n import reset_locale, set_locale
 from tools.financial_calculator import (
     calculate_npv,
     calculate_irr,
@@ -28,11 +31,19 @@ def _call(fn, **kwargs):
     return json.loads(raw)
 
 
+@pytest.fixture
+def en():
+    """会话级切到 en（压过 conftest 的部署级 zh 钉），用完复位。"""
+    set_locale("en")
+    yield
+    reset_locale()
+
+
 # ── NPV ────────────────────────────────────────────────────────────────────
-def test_npv_zero_rate_is_sum():
+def test_npv_zero_rate_is_sum(en):
     d = _call(calculate_npv, rate_percent=0, cashflows_json="[100000,100000,100000]")
     assert d["npv"] == 300000.0, d
-    assert d["interpretation"] == "项目值得投资", d
+    assert d["interpretation"] == "Project is worth investing in", d
 
 
 def test_npv_positive_discount():
@@ -67,11 +78,11 @@ def test_irr_with_initial_investment():
 
 
 # ── ROI ──────────────────────────────────────────────────────────────────
-def test_roi_basic():
+def test_roi_basic(en):
     d = _call(calculate_roi, total_return=150, total_investment=100)
     assert d["roi"] == "50.0%", d
     assert d["net_profit"] == 50.0
-    assert d["interpretation"] == "回报率尚可"
+    assert d["interpretation"] == "Decent return"
 
 
 def test_roi_zero_investment_errors():
@@ -94,18 +105,18 @@ def test_breakeven_price_le_variable_errors():
 
 
 # ── 单位经济 LTV/CAC ─────────────────────────────────────────────────────
-def test_unit_economics_healthy():
+def test_unit_economics_healthy(en):
     d = _call(calculate_unit_economics, customer_acquisition_cost=100,
               customer_lifetime_value=300, gross_margin_percent=60)
     assert d["ltv_cac_ratio"] == 3.0, d
-    assert d["health"] == "健康"
+    assert d["health"] == "Healthy"
 
 
-def test_unit_economics_dangerous():
+def test_unit_economics_dangerous(en):
     d = _call(calculate_unit_economics, customer_acquisition_cost=200,
               customer_lifetime_value=100, gross_margin_percent=30)
     assert d["ltv_cac_ratio"] == 0.5
-    assert d["health"] == "危险"
+    assert d["health"] == "Danger"
 
 
 def test_unit_economics_zero_cac_errors():
@@ -174,7 +185,7 @@ def test_cost_structure_bad_json():
 
 
 # ── 敏感性分析（F3：变动成本随营收联动，固定成本独立波动）────────────────
-def test_sensitivity():
+def test_sensitivity(en):
     # 典型餐饮：月营收 6 万，固定成本 3 万（租金+人工+水电），变动成本 1.8 万（食材+包装+佣金）
     # 变动成本率 = 18000/60000 = 30%，月利润 = 12000
     d = _call(sensitivity_analysis, base_revenue=60000, fixed_cost=30000, variable_cost=18000,
@@ -189,7 +200,7 @@ def test_sensitivity():
     assert d["best_case"]["profit"] == 26400.0, d
     assert d["profit_range"] == 26400 - (-2400)
     # 口径说明必须存在
-    assert "变动成本随营收" in d["note"]
+    assert "Variable cost moves with revenue" in d["note"]
 
 
 # ── M2：None 消费一致性（2026-08-19）──────────────────────────────────
