@@ -4,7 +4,7 @@
 
 A local-first financial modeling workbench for micro-entrepreneurs opening a noodle shop, coffee stand, or family-run store — real main-street businesses, not polished pitch-deck models.
 
-**中文版（独立仓库）：[chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
+**Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
 ---
 
