@@ -26,6 +26,14 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 ---
 
+## What's New
+
+**English-only output** — Chinese copy removed from every rendered output path (reports, formatting, UI). Runtime CJK-leak guards now enforce English-only output on all user-visible surfaces.
+
+**More stable runtime** — flaky-free and order-independent test suite, concurrency-safe request handling, robust to empty/oversized/invalid inputs, and clean resource release on shutdown.
+
+---
+
 ## Quick start
 
 ```bash
