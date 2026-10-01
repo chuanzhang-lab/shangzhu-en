@@ -36,11 +36,12 @@ def _fmt_benchmark_lines(bench: Dict, industry_key: str = "") -> List[str]:
     这里只渲染四项对人有用的（客流区间 / 利润率 / 回本周期 / 核心风险），
     文案走 i18n，按行业取（基准是**每行业不同**的内容，不是通用 UI 文案）。
     """
-    # 「自定义 / 其他」没有基准条目：先问有没有，别把 missing 标记漏给用户
+    # 「自定义 / 其他」没有基准条目：走中性提示，绝不倒原始 dict。
+    # 倒 dict 会把 industry_templates.yaml 的兜底值（"未知"/"无数据"…）漏给用户 ——
+    # 英文版每次扫描都漏中文（M-07 护栏实测抓到）；且原始 dict 还含
+    # profit_margin_min 这类引擎内部字段，两种语言下都是噪音。
     if not industry_key or not has(f"bench.traffic.{industry_key}"):
-        # 拿不到行业键就退回「有啥显示啥」——宁可显示原始值也不静默留白
-        return [f"- {k}: {v}" for k, v in bench.items()
-                if isinstance(v, (int, float, str))]
+        return [f"- {t('bench.no_benchmark')}"]
     return [
         f"- {t('bench.label.traffic_range')}: {t(f'bench.traffic.{industry_key}')}",
         f"- {t('bench.label.profit_margin')}: {t(f'bench.margin.{industry_key}')}",
@@ -353,7 +354,11 @@ def _fmt_scan(data: Dict) -> str:
         if drivers:
             lines.append("")
             lines.append(
-                t("fmt.scan.scenarios_drivers", items="、".join(f"「{d}」" for d in drivers))
+                t(
+                    "fmt.scan.scenarios_drivers",
+                    # 分隔符与引号是**渲染标点**，不能硬编码中文（英文版会漏「」、）。
+                    items=", ".join(f'"{d}"' for d in drivers),
+                )
             )
         lines.append("")
 

@@ -820,6 +820,7 @@ industry:
 # 由 test_bench_copy_matches_config 守住；改配置不改这里 = 测试红。
 bench:
   note: "以上为行业参考区间（人民币口径），非预测值"
+  no_benchmark: "该行业暂无行业参考基准；以上数字仅为模型输出。"
   label:
     traffic_range: "日均客流"
     profit_margin: "典型利润率"

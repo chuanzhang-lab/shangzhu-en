@@ -7,7 +7,11 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "SHANGZHU_LOCALE": "en"
+            }
         },
         {
             "name": "Python Debugger: web_server",

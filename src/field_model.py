@@ -661,6 +661,6 @@ def derived_values(params: Dict[str, Any], src: Optional[Dict[str, str]] = None)
             item["value"] = None
             item["formula"] = ""
             causes = _missing_root_causes(name, params, values)
-            item["missing"] = "、".join(dict.fromkeys(causes)) if causes else t("field.msg.missing_deps")
+            item["missing"] = t("llm.brief.sep").join(dict.fromkeys(causes)) if causes else t("field.msg.missing_deps")
         out.append(item)
     return out

@@ -483,7 +483,7 @@ def to_llm_view(thread_id: str, focus_fields: Optional[List[str]] = None) -> dic
         rest = {k: v for k, v in raw_params.items() if k not in relevant}
         params_for_view = focused
         params_summary = (
-            t("ss.view.other_summary") + "、".join(
+            t("ss.view.other_summary") + t("llm.brief.sep").join(
                 f"{k}={v}" for k, v in rest.items()
             )
         ) if rest else ""

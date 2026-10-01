@@ -13,6 +13,11 @@ from langchain.tools import tool
 
 from i18n import has, industry_name, t
 
+# 「无限」是引擎的**数据标记**（靠等值比较识别，见 financial_calculator._calc_runway、
+# decision_engine、workflow_engine 的 `== "无限"`），不是文案。渲染时必须映射成
+# 展示文案，否则英文版报表会直接漏出中文（M-07 护栏实测抓到的泄漏）。
+_ENGINE_INFINITE_MARK = "无限"
+
 # output/ 目录文件数上限与 TTL，防止长期运行磁盘无限增长
 _MAX_OUTPUT_FILES = 50
 _OUTPUT_FILE_TTL_SECONDS = 3600 * 24  # 24 小时
@@ -257,8 +262,13 @@ def _cell(v) -> str:
     """报告单元格：**缺失**必须显式成「—」，绝不把 None 印成字面量 "None"。
 
     None 直出会被读者当成「数值就是 None」，与项目「缺失不冒充 0」同属一类事故。
+    「无限」这类引擎数据标记必须映射成展示文案（否则英文版漏中文）。
     """
-    return "—" if v is None else str(v)
+    if v is None:
+        return "—"
+    if str(v) == _ENGINE_INFINITE_MARK:
+        return t("fmt.common.infinite")
+    return str(v)
 
 
 def _labeled_scenarios(scan: dict) -> list:

@@ -124,7 +124,7 @@ def preview_op(op: dict, base_params: dict, scanner) -> Optional[dict]:
     fixed = (scan.get("params") or {}).get("monthly_fixed_cost")
     revenue = cm.get("monthly_revenue")
     return {
-        "label": op.get("label", changes and "、".join(f"{k}={v}" for k, v in changes.items()) or op.get("propose", "")),
+        "label": op.get("label", changes and t("llm.brief.sep").join(f"{k}={v}" for k, v in changes.items()) or op.get("propose", "")),
         "changes": changes,
         "ok": True, "reason": "",
         "profit_after": profit, "fixed_after": fixed, "revenue_after": revenue,

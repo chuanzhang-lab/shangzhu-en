@@ -818,6 +818,7 @@ industry:
 # 由 test_bench_copy_matches_config 守住；改配置不改这里 = 测试红。
 bench:
   note: "Industry reference ranges (CNY basis), not a forecast"
+  no_benchmark: "No industry reference available for this project type yet; the figures above are model outputs only."
   label:
     traffic_range: "Daily traffic"
     profit_margin: "Typical profit margin"

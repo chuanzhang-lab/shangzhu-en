@@ -504,7 +504,7 @@ def render_decision(decision_result: dict) -> str:
         lines.append("")
         for i, o in enumerate(decision_result["options"]):
             tag = "ABCD"[i]
-            chg = "、".join(f"{k}={v}" for k, v in o["changes"].items())
+            chg = t("llm.brief.sep").join(f"{k}={v}" for k, v in o["changes"].items())
             rev = t("de.render.reversible") if o.get("reversible") else t("de.render.hard_to_revert")
             lines.append(
                 t("de.render.option_line", tag=tag, label=o['label'], chg=chg,
