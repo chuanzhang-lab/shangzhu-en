@@ -1,4 +1,9 @@
 {
+	// 项目解释器：钉到 uv 管理的 .venv，避免调试/运行落到系统 Python
+	//（本机 Anaconda/homebrew Python 没装 PyYAML，F5 直接 ModuleNotFoundError: yaml）。
+	// 注意：该默认值只在「从未手动选过解释器」时生效；若调试器仍用错解释器，
+	// ⌘⇧P → "Python: Select Interpreter" → 选 ./.venv/bin/python（选一次即可）。
+	"python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
 	// Pylance 静态分析补充路径。
 	// web_server.py 运行时通过 sys.path.insert(0, src) 导入 router/tools/session_state
 	// 等 src/ 下的模块；pytest 走 pyproject.toml 的 [tool.pytest.ini_options]
