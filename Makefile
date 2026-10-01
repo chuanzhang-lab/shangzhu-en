@@ -28,9 +28,12 @@ smoke:
 compile:
 	$(PY) -m compileall -q src web_server.py tests
 
-# start.sh 读取 PORT 环境变量（不接受 -p 参数，见 start.sh）
+# start.sh 读取 PORT 环境变量（不接受 -p 参数，见 start.sh）。
+# SHANGZHU_LOCALE 显式传 en：部署默认语言必须是英文，不靠 start.sh 内部默认
+# 传递（少一层隐式依赖）。注意**不全局 export** —— make test 走 tests/conftest.py
+# 钉的 zh（中文用例需 zh），全局 en 会把 208 个中文用例跑崩。
 start:
-	PORT=$(PORT) ./start.sh
+	PORT=$(PORT) SHANGZHU_LOCALE=en ./start.sh
 
 health:
 	curl -sS "http://127.0.0.1:$(PORT)/health" | $(PY) -m json.tool
