@@ -165,14 +165,17 @@ async function loadTasks() {
 }
 async function _loadTasksInner() {
   try { const r = await fetch('/tasks'); if (!r.ok) throw new Error('HTTP ' + r.status); const tasks = await r.json(); taskList.innerHTML = '';
-    tasks.forEach(t => {
-      tasksCache[t.id] = t;  // 缓存含 params 的完整任务对象
-      const div = document.createElement('div'); div.className = 'task-item' + (t.id === currentTaskId ? ' active' : ''); div.dataset.id = t.id;
+    // 循环参数必须叫 task 而不是 t：全局 t 是 i18n 翻译函数，被参数遮蔽后
+    // 翻译调用变成「拿任务对象当函数调」→ TypeError → 被外层
+    // catch 吞掉 → 前端永远弹「任务列表加载失败」。i18n 迁移引入的回归。
+    tasks.forEach(task => {
+      tasksCache[task.id] = task;  // 缓存含 params 的完整任务对象
+      const div = document.createElement('div'); div.className = 'task-item' + (task.id === currentTaskId ? ' active' : ''); div.dataset.id = task.id;
       div.innerHTML = '<span class="tname"></span><span class="tmenu" title="' + t('ui.rename_title') + '">⋯</span><span class="tdel" title="' + t('ui.delete_title') + '">×</span>';
-      div.querySelector('.tname').textContent = t.name || t('ui.unnamed_task');
-      div.querySelector('.tname').addEventListener('click', () => switchTask(t.id));
-      div.querySelector('.tmenu').addEventListener('click', e => { e.stopPropagation(); taskMenu(t, div); });
-      div.querySelector('.tdel').addEventListener('click', e => { e.stopPropagation(); deleteTask(t, div); });
+      div.querySelector('.tname').textContent = task.name || t('ui.unnamed_task');
+      div.querySelector('.tname').addEventListener('click', () => switchTask(task.id));
+      div.querySelector('.tmenu').addEventListener('click', e => { e.stopPropagation(); taskMenu(task, div); });
+      div.querySelector('.tdel').addEventListener('click', e => { e.stopPropagation(); deleteTask(task, div); });
       taskList.appendChild(div); });
     // 刷新后自动恢复最近任务（否则分类按钮无参数状态、真实参数不加载）
     if (!currentTaskId && tasks.length > 0) {
@@ -220,7 +223,7 @@ async function newTask() {
   try {
     const r = await fetch('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: t('ws.task.new') }) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const t = await r.json(); currentTaskId = t.id; ok = true;
+    const task = await r.json(); currentTaskId = task.id; ok = true;
   } catch (e) { console.error('[newTask] 新建任务失败:', e); currentTaskId = null; }
   if (!ok) { setToast(t('ui.toast.new_task_fail'), '#d97706'); }
   clearChat(); activeTaskUi(); loadTasks(); input.focus();
@@ -267,9 +270,11 @@ async function restoreTaskParams(id) {
   updateParamsPanel(hasParams ? tp : null, null, null);
 }
 
-function taskMenu(t, div) {
+// 参数必须叫 task 而不是 t：t 是全局 i18n 翻译函数（同 _loadTasksInner 的教训），
+// 遮蔽后所有翻译调用都会变成「拿任务对象当函数调」→ TypeError。
+function taskMenu(task, div) {
   const tnameEl = div.querySelector('.tname');
-  const originalName = t.name || t('ui.unnamed_task');
+  const originalName = task.name || t('ui.unnamed_task');
   // 创建行内输入框替换任务名显示
   const input = document.createElement('input');
   input.type = 'text';
@@ -306,10 +311,10 @@ function taskMenu(t, div) {
     const clean = (newName || '').trim();
     if (!clean || clean === originalName) { finished = true; cleanup(); restore(); return; }
     finished = true; cleanup();   // 先上锁，避免 restore 触发的 blur 再次进入 finish
-    fetch('/tasks/' + t.id + '/rename', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: clean }) })
+    fetch('/tasks/' + task.id + '/rename', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: clean }) })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(() => {
-        if (tasksCache[t.id]) tasksCache[t.id].name = clean;  // 同步单一真相源
+        if (tasksCache[task.id]) tasksCache[task.id].name = clean;  // 同步单一真相源
         restore();                                             // 先把 tnameEl 放回 DOM
         if (tnameEl.parentNode) tnameEl.textContent = clean;  // 立即更新显示，杜绝二次 loadTasks 竞态下的旧名闪烁
         loadTasks();
@@ -323,11 +328,11 @@ function taskMenu(t, div) {
 }
 
 // Module 4: 任务删除重写 — CSS class 状态管理，不替换事件监听器
-async function deleteTask(t, div) {
+async function deleteTask(task, div) {
   const tdel = div.querySelector('.tdel');
   if (tdel.classList.contains('confirming')) {
     // 二次点击 → 执行删除
-    await executeDelete(t, div);
+    await executeDelete(task, div);
     return;
   }
   // 首次点击 → 进入确认状态
@@ -337,21 +342,21 @@ async function deleteTask(t, div) {
   tdel._cancelTimeout = setTimeout(() => resetDeleteButton(tdel), 3000);
 }
 
-async function executeDelete(t, div) {
+async function executeDelete(task, div) {
   const tdel = div.querySelector('.tdel');
   if (!tdel) { console.error('[executeDelete] tdel not found'); return; }
   clearTimeout(tdel._cancelTimeout);
   try {
-    const r = await fetch('/tasks/' + t.id, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const r = await fetch('/tasks/' + task.id, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     if (!r.ok) {
       const errText = await r.text().catch(() => r.status);
       throw new Error('HTTP ' + r.status + ': ' + errText);
     }
     // 从缓存中移除
-    delete tasksCache[t.id];
+    delete tasksCache[task.id];
     // 统一调用 loadTasks 刷新列表（无论是否当前任务，保证 UI 与服务端一致）
     await loadTasks();
-    setToast(t('ui.toast.deleted') + (t.name || t('ui.unnamed_task')), '#666');
+    setToast(t('ui.toast.deleted') + (task.name || t('ui.unnamed_task')), '#666');
   } catch (e) {
     console.error('[executeDelete] 删除失败:', e);
     resetDeleteButton(tdel);
