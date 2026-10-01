@@ -13,7 +13,7 @@
 将来若要接入 LLM 做语义判定，应替换本模块而非在调用点加分支。
 """
 
-from i18n import get_locale
+from i18n import DEFAULT_LOCALE, get_locale
 
 _MARKERS = {
     "zh": {
@@ -46,16 +46,16 @@ _MARKERS = {
 
 
 def tam_huge_markers() -> list:
-    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["tam_huge"])
+    return list(_MARKERS.get(get_locale(), _MARKERS[DEFAULT_LOCALE])["tam_huge"])
 
 
 def no_competitor_markers() -> list:
-    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["no_competitor"])
+    return list(_MARKERS.get(get_locale(), _MARKERS[DEFAULT_LOCALE])["no_competitor"])
 
 
 def risk_markers() -> list:
     """LLM 输出风险句起始词（随 locale；英文部署匹配英文 LLM 输出的 risk/warning…）。"""
-    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["risk"])
+    return list(_MARKERS.get(get_locale(), _MARKERS[DEFAULT_LOCALE])["risk"])
 
 
 def conflict_markers() -> list:
@@ -65,4 +65,4 @@ def conflict_markers() -> list:
     「与显式总数矛盾/conflicts with explicit total」写进字段来源串（其 _codes 仍是
     user/derived），所以不能只看状态码，还得匹配文案里的冲突信号。
     """
-    return list(_MARKERS.get(get_locale(), _MARKERS["zh"])["conflict"])
+    return list(_MARKERS.get(get_locale(), _MARKERS[DEFAULT_LOCALE])["conflict"])

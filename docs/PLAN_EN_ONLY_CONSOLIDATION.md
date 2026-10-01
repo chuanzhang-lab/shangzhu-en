@@ -276,7 +276,7 @@ LLM 只作 **Engine Steward（只读协作者）**，仅在闲聊与「AI 解读
 | **M-05** | ✅ 完成 | `ef83a5a` | 额外发现 `DEFAULT_LOCALE` 在 `i18n/` 与 `rules/` **各定义一份**（SSOT 违规，计划漏判），已收敛为 `rules` 从 `i18n` 导入 |
 | **M-06** | ⏸️ **后置** | — | **用户决策（2026-10-01）**：暂不删 `rules/zh.yaml`。理由：208 个中文用例中约 30 个是引擎算法测试（中文只是输入载体，测财务计算正确性），跟着陪葬是净损失。改为先钉住，待英文能力全绿后统一处置 |
 | **M-07** | ✅ 完成 | `8eb52a9` | 文件名为 `tests/test_cjk_leak_guard.py`（计划写的 `test_no_cjk_leak.py`）。护栏首跑即抓到 **4 处运行时泄漏**（见下） |
-| **M-08** | 🔜 **下一步** | — | 用户已确认纳入本轮实施 |
+| **M-08** | ✅ 完成 | `9690df5` | 缺口只在 Makefile（start.sh/launch.json 已默认 en）。显式传 `SHANGZHU_LOCALE=en` 但**不全局 export**（会把 conftest 钉 zh 的 208 个中文用例跑崩）。4 种启动方式实测 + 真实服务端到端验证 |
 
 **M-07 护栏抓到的 4 处运行时泄漏**（源码扫描抓不到，因为是数据面/渲染标点问题）：
 
@@ -313,7 +313,7 @@ M-02 ─┘         │
 | **MS-2 locale 收口** | M-04, M-05 | 3 文件硬编码清理 + DEFAULT_LOCALE 改 en | 非 `start.sh` 启动默认英文；评审是否破坏中文版兼容（若保留） | ✅ `ef83a5a` |
 | **MS-3 死重清除** | M-06 | 删 `rules/zh.yaml` + 中文正则 | 启动正常、英文抽取正常；评审删除范围是否过界 | ⏸️ **后置**（用户决策，见实施进度实况） |
 | **MS-4 护栏固化** | M-07 | CJK 泄漏护栏 | 护栏全绿 | ✅ `8eb52a9` |
-| **MS-5 部署一致** | M-08 | 4 种启动方式统一默认英文 | 4 种方式实测一致 | 🔜 本轮实施 |
+| **MS-5 部署一致** | M-08 | 4 种启动方式统一默认英文 | 4 种方式实测一致 | ✅ `9690df5` |
 
 ### 关键路径
 **M-01/M-02 → M-04 → M-05 → M-07** 是已完成的主链。M-05（locale 默认改 en）是**阻塞项**：M-06 删 zh 规则必须等 M-05 定好回退目标，否则会破坏 zh 回退链路导致异常（M-05 已完成，回退目标已定为 en，M-06 的前置条件已满足，现仅因测试处置策略而后置）。
@@ -354,8 +354,8 @@ M-06 是**不可逆度最高**的一步（删文件）。测试护栏已就位�
 |---|---|---|
 | MS-1 | `pytest tests/test_en_extraction_gaps.py -q` | 8 个英文写法全过 |
 | MS-2 | `SHANGZHU_LOCALE=en python -c "from router.intent import detect_intent; print(detect_intent('rent 8000'))"` + `grep '"zh"' src/` | 意图 `quick_scan`；grep 仅剩 2 处合法引用 |
-| MS-3 | `./start.sh` + 英文输入实测 | 服务启动正常、英文抽取正常、`rules/zh.yaml` 不存在 |
-| MS-4 | `pytest tests/test_no_cjk_leak.py -q` + 4 种启动方式实测 | 护栏全绿；4 种方式都默认英文 |
+| MS-3 | `./start.sh` + 英文输入实测 | ⏸️ 后置：M-06 未执行，`rules/zh.yaml` 暂留（208 个中文用例仍需它）；前置条件已满足，待英文能力全绿后重启 |
+| MS-4 | `pytest tests/test_cjk_leak_guard.py -q` + 4 种启动方式实测 | 护栏全绿；4 种方式都默认英文 |
 
 ### 验收方式
 ```bash
@@ -366,7 +366,7 @@ M-06 是**不可逆度最高**的一步（删文件）。测试护栏已就位�
 env SHANGZHU_LOCALE=en PYTHONPATH=src .venv/bin/python -m pytest tests/test_en_extraction_gaps.py -q
 
 # 3. CJK 泄漏护栏（新增）
-env SHANGZHU_LOCALE=en PYTHONPATH=src .venv/bin/python -m pytest tests/test_no_cjk_leak.py -q
+env SHANGZHU_LOCALE=en PYTHONPATH=src .venv/bin/python -m pytest tests/test_cjk_leak_guard.py -q
 
 # 4. 启动方式一致性
 env SHANGZHU_LOCALE=en PYTHONPATH=src .venv/bin/python -c "
