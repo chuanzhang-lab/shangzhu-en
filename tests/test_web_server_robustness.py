@@ -145,8 +145,11 @@ def test_health_includes_version_and_uptime():
     assert isinstance(body["uptime_seconds"], (int, float))
     assert "llm_configured" in body
     assert isinstance(body["llm_configured"], bool)
-    assert "sessions" in body
-    assert "active_sessions" in body["sessions"]
+    # sessions 属内部详情，须显式索取 /health?detail=1（默认探活不泄露会话规模）
+    assert "sessions" not in body
+    detailed = _client.get("/health?detail=1").json()
+    assert "sessions" in detailed
+    assert "active_sessions" in detailed["sessions"]
 
 
 def test_oversized_input_returns_400():

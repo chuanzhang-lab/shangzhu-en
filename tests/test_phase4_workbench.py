@@ -601,11 +601,12 @@ def test_p49_health_and_footer_single_source():
     try:
         # 1) 模块级 MODEL_NAME == config.model
         assert ws.MODEL_NAME == model, (ws.MODEL_NAME, model)
-        # 2) /health 返回 model == config.model，endpoint 非空
+        # 2) /health 返回 model == config.model；endpoint 属内部详情，需显式索取
         c = TestClient(ws.app)
         h = c.get("/health").json()
         assert h["model"] == model, h
-        assert h.get("endpoint"), h
+        assert "endpoint" not in h
+        assert c.get("/health?detail=1").json().get("endpoint"), h
         # 3) 首页页脚占位符被真实模型名替换，且不再残留占位符
         html = c.get("/").text
         assert model in html, "页脚未注入真实模型名"

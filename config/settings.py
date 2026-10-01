@@ -93,8 +93,26 @@ def load() -> dict:
         return _DEFAULT_CONFIG.copy()
 
 
+def _validate_endpoint_ssrf(base_url: str) -> Optional[str]:
+    """写入路径的 SSRF 校验委托给 llm_advisor._validate_llm_url。
+
+    两条蛇必须咬住同一处：探测端点 /settings/llm/test 与保存端点
+    /settings/llm 若各用一套规则，收紧探测口反而会让攻击者转向没防护的
+    写口。这里刻意不做实现，只转发 —— 规则只有一份，改一处两边生效。
+
+    返回 None 表示通过，否则返回拒绝原因文案。
+    """
+    try:
+        from llm_advisor import _validate_llm_url
+    except Exception:  # 模块不可用时退化为仅协议检查
+        if (base_url or "").startswith("http://"):
+            return t("llm.err.only_https", scheme="http")
+        return None
+    return _validate_llm_url(base_url)
+
+
 def validate(config: dict) -> tuple[bool, str]:
-    """校验配置格式。返回 (是否通过, 错误信息)。"""
+    """校验配置 dict。返回 (是否合法, 错误信息)。"""
     if not isinstance(config, dict):
         return False, t("cs.err.not_json_object")
     
@@ -119,7 +137,15 @@ def validate(config: dict) -> tuple[bool, str]:
     base_url = inner.get("base_url", "")
     if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
         return False, t("cs.err.bad_url_scheme")
-    
+
+    # SSRF 加固：写入路径与探测路径统一走同一份 URL 校验。
+    # 此前 _validate_llm_url 只在 /settings/llm/test 生效，POST /settings/llm
+    # 能直接落盘任意 URL —— 攻击者写入自己的端点后，后续所有 LLM 请求都会
+    # 带着真实 API key 打到那里（key 从 Authorization 头直接泄露）。
+    reject = _validate_endpoint_ssrf(base_url)
+    if reject:
+        return False, reject
+
     return True, ""
 
 

@@ -1060,19 +1060,27 @@ async def i18n_js():
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     uptime_seconds = round(time.time() - _START_TIME, 1)
     stats = session_stats()
-    return {
+    # 健康检查常被当作公开探活端点，默认不再回显内部详情，
+    # 避免泄露：LLM 厂商完整地址、后端降级状态（PG vs 内存）、会话数。
+    # 排查时按需取 /health?detail=1。
+    include_detail = request.query_params.get("detail", "") in ("1", "true")
+    body = {
         "status": "ok",
         "model": get_model_name(),
-        "endpoint": get_base_url(),
         "version": APP_VERSION,
         "uptime_seconds": uptime_seconds,
         "llm_configured": has_api_key(),
-        "sessions": stats,
-        "store_backend": type(get_store()).__name__,
     }
+    if include_detail:
+        body.update({
+            "endpoint": get_base_url(),
+            "store_backend": type(get_store()).__name__,
+            "sessions": stats,
+        })
+    return body
 
 
 # ── 模型设置 API（运行时切换 LLM 配置）──────────────────────────────────────

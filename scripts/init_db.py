@@ -1,23 +1,30 @@
-"""初始化本机 PostgreSQL — 幂等建库建表。
+"""Initialize the local PostgreSQL database — idempotent.
 
-为本地创业者工作台创建 `shangzhu` 库及 tasks / messages 表。
+Creates the `shangzhu` database and the tasks / messages tables.
 
-用法：
+Usage:
     .venv/bin/python scripts/init_db.py
 
-依赖：psycopg 3（已在 .venv）。可重复执行（CREATE IF NOT EXISTS）。
+Requires psycopg 3 (already in .venv). Safe to re-run (IF NOT EXISTS).
+
+Connection strings come from environment variables so no hostnames or
+credentials are committed:
+    PGADMIN_URL     admin connection used to create the database
+                    (default: libpq defaults against the local install)
+    PGDATABASE_URL  application connection used to create tables
 """
 import os
 import sys
 
 import psycopg
+from psycopg import sql
 
-# 管理员连接（默认连 postgres 库，用于建库）。可用 PGADMIN_URL 覆盖。
-DEFAULT_ADMIN_URL = "postgresql://newmacbook@localhost:5432/postgres"
+# No credentials or hostnames here — both URLs are fully environment-driven.
+# Falls back to libpq defaults (local socket / PG* variables) when unset.
+DEFAULT_ADMIN_URL = os.getenv("PGADMIN_URL", "")
 DB_NAME = "shangzhu"
 
-# 业务连接（建表用）。可用 PGDATABASE_URL 覆盖。
-DEFAULT_URL = f"postgresql://newmacbook@localhost:5432/{DB_NAME}"
+DEFAULT_URL = os.getenv("PGDATABASE_URL", "")
 
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -43,20 +50,25 @@ CREATE INDEX IF NOT EXISTS idx_messages_task ON messages(task_id);
 
 
 def ensure_db() -> None:
-    """若目标库不存在则创建（幂等）。"""
+    """Create the target database if it does not exist (idempotent)."""
     admin_url = os.getenv("PGADMIN_URL") or DEFAULT_ADMIN_URL
+    # Empty string makes psycopg fall back to libpq defaults / PG* variables.
     conn = psycopg.connect(admin_url, autocommit=True)
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (DB_NAME,))
             if not cur.fetchone():
-                cur.execute(f'CREATE DATABASE "{DB_NAME}"')
+                # CREATE DATABASE cannot accept bind parameters, so the identifier
+                # is quoted via sql.Identifier rather than f-string interpolation.
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(DB_NAME))
+                )
     finally:
         conn.close()
 
 
 def ensure_tables() -> None:
-    """在业务库内创建表（幂等）。"""
+    """Create tables inside the application database (idempotent)."""
     url = os.getenv("PGDATABASE_URL") or DEFAULT_URL
     conn = psycopg.connect(url, autocommit=True)
     try:
@@ -64,7 +76,7 @@ def ensure_tables() -> None:
             cur.execute(CREATE_TABLES_SQL)
     finally:
         conn.close()
-    print(f"[init_db] OK — DB={DB_NAME} 表就绪")
+    print(f"[init_db] OK — DB={DB_NAME} tables ready")
 
 
 def main() -> None:
@@ -76,5 +88,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:  # noqa: BLE001
-        print(f"[init_db] 失败: {e}", file=sys.stderr)
+        # Message only — never echo the connection URL, which may embed a password.
+        print(f"[init_db] failed: {e}", file=sys.stderr)
         sys.exit(1)

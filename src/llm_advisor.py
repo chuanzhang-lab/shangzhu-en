@@ -702,13 +702,17 @@ def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
     except ImportError:
         return {"ok": False, "status_code": None, "error": t("llm.err.requests_missing"), "latency_ms": 0}
 
-    # 绕过代理：将 API 域名加入 NO_PROXY
+    # 本次探测绕开代理。此处刻意保留 requests.post 调用（便于测试 monkeypatch），
+    # 因此采用「临时改写 + 最终还原」而非原地追加：旧实现从不还原，且每次调用
+    # 都往 NO_PROXY 里塞一个域名，长期运行会无限膨胀并把越来越多站点排除出代理。
     from urllib.parse import urlparse
-    _parsed = urlparse(base_url)
-    _domain = _parsed.hostname
+
+    _domain = urlparse(base_url).hostname
+    _saved_env: dict = {}
     if _domain:
         for _var in ("NO_PROXY", "no_proxy"):
-            _old = os.environ.get(_var, "")
+            _saved_env[_var] = os.environ.get(_var)
+            _old = _saved_env[_var] or ""
             if _domain not in _old:
                 os.environ[_var] = f"{_domain},{_old}" if _old else _domain
 
@@ -739,3 +743,10 @@ def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
     except Exception as e:  # noqa: BLE001
         latency = int((_time.time() - t0) * 1000)
         return {"ok": False, "status_code": None, "error": t("llm.err.probe_error", e=e), "latency_ms": latency}
+    finally:
+        # 还原 NO_PROXY：探测是一次性动作，不该留下永久性的环境副作用。
+        for _var, _original in _saved_env.items():
+            if _original is None:
+                os.environ.pop(_var, None)
+            else:
+                os.environ[_var] = _original

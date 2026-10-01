@@ -158,6 +158,36 @@ Deeper design docs: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/CALCU
 
 ---
 
+## Security Model
+
+**Shangzhu is a single-user, local-first tool. It is not designed to be exposed to the public internet.**
+
+The service binds to `127.0.0.1` by default (see `start.sh` and the `--host` argument in `web_server.py`). In this configuration the operating system's loopback interface is the only network boundary, and it should stay that way.
+
+Important properties you should understand before changing that default:
+
+- **No user accounts and no authorization layer.** There is exactly one data namespace. Any client that can reach the port can read every task and every message, including your revenue, cost, and margin figures. There is no per-task ownership check.
+- **No rate limiting.** Requests are not throttled. Because you supply your own LLM API key, an exposed instance lets third parties spend your credits.
+- **API keys are stored on disk.** Your key is written to `config/agent_llm_config.json` in plaintext (protected by filesystem permissions only). Treat that file as a credential.
+- **Session authentication is intentionally absent.** Session IDs are UUIDs, which are unguessable but are *not* secrets — possession is the only check.
+
+### If you choose to expose it anyway
+
+Doing so requires work this project has deliberately not done. Before you bind to `0.0.0.0` or put it behind a public reverse proxy, at minimum:
+
+1. Put it behind authenticating infrastructure (VPN, SSH tunnel, or an authenticating reverse proxy such as Authelia / OAuth2 Proxy). Do not rely on the application for this.
+2. Terminate TLS at that proxy. The application itself serves plain HTTP.
+3. Restrict your LLM key at the provider level — set a hard spend cap and a per-key IP allowlist if available.
+4. Understand that every user shares one data namespace. Do not use it for confidential data belonging to more than one party.
+
+For a multi-user deployment, adding a real authorization layer means changing the storage layer (the `tasks` table has no owner column) and threading an identity through every route. That is a substantial redesign, not a configuration flag.
+
+### Reporting a vulnerability
+
+See [`SECURITY.md`](SECURITY.md).
+
+---
+
 ## Disclaimer
 
 All projections are based on **the parameters you provide** and **industry-experience assumptions**, for assisted thinking and sensitivity analysis only — **not investment or business advice**. Make real decisions with your own due diligence and professional financial advice.

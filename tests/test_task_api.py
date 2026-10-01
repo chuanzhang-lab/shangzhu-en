@@ -76,9 +76,11 @@ def test_soft_delete():
 
 
 def test_health_reports_store_backend():
+    # 内部详情须按需索取（/health?detail=1），默认健康检查不再泄露后端类型
     h = client.get("/health").json()
-    assert "store_backend" in h
-    assert h["store_backend"] == "MemoryStore"
+    assert "store_backend" not in h
+    detailed = client.get("/health?detail=1").json()
+    assert detailed["store_backend"] == "MemoryStore"
 
 
 if __name__ == "__main__":
