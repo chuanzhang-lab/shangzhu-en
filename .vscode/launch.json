@@ -17,7 +17,8 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "SHANGZHU_LOCALE": "en"
             }
         }
     ]
