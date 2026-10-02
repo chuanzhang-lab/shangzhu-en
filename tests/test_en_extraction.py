@@ -243,6 +243,20 @@ def test_salary_words_never_steal_price_or_revenue(en):
     assert "avg_salary" not in _params("we get 100 customers a day")
 
 
+def test_percentage_is_never_read_as_money(en):
+    """百分比不得被当成金额：monthly_expense 对 `%` 设量纲护栏。
+
+    E-03：「variable costs 55%」里 costs 命中 monthly_expense 的关键词，
+    55 是比例却被收成月支出 → 参数表凭空多一个 monthly_expense=55.0。
+    """
+    p = _params("variable costs 55%")
+    assert "monthly_expense" not in p
+    assert p.get("variable_cost_ratio") == 0.55
+    # 真金额不得被护栏误伤
+    assert _params("fixed costs 12000").get("monthly_expense") == 12000.0
+    assert _params("monthly operating costs 9000").get("monthly_expense") == 9000.0
+
+
 def test_window_and_cap_fixes_do_not_break_chinese(zh):
     """上述改动不得改变中文抽取结果（中文侧是既有 oracle）。
 

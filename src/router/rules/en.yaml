@@ -343,6 +343,10 @@ fields:
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
     strict_units: true
     kw_position: {}
+    # E-03：百分比不是金额。「variable costs 55%」里的 costs 命中本字段关键词，
+    # 55 是比例却被收成月支出 → 参数表凭空多一个 monthly_expense=55.0，
+    # 还可能触发「客流×单价 vs 营收」之外的假冲突。沿用既有 reject_units 机制。
+    reject_units: ['%', 'percent']
   - field: 'variable_cost_rate'
     keywords: ['variable cost rate', 'variable cost ratio', 'variable costs', 'variable cost']
     position: 'before'
