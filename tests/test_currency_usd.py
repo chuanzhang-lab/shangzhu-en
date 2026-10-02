@@ -191,3 +191,83 @@ def test_report_shows_dollar_and_no_cny():
         assert "$" in blob or "USD" in blob
     finally:
         reset_locale()
+
+
+# ── 5. 货币符号位置：前置，不是后缀 ───────────────────────────────────────
+
+_DERIVED_PARAMS = {
+    "monthly_rent": 6000, "employee_count": 3, "avg_salary": 3200,
+    "daily_traffic": 160, "price_per_unit": 12, "variable_cost_ratio": 0.55,
+    "total_investment": 120000,
+}
+
+
+def _derived_rows():
+    from field_model import derived_values
+    from router.formatter import _join_value_unit
+    return {
+        d["field"]: _join_value_unit(
+            d["value"], d.get("unit_prefix") or "", d.get("unit") or "")
+        for d in derived_values(_DERIVED_PARAMS)
+        if d.get("status") == "ok"
+    }
+
+
+def test_english_money_symbol_is_a_prefix_not_a_suffix():
+    """英文：货币符号必须前置 —— `$57,600/month`，不是 `57,600 $/month`。
+
+    单位串 `$/month` 直接拼在数字后面就是「数字 空格 $/month」，英文读者眼里
+    是错位的写法。判据用「单位串是否以 $ 开头」拆分，中文单位是「美元/月」，
+    不以 $ 开头 → 走不进该分支，中文侧零改动。
+    """
+    set_locale("en")
+    try:
+        rows = _derived_rows()
+        assert rows["monthly_revenue"] == "$57,600/month"
+        assert rows["monthly_fixed_cost"] == "$15,600/month"
+        assert rows["variable_cost_per_unit"] == "$7/unit"
+        assert rows["available_cash"] == "$120,000"
+        # 不得出现「数字 + 空格 + $」这种后缀写法
+        for field, s in rows.items():
+            assert not re.search(r"\d\s+\$", s), f"{field} 符号在后面: {s!r}"
+        # 公式串同样不得把符号落在后面：「average 3200 $」→「average $3200」
+        from field_model import derived_values
+        blob = " ".join(
+            d.get("formula", "") for d in derived_values(_DERIVED_PARAMS)
+            if d.get("status") == "ok"
+        )
+        assert not re.search(r"\d\s+\$", blob), f"公式串里符号在后面: {blob!r}"
+        assert "average $3200" in blob
+    finally:
+        reset_locale()
+
+
+def test_chinese_money_rendering_is_unchanged():
+    """中文侧必须**逐字不变**：「57,600 美元/月」——无前缀、单位后置加空格。
+
+    这条是本次改动的边界护栏：判定条件一旦写成 locale 分支或键名判断，
+    很容易顺手改坏中文；用「前缀为空则后置加空格」的规则后中文原样输出。
+    """
+    set_locale("zh")
+    try:
+        rows = _derived_rows()
+        assert rows["monthly_revenue"] == "57,600 美元/月"
+        assert rows["annual_fixed_cost"] == "187,200 美元/年"
+        assert rows["variable_cost_per_unit"] == "7 美元/单件"
+        assert rows["available_cash"] == "120,000 美元"
+        for field, s in rows.items():
+            assert "$" not in s, f"{field} 中文侧不该出现 $: {s!r}"
+    finally:
+        reset_locale()
+
+
+def test_frontend_uses_the_same_join_rule_as_the_report():
+    """前端 app.js 必须与报表同规则，否则同一份数据在两处是两种写法。
+
+    后端把符号拆到 `unit_prefix` 字段（value 仍是数字，前端才能自己格式化）；
+    前端若仍写 `formatNum(value) + ' ' + unit`，界面会退回「57,600 $/month」。
+    """
+    src = _read(os.path.join("src", "web_static", "app.js"))
+    assert "fmtDerivedVal" in src, "前端仍在自己拼 value + unit"
+    # 派生值渲染处不得再出现裸的 `+ ' ' + (d.unit` 拼接
+    assert "+ ' ' + (d.unit||'')" not in src

@@ -136,6 +136,19 @@ def _fmt_insufficient(data: Dict) -> str:
     return "\n".join(lines)
 
 
+def _join_value_unit(val, prefix: str, unit: str) -> str:
+    """数字 + 单位拼接：有前置货币符号时紧贴数字（英文 `$57,600/month`），
+    否则后置加空格（`57,600 美元/月` / `160 customers/day`）。
+
+    判据是「有没有前置符号」，而不是 locale 分支：中文单位为「美元/月」，
+    prefix 恒为空串 → 输出与改动前**逐字相同**（中文侧零改动要求）。
+    """
+    num = f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
+    if prefix:
+        return f"{prefix}{num}{unit or ''}"
+    return f"{num} {unit}".rstrip() if unit else num
+
+
 def _fmt_derived(derived) -> list:
     """精确推算层渲染：由用户输入 + 确定公式推出的关联参数，逐项带公式标注。
 
@@ -153,7 +166,7 @@ def _fmt_derived(derived) -> list:
         out.append("|------|--------|------|")
         for d in ok_items:
             val = d["value"]
-            vs = f"{val:,.0f} {d['unit']}" if isinstance(val, (int, float)) else str(val)
+            vs = _join_value_unit(val, d.get("unit_prefix") or "", d.get("unit") or "")
             out.append(f"| {d['label']} | {vs} | `{d['formula']}` |")
         out.append("")
     if miss_items:

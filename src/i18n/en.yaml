@@ -240,7 +240,9 @@ field:
     monthly_revenue: "Daily traffic {traffic} × unit price {price} × {days} days"
     vcr_from_unit_cost: "Unit variable cost {uvc} ÷ unit price {price}"
     vcr_from_gross_margin: "1 − gross margin {gm}"
-    monthly_labor: "Headcount {count} × average {salary} {yuan}"
+    # 英文：货币符号在数字**前面**（"average $3200"）；中文侧是「人均 3200 美元」，
+    # 符号在后 —— 各语言各自调 token 顺序，不写死 $（避免与 field.unit.yuan 漂移）。
+    monthly_labor: "Headcount {count} × average {yuan}{salary}"
     labor_burden_tail: " ×(1+{rate} burden)"
     monthly_variable_cost: "Monthly revenue {rev} × variable cost ratio {vcr}"
     monthly_profit: "Monthly revenue {rev} − monthly fixed cost {fixed} − monthly variable cost {variable}"

@@ -859,7 +859,7 @@ function updateParamsPanel(params, paramSources, derived) {
     const okDerived = derived.filter(d => d.status === 'ok');
     const missDerived = derived.filter(d => d.status === 'missing');
     if (okDerived.length > 0) { html += '<div class="param-section">' + t('ui.derived_section') + '</div>';
-      okDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span style="display:flex;align-items:center;gap:6px;"><span class="psrc psrc-derived">' + t('ui.src_derived') + '</span><span class="pval" style="color:#666;cursor:default;">' + formatNum(d.value) + ' ' + (d.unit||'') + '</span></span></div>'; }); }
+      okDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span style="display:flex;align-items:center;gap:6px;"><span class="psrc psrc-derived">' + t('ui.src_derived') + '</span><span class="pval" style="color:#666;cursor:default;">' + fmtDerivedVal(d) + '</span></span></div>'; }); }
     if (missDerived.length > 0) { html += '<div class="param-section">' + t('ui.missing_section') + '</div>';
       missDerived.forEach(d => { html += '<div class="param-row"><span class="pname">' + d.label + '</span><span class="psrc psrc-missing">' + t('ui.src_missing') + ' ' + (d.missing||'') + '</span></div>'; }); }
   }
@@ -879,6 +879,14 @@ function srcCodeOf(paramSources, f, src) {
 }
 function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'number' && Number.isFinite(v)) return (v * 100).toFixed(0) + '%'; return formatNum(v); }
 function formatNum(v) { if (v === null || v === undefined) return '—'; if (typeof v === 'number' && Number.isFinite(v)) return v.toLocaleString(); if (typeof v === 'number' && !Number.isFinite(v)) return '—'; if (String(v).trim() === '') return '—'; return String(v); }
+
+// 派生值 = 前置货币符号 + 数字 + 单位。符号由后端 unit_prefix 给出（英文 "$"、
+// 中文空串）：有符号则紧贴数字（"$57,600/month"），无符号则后置加空格
+//（"57,600 美元/月"）。与后端 formatter._join_value_unit 必须同规则，
+// 否则同一份数据在报表和界面上是两种写法。
+function fmtDerivedVal(d) {
+  const p = d.unit_prefix || '', u = d.unit || '';
+  return p ? (p + formatNum(d.value) + u) : (u ? formatNum(d.value) + ' ' + u : formatNum(d.value)); }
 
 // ── 导出按钮（F5 补充-D：参数完整性前置校验）──
 function exportGuard() {

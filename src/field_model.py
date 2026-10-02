@@ -627,8 +627,12 @@ def _missing_root_causes(field: str, params: Dict[str, Any],
 def derived_values(params: Dict[str, Any], src: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """生成「精确推算层」清单。
 
-    每个派生字段：{field, label, value, unit, formula(带数字), status(ok/missing),
-    missing(缺什么)}。公式与 derive() 同源，不再手写第二份。
+    每个派生字段：{field, label, value, unit, unit_prefix, formula(带数字),
+    status(ok/missing), missing(缺什么)}。公式与 derive() 同源，不再手写第二份。
+
+    unit_prefix 是**前置**的货币符号（英文 "$"，中文空串）。它必须单独成字段而不是
+    并进 unit：消费方（报表 / 前端）拿到的 value 仍是数字，才能各自决定千分位与精度；
+    若把符号塞进 value 变成字符串，前端 formatNum 会直接失效。
     """
     src = src or {}
     out: List[Dict[str, Any]] = []
@@ -645,8 +649,15 @@ def derived_values(params: Dict[str, Any], src: Optional[Dict[str, str]] = None)
         disp_val, disp_unit = val, _U(spec["unit_key"])
         if spec.get("display_percent") and isinstance(val, (int, float)):
             disp_val, disp_unit = round(val * 100, 1), "%"
+        # 货币符号必须**前置**：英文写「$57,600/month」，不是「57,600 $/month」。
+        # 判据是「渲染后的单位串是否以货币符号开头」——中文单位是「美元/月」，
+        # 不以 $ 开头 → 走不进这个分支，输出与改动前**逐字相同**（中文侧零改动）。
+        disp_prefix = ""
+        if disp_unit.startswith("$"):
+            disp_prefix, disp_unit = "$", disp_unit[1:]
         item: Dict[str, Any] = {
             "field": name, "label": _L(spec["label_key"]), "unit": disp_unit,
+            "unit_prefix": disp_prefix,
             "status": "ok" if val is not None else "missing",
         }
         if val is not None:
