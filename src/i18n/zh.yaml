@@ -831,10 +831,12 @@ industry:
     "其他": "其他"
 
 # ─── 行业基准（内容，非 UI 文案）─────────────────────────────
-# zh 侧的值必须与 config/industry_templates.yaml 的 benchmark 逐字一致，
-# 由 test_bench_copy_matches_config 守住；改配置不改这里 = 测试红。
+# 本命名空间是行业基准文案的**唯一出处**：config/industry_templates.yaml 只放
+# 数值，不含任何文案（旧契约「zh 抄配置 + 相等断言」已随 _gen_bench_yaml.py
+# 一起删除）。覆盖度由 test_bench_i18n_covers_every_industry_in_config 守着；
+# 数据文件是否 locale-free 由 test_industry_config_is_locale_free 守着。
 bench:
-  note: "以上为行业参考区间（人民币口径），非预测值"
+  note: "以上为行业参考区间（美元口径），非预测值"
   no_benchmark: "该行业暂无行业参考基准；以上数字仅为模型输出。"
   # 未识别行业（走 fallback_template）时的四项展示值。
   # 原值是 config/industry_templates.yaml 的 fallback_template.benchmark 里的

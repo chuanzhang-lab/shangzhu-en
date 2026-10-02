@@ -6,7 +6,7 @@ A local-first financial modeling workbench for micro-entrepreneurs opening a noo
 
 **Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
-**Version / 版本：`0.3.0`**
+**Version / 版本：`0.4.0`**
 
 ---
 
@@ -29,6 +29,32 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 ---
 
 ## What's New / 更新内容
+
+### `0.4.0` — Multiple minor fixes
+
+**Spacing & copy**
+
+- Percentages now hug the number in **both** languages — `38%`, not `38 %`. The join rule treats `%` as inseparable while money keeps its locale-appropriate spacing (`$22,230/month` / `22,230 美元/月`); the web UI applies the same rule as the report.
+- The Chinese industry-reference footnote said "人民币口径" (RMB basis) — this deployment is USD. It now reads "美元口径".
+
+**Extraction (E-04): unit prices without "each"**
+
+- `150 customers a day at $13` used to extract the traffic but **lose the price** — the price keywords all required "each". Added `a day at` / `per day at` / `ticket average` patterns, so the most natural English phrasing for a small-business owner now works.
+- `percent` as a word is now accepted for the variable-cost ratio (`variable costs 55 percent`), and a price keyword followed by `%` is rejected as a ratio rather than read as money.
+
+#### 中文
+
+**本次为多项小错误修复（`0.4.0`）**
+
+**空格与文案**
+
+- 百分号在中**英**两侧都紧贴数值了——是 `38%`，不再是 `38 %`。拼接规则把 `%` 视为不可分隔，货币单位保持各自语言的自然写法（`$22,230/month` / `22,230 美元/月`）；网页界面与报表同一套规则。
+- 中文行业基准脚注写的是「人民币口径」，而本部署是美元——已改为「美元口径」。
+
+**抽取（E-04）：不带 each 的售价**
+
+- `150 customers a day at $13` 此前能抽出客流、却**丢了价格**——售价关键词全都要求 "each"。已补 `a day at` / `per day at` / `ticket average` 三种说法，小店主最自然的英文表达现在能抽到了。
+- 变动成本率现在也接受 `percent` 单词（`variable costs 55 percent`）；售价关键词后面跟着 `%` 时会被判为比率拒绝，不会读成金额。
 
 ### `0.3.0` — Extraction-layer correctness + English design
 

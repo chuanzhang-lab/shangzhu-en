@@ -881,12 +881,14 @@ function formatVal(f, v) { if (f === 'variable_cost_ratio' && typeof v === 'numb
 function formatNum(v) { if (v === null || v === undefined) return '—'; if (typeof v === 'number' && Number.isFinite(v)) return v.toLocaleString(); if (typeof v === 'number' && !Number.isFinite(v)) return '—'; if (String(v).trim() === '') return '—'; return String(v); }
 
 // 派生值 = 前置货币符号 + 数字 + 单位。符号由后端 unit_prefix 给出（英文 "$"、
-// 中文空串）：有符号则紧贴数字（"$57,600/month"），无符号则后置加空格
-//（"57,600 美元/月"）。与后端 formatter._join_value_unit 必须同规则，
-// 否则同一份数据在报表和界面上是两种写法。
+// 中文空串）：有符号则紧贴数字（"$57,600/month"），无符号则单位后置；百分号仍紧贴
+// 数字（"38%"），普通单位留空格（"57,600 美元/月"）。必须与后端 formatter 同规则。
 function fmtDerivedVal(d) {
   const p = d.unit_prefix || '', u = d.unit || '';
-  return p ? (p + formatNum(d.value) + u) : (u ? formatNum(d.value) + ' ' + u : formatNum(d.value)); }
+  if (p) return p + formatNum(d.value) + u;
+  if (!u) return formatNum(d.value);
+  return formatNum(d.value) + (u === '%' ? '' : ' ') + u;
+}
 
 // ── 导出按钮（F5 补充-D：参数完整性前置校验）──
 function exportGuard() {

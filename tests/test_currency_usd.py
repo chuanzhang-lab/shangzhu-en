@@ -98,6 +98,15 @@ def test_en_bench_note_is_usd_basis():
     )
 
 
+def test_zh_bench_note_is_usd_basis():
+    """中文行业基准脚注也必须与本项目的美元币种口径一致。"""
+    i18n.reload()
+    note = i18n._load("zh").get("bench.note", "")
+    assert note, "zh.yaml 缺 bench.note"
+    assert "美元口径" in note, f"中文基准脚注未标美元口径：{note!r}"
+    assert "人民币" not in note, f"中文基准脚注残留人民币口径：{note!r}"
+
+
 def test_money_template_renders_dollar_sign():
     """金额文案渲染出来必须带 $ 在前（美元语序），不是「1000 $」。"""
     set_locale("en")
@@ -210,13 +219,14 @@ _DERIVED_PARAMS = {
 }
 
 
-def _derived_rows():
+def _derived_rows(params=None):
     from field_model import derived_values
     from router.formatter import _join_value_unit
+    params = _DERIVED_PARAMS if params is None else params
     return {
         d["field"]: _join_value_unit(
             d["value"], d.get("unit_prefix") or "", d.get("unit") or "")
-        for d in derived_values(_DERIVED_PARAMS)
+        for d in derived_values(params)
         if d.get("status") == "ok"
     }
 
@@ -226,7 +236,7 @@ def test_english_money_symbol_is_a_prefix_not_a_suffix():
 
     单位串 `$/month` 直接拼在数字后面就是「数字 空格 $/month」，英文读者眼里
     是错位的写法。判据用「单位串是否以 $ 开头」拆分，中文单位是「美元/月」，
-    不以 $ 开头 → 走不进该分支，中文侧零改动。
+    不以 $ 开头 → 走不进该货币符号分支，中文金额拼接不变。
     """
     set_locale("en")
     try:
@@ -251,10 +261,9 @@ def test_english_money_symbol_is_a_prefix_not_a_suffix():
 
 
 def test_chinese_money_rendering_is_unchanged():
-    """中文侧必须**逐字不变**：「57,600 美元/月」——无前缀、单位后置加空格。
+    """中文金额必须保持「57,600 美元/月」——无前缀、普通单位后置加空格。
 
-    这条是本次改动的边界护栏：判定条件一旦写成 locale 分支或键名判断，
-    很容易顺手改坏中文；用「前缀为空则后置加空格」的规则后中文原样输出。
+    百分号的无空格规则由独立的中英回归用例覆盖。
     """
     set_locale("zh")
     try:
@@ -273,9 +282,22 @@ def test_frontend_uses_the_same_join_rule_as_the_report():
     """前端 app.js 必须与报表同规则，否则同一份数据在两处是两种写法。
 
     后端把符号拆到 `unit_prefix` 字段（value 仍是数字，前端才能自己格式化）；
-    前端若仍写 `formatNum(value) + ' ' + unit`，界面会退回「57,600 $/month」。
+    百分号还必须紧贴数字；普通单位仍后置留空格。
     """
     src = _read(os.path.join("src", "web_static", "app.js"))
     assert "fmtDerivedVal" in src, "前端仍在自己拼 value + unit"
     # 派生值渲染处不得再出现裸的 `+ ' ' + (d.unit` 拼接
     assert "+ ' ' + (d.unit||'')" not in src
+    assert "u === '%' ? '' : ' '" in src, "前端百分号仍与数字分离"
+
+
+@pytest.mark.parametrize("locale", ["zh", "en"])
+def test_percentage_units_have_no_space(locale):
+    """百分号必须紧贴数值；中英文共用同一派生值渲染路径。"""
+    set_locale(locale)
+    try:
+        rows = _derived_rows({**_DERIVED_PARAMS, "variable_cost_ratio": 0.38})
+        assert rows["variable_cost_ratio"] == "38%"
+        assert rows["gross_margin"] == "62%"
+    finally:
+        reset_locale()

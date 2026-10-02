@@ -143,6 +143,54 @@ def test_english_full_sentence_extracts_all_core_params(en):
         assert p.get(field) == want, f"{field}: got {p.get(field)}, want {want}"
 
 
+@pytest.mark.parametrize(
+    "text,expected,absent",
+    [
+        pytest.param(
+            "150 bowls a day at $13",
+            {"daily_traffic": 150.0, "price_per_unit": 13.0},
+            set(),
+            id="daily-traffic-and-price-without-each",
+        ),
+        pytest.param(
+            "pay each worker 3000 monthly",
+            {"avg_salary": 3000.0},
+            {"employee_count", "price_per_unit"},
+            id="pay-per-worker",
+        ),
+        pytest.param("ticket average is $18", {"price_per_unit": 18.0}, set(), id="ticket-average"),
+        pytest.param(
+            "I'm putting in $80,000",
+            {"total_investment": 80000.0},
+            set(),
+            id="putting-in-investment",
+        ),
+        pytest.param(
+            "COGS around 40 percent",
+            {"variable_cost_ratio": 0.4},
+            {"monthly_expense", "unit_variable_cost"},
+            id="cogs-percent",
+        ),
+        pytest.param("I employ 4", {"employee_count": 4.0}, {"avg_salary"}, id="employ-count"),
+        pytest.param(
+            "150 bowls a day at 13%",
+            {"daily_traffic": 150.0},
+            {"price_per_unit"},
+            id="percentage-is-not-unit-price",
+        ),
+    ],
+)
+def test_remaining_english_smoke_phrasings_are_extracted(en, text, expected, absent):
+    """E-04 冒烟：补齐缺失说法，且不给百分数凭空生成售价。"""
+    params = _params(text)
+    for field, value in expected.items():
+        assert params.get(field) == pytest.approx(value), (
+            f"{text!r}: {field}={params.get(field)!r}, expected {value}"
+        )
+    for field in absent:
+        assert field not in params, f"{text!r}: unexpected {field}={params[field]!r}"
+
+
 def test_keyword_window_never_cuts_a_number_in_half(en):
     """邻域窗口不得把数字截成两半：「$3200」被 24 字符窗口截成「$32」。
 

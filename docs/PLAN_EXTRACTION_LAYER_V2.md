@@ -85,7 +85,7 @@
 | E-01 | **致命** | `lease costs 5000 monthly` → `monthly_expense = 5,000,000,000`；`profit 3000 monthly` → `3e9`；`revenue 50000 monthly` → `5e10` | `param_extractor._parse_number()` 量级锚定正则 `^(\d+…)\s*{unit}` | 静默**放大 100 万倍**。同根因另一症状：`rent 5000 monthly` → 5e9 被 guard 丢弃 → 租金**静默丢参**。两种症状都指向同一行 |
 | E-02 | **严重** | 薪资说法大面积漏抽：`4 employees earning $3,500 each` / `each gets 4000 a month` / `payroll 4500 per head` / `3 employees making 3200` 均只抽出人数、**薪资为空** | `rules/en.yaml` → `avg_salary.keywords` 与 `labor_pair_patterns` | 人工是最敏感假设。漏抽 → 固定成本被低估 → 利润/回本偏乐观；下游虽有 `incomplete` 兜底，但**能抽到时应抽到** |
 | E-03 | **一般** | `variable costs 55%` → 凭空多出 `monthly_expense = 55.0` | 通用字段 `monthly_expense` 未对百分号设量纲护栏 | 污染参数表，可能触发派生一致性冲突 |
-| E-04 | 轻微 | 覆盖缺口：`ticket average is $18` / `I'm putting in $80,000` / `COGS around 40 percent` / `I employ 4` 抽不到 | `rules/en.yaml` 各字段 keywords | 漏参，但有 `missing` 兜底，不产生错值 |
+| E-04 | 轻微（本轮局部关闭） | 已覆盖 `150 bowls a day at $13`、`pay each worker 3000 monthly`、`ticket average is $18`、`I'm putting in $80,000`、`COGS around 40 percent`、`I employ 4` | `rules/en.yaml` 字段 keywords 与 `vc_ratio_patterns` | 原为漏参、由 `missing` 兜底；本轮只关闭这些已复现表达，未扩完整词表 |
 
 ## 4. 改进范围与目标
 
@@ -96,13 +96,14 @@
 | E-01 | 量级单位锚定后**不得紧跟字母**；`5000 monthly` 不再 ×1e6，`1.2m` / `150k` / `5000 million` 行为不变；中文 `万/千/w/k` 不受影响 |
 | E-02 | `avg_salary` 覆盖 `earning / earns / making / gets / per head / per person`；`pay … worker` 这类动宾句式能认领薪资；**不得**把真售价语境误伤 |
 | E-03 | `monthly_expense` 对 `%` 设量纲护栏（沿用既有 `reject_units` 机制，不新增模块） |
+| E-04 | 仅补齐本轮冒烟复现的 6 种具体表达；英文词表其余覆盖缺口仍留待后续 |
 
 **不做**（本次范围外）
 
 - 不更换抽取架构（不引入 LLM 抽取、不上 NLP 库）；
 - 不改中文规则包 `rules/zh.yaml`（中文侧零改动是硬约束）；
 - 不动 `field_model` / `workflow_engine` / 前端；
-- 不做 E-04 的完整词表扩充（仅记录，留待后续）。
+- 不做 E-04 的完整词表扩充；本轮只覆盖上表列出的 6 种复现表达。
 
 ## 5. 项目边界声明
 
@@ -189,6 +190,10 @@ monthly_expense.reject_units += ['%']       # E-03：百分比不是金额
   → 均含 `avg_salary`（3500 / 4000 / 4500 / 3200）。
   负例：`price per cup 15` / `15 each`（无 employees 语境）→ 仍是 `price_per_unit`。
 - **MS3**：`variable costs 55%` → 无 `monthly_expense`。
+- **E-04 回归**：`150 bowls a day at $13` → `daily_traffic=150`、`price_per_unit=13`；
+  `pay each worker 3000 monthly` → `avg_salary=3000`；`ticket average is $18` →
+  `price_per_unit=18`；`I'm putting in $80,000` → `total_investment=80000`；
+  `COGS around 40 percent` → `variable_cost_ratio=0.4`；`I employ 4` → `employee_count=4`。
 - **端到端 Oracle**：
   `Rent is $6000 per month, 4 employees earning $3200 each, 150 bowls a day at $13, food cost 38%`
   → `monthly_labor = 12800`、`monthly_fixed_cost = 18800`、人工**进入**总额且来源标 `[User]`。

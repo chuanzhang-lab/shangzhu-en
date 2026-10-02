@@ -215,12 +215,12 @@ fields:
     reject_context: ['deposit', 'security deposit']
     kw_position: {}
   - field: 'total_investment'
-    keywords: ['total investment', 'startup capital', 'initial investment', 'investment', 'invest', 'capital', 'budget']
+    keywords: ['total investment', 'startup capital', 'initial investment', 'investment', 'invest', 'capital', 'budget', 'putting in']
     position: 'before'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand', 'm', 'million']
     kw_position: {}
   - field: 'employee_count'
-    keywords: ['employees', 'employee', 'staff', 'headcount', 'team', 'workers', 'people', 'hires']
+    keywords: ['employees', 'employee', 'staff', 'headcount', 'team', 'workers', 'people', 'hires', 'employ']
     position: 'any'
     units: ['employees', 'staff', 'people', 'workers', 'persons', 'members', 'hires']
     max_value: 200
@@ -236,7 +236,7 @@ fields:
     # 实测「monthly earnings 30000」会被读成月薪 30000（营收变薪资）。
     # 这两个词改由 `labor_pair_patterns` 认领（那里要求「N employees … 数字」
     # 相邻，营收句根本进不来）。
-    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head', 'paid', 'pays',
+    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'pay each worker', 'payroll per head', 'paid', 'pays',
                'making', 'gets', 'per head', 'pay per head', 'per employee']
     position: 'before'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
@@ -289,6 +289,7 @@ fields:
       - 'average ticket'
       - 'avg ticket'
       - 'ticket price'
+      - 'ticket average'
       - 'unit price'
       - 'price per unit'
       - 'selling price'
@@ -298,11 +299,14 @@ fields:
       - 'per bowl'
       - 'per item'
       - 'per order'
+      - 'per day at'
+      - 'a day at'
       - 'each'
       - 'a cup'
       - 'a bowl'
     position: 'after'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars']
+    reject_units: ['%', 'percent', 'pct']
     # "each" is ambiguous in English: "15 each" (per cup) vs "6000 each" (per person).
     # - kw_position before: take the number BEFORE "each" (otherwise the search runs
     #   off the end of the sentence and grabs a neighbouring number).
@@ -317,10 +321,13 @@ fields:
       'a bowl': 'before'
       price: 'before'
       ticket price: 'before'
+      ticket average: 'before'
       unit price: 'before'
       average ticket: 'before'
       avg ticket: 'before'
       selling price: 'before'
+      per day at: 'before'
+      a day at: 'before'
   - field: 'monthly_revenue'
     keywords: ['monthly revenue', 'monthly sales', 'monthly income', 'monthly turnover', 'revenue', 'turnover', 'sales per month']
     position: 'before'
@@ -666,13 +673,13 @@ reset_hints:
 
 # Variable cost ratio (normalised 0~1): "45% of revenue" / "variable cost 60%"
 vc_ratio_patterns:
-  - regex: '(?:ingredient|material|raw material|cogs|variable)(?:\s+cost)?\s*(?:is|are|at|of|about|around)?\s*(-?\d+(?:\.\d+)?)\s*%'
-  - regex: '(?:variable cost ratio|variable cost rate|cost ratio)\s*(?:is|are|at|of|=)?\s*(-?\d{1,3}(?:\.\d+)?)\s*%'
-  - regex: '(-?\d+(?:\.\d+)?)\s*%\s*(?:of\s+)?(?:revenue|sales|turnover|income)'
+  - regex: '(?:ingredient|material|raw material|cogs|variable)(?:\s+cost)?\s*(?:is|are|at|of|about|around)?\s*(-?\d+(?:\.\d+)?)\s*(?:%|percent\b)'
+  - regex: '(?:variable cost ratio|variable cost rate|cost ratio)\s*(?:is|are|at|of|=)?\s*(-?\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b)'
+  - regex: '(-?\d+(?:\.\d+)?)\s*(?:%|percent\b)\s*(?:of\s+)?(?:revenue|sales|turnover|income)'
   # Bare "cost 55%" / "costs at 55%" — the plain-English shorthand. Runs last so the
   # specific phrases above win. lookbehind keeps it away from fixed/total/unit cost
   # (the last belongs to unit_variable_cost, not a rate).
-  - regex: '(?<!fixed\s)(?<!total\s)(?<!unit\s)(?<!per\s)(?:costs?|cost\s+ratio|cost\s+rate)\s*(?:is|are|at|of|=|:)?\s*(-?\d{1,3}(?:\.\d+)?)\s*%'
+  - regex: '(?<!fixed\s)(?<!total\s)(?<!unit\s)(?<!per\s)(?:costs?|cost\s+ratio|cost\s+rate)\s*(?:is|are|at|of|=|:)?\s*(-?\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b)'
 
 # Annual rent -> monthly rent = annual / 12 (treating annual as monthly is a 12x error)
 # Order matters: "annual rent" style (keyword first) must run before the generic

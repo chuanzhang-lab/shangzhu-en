@@ -206,7 +206,7 @@ if text.startswith("[i18n:missing:"):
 | 模块冲突 | 通过 | 数值字段（`*_min` / `*_max`）原样透传，`_benchmark_check` 输入未变；`_traffic_unit` 从视图取值，中文侧仍得「杯/天」 |
 | 运行改进 | 通过 | 全量 `pytest tests` **616 passed**（基线 611，+5）；`/health` 返回 `0.2.0` |
 | 功能边界 | **有残留** | ① `/chat` 返回的 `params.industry` 仍是数据键 `餐饮` —— **故意的**，前端要原样回传，展示层已映射；②「跑道无限」英文渲染成 `Unlimited months`，略有冗余 |
-| 工程完整性 | **有残留** | ① `38 %` / `62 %` 数字与百分号间有空格（`_join_value_unit` 的后置空格规则），**中英两侧同症状、非本次引入**；② `zh.yaml` 的 `bench.note` 仍写「人民币口径」，按「不改中文侧」约定未动 |
+| 工程完整性 | 本轮收口 | ① 后端 `_join_value_unit` 与前端 `fmtDerivedVal` 都让 `%` 紧贴数字，中英共用；② `zh.yaml` 的 `bench.note` 已改为「美元口径」，并由币种回归测试守护 |
 
 ## 12.4 负向验证（防「绿灯假象」）
 

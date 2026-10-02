@@ -138,15 +138,15 @@ def _fmt_insufficient(data: Dict) -> str:
 
 def _join_value_unit(val, prefix: str, unit: str) -> str:
     """数字 + 单位拼接：有前置货币符号时紧贴数字（英文 `$57,600/month`），
-    否则后置加空格（`57,600 美元/月` / `160 customers/day`）。
+    否则后置加空格（`57,600 美元/月` / `160 customers/day`），但百分号紧贴数值。
 
-    判据是「有没有前置符号」，而不是 locale 分支：中文单位为「美元/月」，
-    prefix 恒为空串 → 输出与改动前**逐字相同**（中文侧零改动要求）。
+    货币符号位置由 prefix 决定而非 locale；`%` 在中英文里都不与数字分隔。
     """
     num = f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
     if prefix:
         return f"{prefix}{num}{unit or ''}"
-    return f"{num} {unit}".rstrip() if unit else num
+    separator = "" if unit == "%" else " "
+    return f"{num}{separator}{unit}".rstrip() if unit else num
 
 
 def _fmt_derived(derived) -> list:
