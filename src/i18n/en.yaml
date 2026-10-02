@@ -1172,8 +1172,11 @@ ws:
     export_pdf: 📄 PDF
     export_excel: 📊 Excel
     params_placeholder: Enter project parameters to show here
-    example_q_coffee: Open a coffee shop, monthly rent 15000, 3 employees, average salary 5000, 50 customers per day, average price 25. Detailed analysis
-    example_q_saas: Build a SaaS tool, target customers are SMEs, priced at 99 per month, expected 1000 users in the first year. Detailed analysis
+    # Numbers in the example questions must be USD-scale. The old ones
+    # (rent 15000 / salary 5000 / price 25) read as "$25 for a coffee and
+    # $5,000/month for a barista" once the currency switched.
+    example_q_coffee: Open a coffee shop, monthly rent 6000, 3 employees, average salary 3200, 160 customers per day, average price 6. Detailed analysis
+    example_q_saas: Build a SaaS tool, target customers are SMEs, priced at $99 per month, expected 1000 users in the first year. Detailed analysis
     example_q_quick: "Quick: milk tea shop, total investment 500k, monthly rent 20k"
     example_q_benchmark: Look up 2024 China coffee industry benchmarks for gross margin and customer acquisition cost
   modal:

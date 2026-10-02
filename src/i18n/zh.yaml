@@ -7,8 +7,8 @@ fmt:
   common:
     project_type_default: "项目"
     qual_suffix: "（{s}）"
-    money: "{v} 元"
-    delta_money: "+{v} 元"
+    money: "${v}"
+    delta_money: "+${v}"
     unknown: "未知"
     unknown_pending: "未知/待填"
     infinite: "无限"
@@ -52,7 +52,7 @@ fmt:
     core_header: "## 核心指标"
     core_table_header: "| 指标 | 数值 | 状态 |"
     vc_gap_note1: "> 📌 **变动成本率未提供，利润与保本结论还不能定。**"
-    vc_gap_note2: "> 补一句「变动成本率 55%」或「每份成本 X 元」即可算出硬结论。"
+    vc_gap_note2: "> 补一句「变动成本率 55%」或「每份成本 $X」即可算出硬结论。"
     profit_unknown: "⚪ 未知（需变动成本率）"
     profit_up: "🟢 盈利"
     profit_down: "🔴 亏损"
@@ -99,8 +99,8 @@ fmt:
     revenue_row: "| 月营收 | {base} | {alt} | {diff} |"
     fixed_row: "| 月固定成本 | {base} | {alt} | {diff} |"
     verdict: "## 结论: {verdict}"
-    profit_diff: "\n利润差异: {value} 元/月"
-    revenue_diff: "营收差异: {value} 元/月"
+    profit_diff: "\n利润差异: ${value}/月"
+    revenue_diff: "营收差异: ${value}/月"
     ops_hint: "操作: 改参数 | 趋势预测 | 参数建议 | 生成PDF"
 
   # ── suggest_params ────────────────────────────────────────────────────
@@ -108,9 +108,9 @@ fmt:
     error: "## ⚠️ 参数建议失败\n\n{error}"
     title: "## 💡 参数调整建议"
     expectation_header: "## 调整后预期"
-    current_profit: "- 当前月利润: **{value} 元**"
-    projected_profit: "- 调整后月利润: **{value} 元**"
-    total_improvement: "- 总改善: **{value} 元/月**"
+    current_profit: "- 当前月利润: **${value}**"
+    projected_profit: "- 调整后月利润: **${value}**"
+    total_improvement: "- 总改善: **${value}/月**"
     verdict: "- 结论: {verdict}"
     issues_header: "## 检测到的问题"
     issues_table_header: "| 严重度 | 问题 |"
@@ -137,13 +137,13 @@ fmt:
     cannot_title: "## 💰 成本归因还不能定"
     cannot_message: "成本数据不足，无法进行归因分析。"
     title: "## 💰 成本结构归因"
-    total_cost: "**月度总成本**：{total} 元（固定 {fixed} + 变动 {variable}）"
+    total_cost: "**月度总成本**：${total}（固定 {fixed} + 变动 {variable}）"
     ratio: "**固定/变动比**：{fixed:.0%} / {variable:.0%}"
     components_header: "### 各分量明细"
     components_table_header: "| 分项 | 金额 | 占比 | 来源 |"
-    component_row: "| {name} | {amount} 元 | {pct} | {source} |"
+    component_row: "| {name} | ${amount} | {pct} | {source} |"
     chart_header: "### 成本占比图"
-    top_component: "**最大成本项**：{name}（{amount} 元，占 {pct}）"
+    top_component: "**最大成本项**：{name}（${amount}，占 {pct}）"
     warnings_header: "### 风险提示"
     ops_hint: "操作: 改参数 | 敏感度分析 | 对比方案 | 趋势预测"
 
@@ -160,7 +160,7 @@ fmt:
     margin: "**安全边际**：{value}（{pct}）· 方向：{direction}"
     curve_header: "### 利润随变量变化"
     curve_table_header: "| {label} | 月利润 | 状态 |"
-    curve_row: "| {value} | {profit} 元 | {status} |"
+    curve_row: "| {value} | ${profit} | {status} |"
     ops_hint: "操作: 改参数 | 成本归因 | 对比方案 | 趋势预测"
 
   # ── 现金流 ────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ fmt:
     table_header: "| 月 | 收入到账 | 支出 | 净额 | 月末现金 |"
     zero_cash: "📉 **现金归零**：无外部注资下，现金约在第 **{month} 个月**耗尽。"
     no_zero_cash: "🟢 **12 个月内现金未耗尽**（基于当前输入；假设若变结论动）。"
-    max_shortfall: "💰 **累计最大缺口**：约 **{value} 元**（在归零月之后的缺口）。"
+    max_shortfall: "💰 **累计最大缺口**：约 **${value}**（在归零月之后的缺口）。"
     note: "> 现金流只关注「实际到账/支出」（含一次性大额、到账延迟、季度支付），与利润（P&L）解耦。"
 
 # ── 字段模型（src/field_model.py）───────────────────────────────────────
@@ -211,10 +211,10 @@ field:
     available_cash: "可用现金"
 
   unit:
-    yuan: "元"
-    yuan_per_month: "元/月"
-    yuan_per_year: "元/年"
-    yuan_per_unit: "元/单位"
+    yuan: "美元"
+    yuan_per_month: "美元/月"
+    yuan_per_year: "美元/年"
+    yuan_per_unit: "美元/单件"
     person_per_day: "人/天"
     person: "人"
     ratio: "0~1"
@@ -252,7 +252,7 @@ field:
     revenue_vs_traffic: "月营收 {rev} 与「日均{traffic}×单价{price}×{days}天」推算 {implied} 差异超 50%，请确认口径"
     cost_unsustainable: "总成本 {total} 超月营收 {rev} 10 倍，参数组合物理上不可持续"
     vcr_vs_gross_margin: "毛利率 {gm}% 与变动成本率 {vcr}% 矛盾（按变动成本率推算毛利率应为 {implied}%）；当前按变动成本率口径计算，若应以毛利率为准请只保留其一"
-    vcr_vs_unit_cost: "变动成本率 {vcr}% 与「每份成本 {uvc} 元 ÷ 客单价 {price} 元」推算的 {implied}% 不一致；当前按你直述的变动成本率计算，请确认以哪个口径为准"
+    vcr_vs_unit_cost: "变动成本率 {vcr}% 与「每份成本 ${uvc} ÷ 客单价 ${price}」推算的 {implied}% 不一致；当前按你直述的变动成本率计算，请确认以哪个口径为准"
 
   # 冲突处置 ops
   op:
@@ -344,12 +344,12 @@ wf:
     derived: 推算
     incomplete: 不完整
   framework:
-    revenue_known: "月营收 = {rev} 元（已知）"
+    revenue_known: "月营收 = ${rev}（已知）"
     revenue_unknown: 月营收：未知（需 月营收 或 日均客流×客单价）
-    cost: "月固定成本 ≈ 租金 {rent} 元"
-    labor_part: " + 人工 {labor} 元"
+    cost: "月固定成本 ≈ 租金 ${rent}"
+    labor_part: " + 人工 ${labor}"
     labor_none: （人工未提供，按 0 计）
-    cash_known: "可用现金 = {cash} 元"
+    cash_known: "可用现金 = ${cash}"
     cash_unknown: 可用现金：未知（需 总投资）
   readiness:
     no_vcr: 变动成本率未提供（或不可推导），无法计算月利润与趋势
@@ -378,8 +378,8 @@ wf:
   narrative:
     confident: 关键参数均由你提供，结论置信度高；下方数字可放心作为决策参考。
     profit_unknown: 月利润：还无法计算（需变动成本率）
-    profit_range: "按当前假设，月利润约 {base} 元（乐观 {best} / 保守 {worst}）"
-    profit_approx: "月利润约 {v} 元"
+    profit_range: "按当前假设，月利润约 ${base}（乐观 {best} / 保守 {worst}）"
+    profit_approx: "月利润约 ${v}"
     risk_focus: "风险聚焦：结论的弹性主要来自「{lead}」这一假设。{rng}。你最该优先核实/补充的就是它——一旦它变了，上面的数字会跟着动。"
     extra_risks: " 另有 {n} 项结构化风险待关注（见下方「风险」）。"
   scenario:
@@ -459,7 +459,7 @@ fc:
     must_gt_full: 售价必须大于变动成本，否则永远无法盈利
     suggestion: "当前售价 {price} ≤ 变动成本 {vc}，每卖一单都在亏钱。请提高售价或降低变动成本。"
     formula: "盈亏平衡点 = 固定成本 / (售价 - 变动成本) = {fc} / ({price} - {vc})"
-    interpretation: "需要卖出约 {units} 单位，或实现收入 {revenue} 元才能保本。"
+    interpretation: "需要卖出约 {units} 单位，或实现收入 ${revenue} 才能保本。"
   runway:
     cash_missing: 现金缺失，跑道无法计算
     positive: 公司已实现现金流为正，不需要额外融资。
@@ -467,7 +467,7 @@ fc:
     advice_ok: 跑道尚可，建议 6 个月后启动下一轮融资。
     advice_tight: 跑道偏紧，建议立即启动融资或削减支出。
     advice_critical: 🚨 跑道不足 6 个月！必须立即采取行动：削减成本、加速收入或紧急融资。
-    note: "按当前净消耗 {burn} 元/月，现金将在约 {months} 个月后耗尽。"
+    note: "按当前净消耗 ${burn}/月，现金将在约 {months} 个月后耗尽。"
   ue:
     cac_gt0: CAC 必须大于 0
     acquisition_gt0: 获客成本必须大于 0
@@ -539,7 +539,7 @@ de:
     traffic_exp: 连续 7 天记录实际到店客流，对比预估
     traffic_watch: 日均客流
     price_what: 客单价
-    price_exp: 限时 3 天小幅度提价（如 0.5 元），观察订单量变化
+    price_exp: 限时 3 天小幅度提价（如 $0.50），观察订单量变化
     price_watch: 降价 0.5 → 订单变动
     vcr_what: 变动成本率
     vcr_exp: 复盘近一个月进货/食材成本占比
@@ -556,7 +556,7 @@ de:
   first_validation:
     none: 关键参数均由你提供，暂无明显需优先验证的假设
   decide:
-    profit: "在当前数据下月利润 {profit} 元"
+    profit: "在当前数据下月利润 ${profit}"
     above_be: 高于盈亏平衡客流
     be_gap: "离盈亏平衡客流还差 {gap} {unit}/天"
     runway: "现金跑道 {rw} 个月"
@@ -566,7 +566,7 @@ de:
     fill_gaps: 补充上述缺失项
     cf_incomplete: 现金流明细尚不能定（期初现金或月营收未提供）。
     cf_exhaust: "在无外部注资下，现金约在第 **{zc} 个月**耗尽"
-    cf_shortfall: "；届时累计缺口约 **{ms} 元**"
+    cf_shortfall: "；届时累计缺口约 **${ms}**"
     cf_basis: 以上基于期初现金（总投资推导）与逐月收支；一次性大额/到账延迟/支付节奏已计入
     cf_survives: 按当前输入，12 个月内现金未耗尽。
     cf_changes: 若营收/支出假设变化，结论会动
@@ -579,7 +579,7 @@ de:
     mutually_exclusive: 每项都可独立执行，改动互斥；回复「**应用A/B/C**」执行其一（LLM 不直接改）。
     reversible: 可逆
     hard_to_revert: 需谨慎（难回退）
-    option_line: "- **{tag}** {label}（{chg}） ｜ 预估月利润变化 **{delta} 元** ｜ {rev}"
+    option_line: "- **{tag}** {label}（{chg}） ｜ 预估月利润变化 **${delta}** ｜ {rev}"
     min_exp: "- 最小实验：{exp}"
     watch: "- 看什么指标：{metric}"
     validate_line: "- 先验证：{what}"
@@ -606,7 +606,7 @@ ss:
   fmt:
     "yes": 是
     "no": 否
-    yuan: 元
+    yuan: 美元
   ctx:
     industry: 行业：
   view:
@@ -897,11 +897,11 @@ bench:
 # ─── 参数守门层（param_guard）─────────────────────────────────────────────
 pg:
   unit:
-    per_month: "元/月"
-    cny: "元"
+    per_month: "美元/月"
+    cny: "美元"
     per_day: "单/天"
     person: "人"
-    per_unit: "元/单位"
+    per_unit: "美元/单件"
     ratio_or_pct: "0~1 或 0~100%"
     pct: "%"
     none: ""
@@ -927,29 +927,29 @@ pa:
     down: "降低"
     none: "无需调整"
   issue:
-    negative_profit: "月亏损 {loss} 元"
+    negative_profit: "月亏损 ${loss}"
     short_runway: "现金流跑道仅 {runway} 个月"
     tight_runway: "现金流跑道 {runway} 个月，偏紧"
-    low_price: "客单价 {price} 元偏低，餐饮/零售典型 20-35 元"
+    low_price: "客单价 ${price} 偏低，餐饮/零售典型 $12-22"
     low_margin: "毛利率 {gm}% 低于行业 benchmark {bench}%"
     high_rent: "月租占营收 {ratio}%，合理应 < 15%"
     low_traffic: "当前客流仅达盈亏平衡的 {pct}%"
   sug:
-    raise_price_cover: "提价 {delta} 元可覆盖月亏损 {loss} 元（基于当前客流）"
-    cut_fixed: "削减月固定成本 {cut} 元（从 {cur} → {new}）"
+    raise_price_cover: "提价 ${delta} 可覆盖月亏损 ${loss}（基于当前客流）"
+    cut_fixed: "削减月固定成本 ${cut}（从 {cur} → {new}）"
     cashflow_positive: "现金流为正"
-    runway_target: "为达到 {months} 个月跑道，需削减月支出 {cut} 元"
-    price_typical: "行业典型价 {lo}-{hi} 元，保守提价到 {target} 元"
-    price_aggressive: "激进策略：到行业中位价 {mid} 元（可能流失 10-20% 客户）"
+    runway_target: "为达到 {months} 个月跑道，需削减月支出 ${cut}"
+    price_typical: "行业典型价 {lo}-${hi}，保守提价到 ${target}"
+    price_aggressive: "激进策略：到行业中位价 ${mid}（可能流失 10-20% 客户）"
     vc_at_benchmark: "已接近行业 benchmark 毛利率 {gm}%"
     vc_improve: "毛利率从 {cur}% 提到 {target}%：换供应商/提采购规模/配方优化"
-    rent_cut: "月租降到营收 15%（{target} 元），省 {cut} 元/月。方式：换地段/扩面积摊薄/转租"
+    rent_cut: "月租降到营收 15%（${target}），省 ${cut}/月。方式：换地段/扩面积摊薄/转租"
     traffic_insufficient: "参数不足"
     traffic_target: "日均客流需达 {be}（+{delta}）才能保本。方式：促销/扩渠道/选址引流"
   summary:
     healthy: "参数健康，无需调整"
     turnaround: "调整后扭亏为盈"
-    improve: "利润改善 {delta} 元/月"
+    improve: "利润改善 ${delta}/月"
     need_more: "需更深入的策略调整"
     note: "工具给出基于行业 benchmark 的方向性建议。LLM 可在此基础上补充具体实施细节。"
     error: "suggest_params 失败: {err}"
@@ -1167,8 +1167,10 @@ ws:
     export_pdf: 📄 PDF
     export_excel: 📊 Excel
     params_placeholder: 输入项目参数后这里会显示
-    example_q_coffee: 开一家咖啡店，月租金15000，员工3人，人均工资5000，每天50杯客流量，均价25元。详细分析
-    example_q_saas: 做一个 SaaS 工具，目标客户中小企业，定价99元/月，预计首年1000用户。详细分析
+    # 示例问句里的数字必须落在**美元量级**：旧值（月租15000/薪资5000/均价25）
+    # 按美元读就是「一杯咖啡卖 $25、咖啡师月薪 $5,000」，会直接劝退用户。
+    example_q_coffee: 开一家咖啡店，月租金6000，员工3人，人均工资3200，每天160杯客流量，均价6美元。详细分析
+    example_q_saas: 做一个 SaaS 工具，目标客户中小企业，定价99美元/月，预计首年1000用户。详细分析
     example_q_quick: 快速：奶茶店总投资50万，月租2万
     example_q_benchmark: 查一下 2024 年中国咖啡行业的毛利率和获客成本基准
   modal:
@@ -1243,10 +1245,10 @@ ws:
     conflict: "⚠️ **数据冲突**：{msg}"
     header: "## ⚠️ 参数守门（先确认，再计算）\n"
   ops:
-    current_profit: "当前月利润 **{v} 元**。候选方案预览（引擎重算后）："
+    current_profit: "当前月利润 **${v}**。候选方案预览（引擎重算后）："
     rejected: "- **{option}** ❌ 拒绝：{reason}（{label}）"
     row: "- **{option}** {label}（{changes}）→ 月利润预计 **{profit}**  ｜ 回复「**{apply}{tag}**」生效  ｜ LLM 只提议、引擎算"
-    money: "{v} 元"
+    money: "${v}"
     dash: "—"
     joiner: "、"
   apply:
@@ -1275,11 +1277,11 @@ ws:
     word_up: 上升
   var_label:
     daily_traffic: 日均客流（杯/天）
-    monthly_rent: 月租金（元）
+    monthly_rent: 月租金（美元）
     variable_cost_ratio: 变动成本率（%）
     employee_count: 员工人数（人）
-    avg_salary: 人均月薪（元）
-    price_per_unit: 客单价（元）
+    avg_salary: 人均月薪（美元）
+    price_per_unit: 客单价（美元）
   app_title: 创业者工作台
 
 # ─── config/settings（LLM 配置读写）──────────────────────────────────────
@@ -1356,7 +1358,7 @@ llm:
 
       ```ops
       [
-        {"propose": "try", "label": "提价3元", "changes": {"price_per_unit": 18}, "reason": "看提价能否扭亏"},
+        {"propose": "try", "label": "提价3美元", "changes": {"price_per_unit": 18}, "reason": "看提价能否扭亏"},
         {"propose": "try", "label": "客流+10/天", "changes": {"daily_traffic": 60}, "reason": "看客流提升能否扭亏"}
       ]
       ```
@@ -1365,7 +1367,7 @@ llm:
 
       ```ops
       [
-        {"propose": "set", "field": "avg_salary", "value": 3000, "reason": "用户明确要求改为3000元"}
+        {"propose": "set", "field": "avg_salary", "value": 3000, "reason": "用户明确要求改为3000美元"}
       ]
       ```
 

@@ -42,6 +42,44 @@ def test_no_cny_literal_in_en_copy():
     assert "CNY" not in _read(os.path.join("src", "i18n", "en.yaml"))
 
 
+def test_no_cny_literal_in_zh_copy():
+    """中文侧同样不得残留人民币单位。
+
+    币种是**产品事实**不是语言偏好：中英两份文案若一个写 元 一个写 $，
+    同一份报表切个语言就换一种货币。
+    ⚠️ 只扫 i18n/zh.yaml —— `router/rules/zh.yaml` 里的「元」是**中文输入
+    解析规则**（用户说「5000元」要能抽出来），必须保留。
+    """
+    zh = _read(os.path.join("src", "i18n", "zh.yaml"))
+    leftovers = [
+        (i, l.strip()) for i, l in enumerate(zh.split("\n"), 1)
+        if re.search(r"(?<![美国])元(?![月年单件])", l) and "美元" not in l
+    ]
+    assert not leftovers, f"zh.yaml 仍有人民币单位「元」: {leftovers}"
+
+
+def test_zh_money_template_renders_dollar():
+    """中文金额文案渲染出来必须是美元，不是「元」。"""
+    set_locale("zh")
+    try:
+        assert t("fmt.common.money", v="1,000") == "$1,000", t("fmt.common.money", v="1,000")
+        assert t("field.unit.yuan_per_month") == "美元/月"
+        assert t("pg.unit.cny") == "美元"
+        assert t("ss.fmt.yuan") == "美元"
+    finally:
+        reset_locale()
+
+
+def test_input_rules_keep_chinese_yuan():
+    """中文抽取规则必须保留「元」——那是用户输入，不是展示币种。
+
+    与上面两条正好相反，放在一起是为了让「哪些 元 该留、哪些该改」有断言兜着，
+    别有人看到护栏就顺手把规则文件也改了。
+    """
+    rules = _read(os.path.join("src", "router", "rules", "zh.yaml"))
+    assert "元" in rules, "中文输入规则里的「元」被误删——「5000元」将抽不出来"
+
+
 def test_bench_generator_emits_usd_basis():
     """bench 生成脚本必须与 en.yaml 同口径。
 

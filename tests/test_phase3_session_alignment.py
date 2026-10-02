@@ -120,7 +120,9 @@ def test_session_grounding():
     apply_turn(TID, extract_params(TURN2), TURN2, None)
     ctx = get_session_context(TID)
     assert "餐饮" in ctx, ctx
-    assert "200,000元" in ctx, ctx  # 总投资真实值，无编造
+    # 币种随部署口径走（本部署 USD）—— 不要写死「元」，改币种会误报
+    from i18n import t as _t
+    assert f"200,000{_t('ss.fmt.yuan')}" in ctx, ctx  # 总投资真实值，无编造
     assert "成都冒菜店" not in ctx  # 杜绝历史幻觉
 
 
