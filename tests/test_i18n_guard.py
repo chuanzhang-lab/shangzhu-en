@@ -227,7 +227,7 @@ def test_t_invalid_locale_falls_back_to_default(monkeypatch):
 # - src/router/param_extractor.py   输入层抽取（中文数字/单位/关键词正则，与 rules/en.yaml 的英文规则同源）
 # - src/tools/pitfall_markers.py    输入层陷阱标记词表（locale 分桶：zh 词表 / en 词表）
 # - src/source_tags.py              旧中文标记协议常量 _LEGACY_MARKS（历史存档向后兼容，改=改接口）
-# - src/tools/compliance_map.py     中国大陆证照原名（司法辖区数据，翻译=捏造法律名词）
+# - src/tools/compliance_map.py     美国证照原名（司法辖区数据，翻译=捏造法律名词）
 # - src/i18n/__init__.py            i18n 引擎自身（文案住在 {zh,en}.yaml，代码里只留内部诊断日志）
 # - src/router/rules/__init__.py    规则加载器（规则住在 rules/{zh,en}.yaml，代码里只留内部诊断日志）
 # 这些模块若被登记，只会逼出一堆「数据也当文案白名单」的脏 whitelist，稀释护栏信号。

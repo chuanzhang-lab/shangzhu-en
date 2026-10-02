@@ -1053,14 +1053,14 @@ pt:
     detail: "Nobody on the team has deep understanding of the target industry."
     impact: "You risk building something technically good that nobody needs, or hitting industry-specific traps."
     action: "Bring in an advisor or partner with industry experience, involved deeply at least in the early stage."
-  # ⚠️ 证照原名是**中国大陆司法辖区数据**，见 src/tools/compliance_map.py —— 翻译 = 捏造法律名词。
-  # 这里的做法是**标注口径**而非翻译：明确告知读者这是中国口径，需按当地法规自行核实。
+  # 证照名称是**美国司法辖区数据**（联邦/州/市三级），见 src/tools/compliance_map.py。
+  # 原则是**标注口径**而非翻译：如实给出原名，并明确告知需按其所在州/市核实。
   license_required:
-    warning: "Detected {n} possible compliance requirements (licence names shown as-is in their original Chinese, since they are China-specific); missing any one can lead to fines or forced closure."
-    action: "Consult a lawyer or a business-registration agent before you start operating, and confirm the full licence list for your jurisdiction."
+    warning: "Detected {n} possible US compliance requirements (federal / state / local names shown as-is); missing any one can lead to fines or forced closure."
+    action: "Consult a lawyer or your state/city business-registration office before you start operating: most of these licences are issued at state or county level, so confirm the exact list for your jurisdiction."
   license_none:
     message: "No industry-specific compliance requirement recognised from the description. If you operate in food, healthcare, finance, education or similar, verify it yourself."
-    action: "Every business needs at least: a business licence, tax registration, and social-insurance registration (China baseline — check your local equivalents)."
+    action: "Almost every US business needs at least: an EIN (federal tax ID), a state/city business licence, a seller's permit if you sell taxable goods, and payroll registration if you hire."
 
 # ─── Report generator ───────────────────────────────────────────────────
 rg:

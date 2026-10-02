@@ -17,19 +17,37 @@ from langchain.tools import tool
 from i18n import t
 # 司法辖区数据（证照原名，永不翻译）—— 见 compliance_map.py 的说明
 from tools.pitfall_markers import no_competitor_markers, tam_huge_markers
-from tools.compliance_map import INDUSTRY_COMPLIANCE_MAP
+from tools.compliance_map import INDUSTRY_COMPLIANCE_MAP, INDUSTRY_COMPLIANCE_KEYWORDS
 
 
 # ─── 公共规则库 ──────────────────────────────────────────────────────────
 
 
 
+def _match_industry_keys(text: str) -> list[str]:
+    """从文本里命中的合规行业键（中文键 + 英文关键词两条路）。
+
+    旧实现只在文本里找**中文行业键**（"餐饮"），英文部署下永远命不中
+    —— 合规检测静默返回 0 条，看着像「你不需要任何证照」。
+    """
+    low = text.lower()
+    hits = []
+    for key in INDUSTRY_COMPLIANCE_MAP:
+        if key in text:
+            hits.append(key)
+            continue
+        for kw in INDUSTRY_COMPLIANCE_KEYWORDS.get(key, []):
+            if kw in low:
+                hits.append(key)
+                break
+    return hits
+
+
 def _check_compliance_keywords(description: str) -> list[str]:
     """从项目描述中匹配行业合规关键词"""
     found = []
-    for keyword, licenses in INDUSTRY_COMPLIANCE_MAP.items():
-        if keyword in description:
-            found.extend(licenses)
+    for key in _match_industry_keys(description):
+        found.extend(INDUSTRY_COMPLIANCE_MAP[key])
     return list(set(found))
 
 
@@ -336,7 +354,7 @@ def _do_compliance_check(project_description: str, industry: str = "") -> dict:
     licenses = _check_compliance_keywords(text)
 
     result = {
-        "analyzed_industry_keywords": [kw for kw in INDUSTRY_COMPLIANCE_MAP if kw in text],
+        "analyzed_industry_keywords": _match_industry_keys(text),
         "required_licenses": licenses,
         "pitfall_count": len(licenses),
     }
