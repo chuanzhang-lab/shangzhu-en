@@ -46,6 +46,8 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 **Fixed costs that are missing a core component are now tagged `incomplete`** — rent given but labor not: the total is still shown, but flagged as systematically *underestimating* cost, with a warning above the key metrics.
 
+**Extraction layer hardened** — three silent-wrong-number defects found by end-to-end probing and fixed: a magnitude unit no longer eats the first letter of the next word (`5000 monthly` used to become **5,000,000,000**); common English salary phrasings (`4 employees earning $3,500 each`, `payroll 4500 per head`, `each gets 4000 a month`) are now extracted — labor is the most sensitive assumption and 4 of 5 real phrasings were silently dropped; and a percentage is no longer read as money (`variable costs 55%` no longer invents a `monthly_expense=55`).
+
 **Chinese side converged / 中文侧收敛** — both locales now share one currency model (one language, one money). Key names stay identical across `zh.yaml` / `en.yaml`; only values differ, so the two packs can never drift apart again.
 
 **More stable runtime** — flaky-free and order-independent test suite, concurrency-safe request handling, robust to empty/oversized/invalid inputs, and clean resource release on shutdown.
@@ -65,6 +67,8 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 - **超限数字不再挡住它后面的正确值**：`monthly revenue $57,600 and 3 employees` 曾整条丢失员工数。
 
 **固定成本缺核心组件时标注 `incomplete`** —— 只给了租金、人工未提供时，总额照常给出但标注为**系统性低估**，并在核心指标上方给出提示。
+
+**抽取层加固** —— 端到端实测挖出并修掉三处「静默算错」：量级单位不再吃掉下一个单词的首字母（`5000 monthly` 曾变成 **5,000,000,000**）；常见英文薪资说法（`4 employees earning $3,500 each`、`payroll 4500 per head`、`each gets 4000 a month`）现在能抽到了——人工是最敏感的假设，此前 5 条真实说法漏 4 条；百分比不再被当成金额（`variable costs 55%` 不再凭空多出 `monthly_expense=55`）。
 
 **中文侧收敛** —— 中英两侧共用一套币种模型（一种语言一种货币）。`zh.yaml` / `en.yaml` 键名保持完全一致，只有值不同，两套语言包再也不会互相漂移。
 
