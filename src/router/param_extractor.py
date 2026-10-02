@@ -262,6 +262,55 @@ def _split_segments(text: str) -> List[str]:
     )
 
 
+def _right_window(hay: str, start: int) -> str:
+    """关键词右侧邻域：按 _KW_WINDOW 截断，但**绝不把数字切成两半**。
+
+    实测事故：「3 employees with average salary $3200」的 after 侧被 24 字符窗口
+    截成 「… salary $32」→ 人数抽成 **32**（真实 3 的 10 倍，且 32 < max_value 200，
+    合理性门禁根本拦不住，报表上就是一个「看起来正常」的错误人数）。
+    窗口是性能/防串味的措施，不能反过来制造错值 —— 截断点落在数字内部时，
+    必须让位给完整的数字。
+    """
+    end = min(len(hay), start + _KW_WINDOW)
+    while end < len(hay) and hay[end - 1].isdigit() and (
+        hay[end].isdigit()
+        or (hay[end] == "," and end + 1 < len(hay) and hay[end + 1].isdigit())
+    ):
+        end += 1
+    return hay[start:end]
+
+
+def _left_window(hay: str, end: int) -> str:
+    """关键词左侧邻域：同 _right_window，左侧切在数字中间时**丢掉那半个数字**。
+
+    左半截数字（「…salary $32|00」的「00」）会被当成独立的数 → 抽成 0，
+    比丢掉更糟；而向左扩窗会把更远处、属于别的字段的数字拉进来，同样不可接受。
+    故只做「对齐到数字起点」的截断，不扩窗。
+    """
+    start = max(0, end - _KW_WINDOW)
+    while start < end and hay[start].isdigit() and start > 0 and (
+        hay[start - 1].isdigit() or hay[start - 1] == ","
+    ):
+        start += 1
+    return hay[start:end]
+
+
+def _mask_outliers(text: str, max_value: float) -> str:
+    """把明显超限的数字整段抹成空格，让 _find_number 落到**下一个候选**。
+
+    F8 只让 max_value 在「侧」之间兜底（超限 → 换另一侧），但同一侧里
+    超限数字**后面**往往就跟着正确值：
+      「monthly revenue $57,600 and 3 employees」→ 抹掉 57,600 才看得见 3。
+    不抹则这一侧永远返回 57600，被丢弃后员工数整条丢失。
+    抹的是整个数字（含千分位），不会留下半个数字。
+    """
+    def _repl(m: "re.Match") -> str:
+        v = _parse_number(m.group(0))
+        return " " if (v is not None and v > max_value) else m.group(0)
+
+    return re.sub(r"\d[\d,]*(?:\.\d+)?", _repl, text)
+
+
 def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
     """在单个段内提取一个字段
 
@@ -307,8 +356,8 @@ def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
 
         # 两侧文本也用小写副本：语境护栏/单位护栏/数字查找的单位词表都是小写，
         # 统一小写才不会出现 "80 USD" 匹配不到单位 "usd" 这类漏抓。
-        before_text = hay[:idx][-_KW_WINDOW:]
-        after_text = hay[idx + len(kw):][:_KW_WINDOW]
+        before_text = _left_window(hay, idx)
+        after_text = _right_window(hay, idx + len(kw))
 
         # 确定搜索「侧」的顺序（before/after），按 position 决定
         if not before_text and after_text:
@@ -331,7 +380,9 @@ def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
                     continue
                 if reject_units and _has_number_with_unit(s, reject_units):
                     continue
-                value = _find_number(s, units, unit_only=True)
+                # F8：超限视为误抓 —— 抹掉超限数字，让本侧看得见后面的正确候选
+                probe = s if max_value is None else _mask_outliers(s, max_value)
+                value = _find_number(probe, units, unit_only=True)
                 # F8：超限视为误抓，继续找下一个候选（见 max_value 注释）
                 if value is not None and (max_value is None or value <= max_value):
                     return value
@@ -344,7 +395,11 @@ def _extract_from_segment(segment: str, field_def: dict) -> Optional[float]:
             # 语境不符 → 关键词后紧跟其他概念的语境词（如「营业额」），跳过。
             if reject_context and _has_context_word(s, reject_context):
                 continue
-            value = _find_number(s, units, strict=strict)
+            # 与阶段1 同理：先抹掉超限数字，否则同一侧的正确值永远被它挡住。
+            # 实测：「Monthly rent is $6000 with 4 employees earning $3500 each」
+            #       after 侧的 3500 挡住了 before 侧的 4 → 员工数整条丢失。
+            probe = s if max_value is None else _mask_outliers(s, max_value)
+            value = _find_number(probe, units, strict=strict)
             if value is not None:
                 # 「3个月」不是金额：数字与「月」之间可夹「个」
                 if reject_units and "月" in reject_units:

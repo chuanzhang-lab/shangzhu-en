@@ -143,6 +143,50 @@ def test_english_full_sentence_extracts_all_core_params(en):
         assert p.get(field) == want, f"{field}: got {p.get(field)}, want {want}"
 
 
+def test_keyword_window_never_cuts_a_number_in_half(en):
+    """邻域窗口不得把数字截成两半：「$3200」被 24 字符窗口截成「$32」。
+
+    根因：`hay[idx+len(kw):][:_KW_WINDOW]` 硬截。实测事故：
+    「3 employees with average salary $3200」→ after 侧停在 "… salary $32"
+    → 人数抽成 **32**（真值 3 的 10 倍，且 32 < max_value 200，合理性门禁
+    拦不住，报表上就是一个看起来完全正常、实则错 10 倍的人工成本）。
+
+    「3200」不带 $ 时更隐蔽：截成 320（>200）→ 员工数整条丢失，
+    用户只会看到「人工未提供」。
+    """
+    p = _params("3 employees with average salary $3200")
+    assert p.get("employee_count") == 3.0, (
+        f"人数被窗口截断成 {p.get('employee_count')}（真值 3）"
+    )
+    assert p.get("avg_salary") == 3200.0
+    # 不带货币符号的同款句子：不得因 320 > 200 而整条丢失
+    assert _params("3 employees with average salary 3200").get("employee_count") == 3.0
+
+
+def test_oversized_number_does_not_hide_the_right_one(en):
+    """同一侧里超限的数字不能挡住它后面的正确值。
+
+    F8 只让 max_value 在「侧」之间兜底（超限 → 换另一侧），但同一侧里
+    超限数字后面往往就跟着正确值：抹掉超限数字才看得见。
+    实测三条整条丢失员工数的真实句子：
+      - 「monthly revenue $57,600 and 3 employees」
+      - 「Monthly rent is $6000 with 4 employees earning $3500 each」
+      - 「we are 5 people and each gets 4000 a month」
+    """
+    assert _params("monthly revenue $57,600 and 3 employees").get("employee_count") == 3.0
+    assert _params(
+        "Monthly rent is $6000 with 4 employees earning $3500 each"
+    ).get("employee_count") == 4.0
+    assert _params("we are 5 people and each gets 4000 a month").get("employee_count") == 5.0
+
+
+def test_window_and_cap_fixes_do_not_break_chinese(zh):
+    """上述两处改动不得改变中文抽取结果（中文侧是既有 oracle）。"""
+    assert _params("3名员工，平均工资3200").get("employee_count") == 3.0
+    assert _params("2人8000").get("employee_count") == 2.0
+    assert _params("月营收57600，3名员工").get("employee_count") == 3.0
+
+
 def test_continuation_and_reset_commands_are_detected(en):
     """续算/重置是**语义开关**：识别不出就不会 merge / 不会重置。
 
