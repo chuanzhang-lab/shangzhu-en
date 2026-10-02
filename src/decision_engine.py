@@ -17,6 +17,7 @@ from typing import Optional
 import yaml
 
 from i18n import t
+from source_tags import INFINITE_MARK
 
 _POLICY_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -425,7 +426,7 @@ def decide(
             parts.append(state)
         if rw is not None and isinstance(rw, (int, float)):
             parts.append(t("de.decide.runway", rw=f"{rw:.1f}"))
-        elif rw == "无限":
+        elif rw == INFINITE_MARK:
             parts.append(t("de.decide.runway_infinite"))
         conclusion["text"] = "；".join(parts) + "。"
         conclusion["conditions"] = [

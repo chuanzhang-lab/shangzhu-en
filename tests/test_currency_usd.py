@@ -5,7 +5,7 @@
 悄悄错一个量级（或错一个符号）——典型的「不报错，只是结论错了」。
 
 三条防线：
-1. 展示层不得残留 CNY 字面量（含生成器脚本，否则下次重生成会把它带回来）；
+1. 展示层不得残留 CNY 字面量（直接断言 en.yaml 的真实产物，不查生成器源码）；
 2. 行业模板的金额字段必须落在 USD 合理区间（人民币量级回写 = 立刻红）；
 3. 文案里硬编码的金额必须与代码里的常量一致（配置漂移护栏）。
 
@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import yaml  # noqa: E402
 
+import i18n  # noqa: E402
 from i18n import reset_locale, set_locale, t  # noqa: E402
 from tools.param_advisor import TYPICAL_UNIT_PRICE_RANGES  # noqa: E402
 from tools.workflow_engine import quick_scan  # noqa: E402
@@ -80,14 +81,21 @@ def test_input_rules_keep_chinese_yuan():
     assert "元" in rules, "中文输入规则里的「元」被误删——「5000元」将抽不出来"
 
 
-def test_bench_generator_emits_usd_basis():
-    """bench 生成脚本必须与 en.yaml 同口径。
+def test_en_bench_note_is_usd_basis():
+    """英文行业基准脚注必须是 USD 口径。
 
-    否则下次跑 `_gen_bench_yaml.py` 重生成，「USD basis」会被悄悄改回 CNY。
+    旧版断言打在一次性生成脚本 `scripts/_gen_bench_yaml.py` 上（怕重生成时
+    把「USD basis」悄悄改回 CNY）。该脚本已被删除 —— 它维护的正是「配置抄一份
+    进 zh.yaml」这份重复，重复本身已消除（见 bench 外置改造）。
+    现在直接断言**真实产物**，比断言生成器源码更靠得住：守的是用户会看到的那行。
     """
-    src = _read(os.path.join("scripts", "_gen_bench_yaml.py"))
-    assert "CNY" not in src, "生成器仍在输出 CNY 口径"
-    assert "USD basis" in src
+    i18n.reload()
+    note = i18n._load("en").get("bench.note", "")
+    assert note, "en.yaml 缺 bench.note"
+    assert "USD" in note, f"英文基准脚注仍是旧币种口径：{note!r}"
+    assert "CNY" not in note and "人民币" not in note, (
+        f"英文基准脚注残留人民币口径：{note!r}"
+    )
 
 
 def test_money_template_renders_dollar_sign():

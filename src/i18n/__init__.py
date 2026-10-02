@@ -144,6 +144,45 @@ def industry_name(key: str) -> str:
     return name
 
 
+# 行业基准的四项展示维度。键名与 bench.* 的子块一一对应，
+# 顺序即渲染顺序，改这里等于改输出结构（前端按这个顺序画）。
+_BENCH_GROUPS = ("traffic", "margin", "breakeven", "warning")
+
+# 结构化输出里的展示字段名（历史契约，前端在读，不能改）。
+_BENCH_OUT_FIELDS = {
+    "traffic": "daily_traffic_range",
+    "margin": "typical_profit_margin",
+    "breakeven": "avg_breakeven_months",
+    "warning": "key_warning",
+}
+
+
+def benchmark_view(industry_key: str, bench: dict) -> dict:
+    """行业基准的**出口视图**：数值来自配置，词来自 i18n。
+
+    为什么必须有这一层：
+    `config/industry_templates.yaml` 里曾经同时躺着数值和展示串（"80-250 杯"、
+    "新店前 3 个月客流…"），结构化输出直接把整个 dict 倒给用户 —— 英文部署
+    每次扫描都漏中文，而 en.yaml 干干净净、静态守卫全绿（查不到这种泄漏）。
+
+    现在数据文件只留数值（locale-free），四项展示串由本函数按
+    `bench.<group>.<行业键>` 取；行业没被覆盖（未识别 / 自定义）时走
+    `bench.fallback.*`，绝不把缺失键标记串倒给用户。
+
+    数值字段原样透传 —— 它们是 `_benchmark_check` 的输入，与语言无关。
+    """
+    data = dict(bench or {})
+    view = {k: v for k, v in data.items() if k not in _BENCH_OUT_FIELDS.values()}
+    for group in _BENCH_GROUPS:
+        key = f"bench.{group}.{industry_key}" if industry_key else ""
+        if key and has(key):
+            value = t(key)
+        else:
+            value = t(f"bench.fallback.{group}")
+        view[_BENCH_OUT_FIELDS[group]] = value
+    return view
+
+
 def t(key: str, **kwargs: Any) -> str:
     """取文案。
 

@@ -12,11 +12,14 @@ from typing import Optional
 from langchain.tools import tool
 
 from i18n import has, industry_name, t
+from source_tags import INFINITE_MARK
 
 # 「无限」是引擎的**数据标记**（靠等值比较识别，见 financial_calculator._calc_runway、
-# decision_engine、workflow_engine 的 `== "无限"`），不是文案。渲染时必须映射成
+# decision_engine、workflow_engine 的 `== INFINITE_MARK`），不是文案。渲染时必须映射成
 # 展示文案，否则英文版报表会直接漏出中文（M-07 护栏实测抓到的泄漏）。
-_ENGINE_INFINITE_MARK = "无限"
+# 哨兵的唯一出处是 source_tags.INFINITE_MARK（历史协议值，不能改）；本别名只为
+# 保留本文件既有的可读称呼，两处齐动才不会漂移。
+_ENGINE_INFINITE_MARK = INFINITE_MARK
 
 # output/ 目录文件数上限与 TTL，防止长期运行磁盘无限增长
 _MAX_OUTPUT_FILES = 50

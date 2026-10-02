@@ -48,6 +48,13 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 **Extraction layer hardened** — three silent-wrong-number defects found by end-to-end probing and fixed: a magnitude unit no longer eats the first letter of the next word (`5000 monthly` used to become **5,000,000,000**); common English salary phrasings (`4 employees earning $3,500 each`, `payroll 4500 per head`, `each gets 4000 a month`) are now extracted — labor is the most sensitive assumption and 4 of 5 real phrasings were silently dropped; and a percentage is no longer read as money (`variable costs 55%` no longer invents a `monthly_expense=55`).
 
+**The English output is now actually English** — i18n used to be a retrofit: two YAML packs plus a key-parity check, holding together a design that leaked. Probing a real deployment found Chinese in nine places of the *English* output (industry keys like `餐饮` shown raw, `无限` for an unlimited runway, and benchmark sentences such as "新店前 3 个月客流通常只有目标值的 40-50%"). Fixed by drawing the line properly:
+
+- **Data vs. copy**: `config/industry_templates.yaml` now holds *numbers only*; every word a user can see lives in `src/i18n/{zh,en}.yaml` and is assembled at the exit by `i18n.benchmark_view()`. The old "copy config into `zh.yaml` and assert they're equal" trick is gone — the duplication itself was removed, not pinned.
+- **Protocol sentinels**: the engine's "unlimited runway" marker (`INFINITE_MARK`) has one home in `source_tags.py` and is translated only when it leaves the engine.
+- **Guards inverted**: the CJK scan now covers **every** Python module by default; only four genuine locale-data files are exempt (with a stated reason), and an exemption that isn't justified fails the build.
+- **End-to-end guard**: a test renders a real scan in `en` and asserts **zero CJK** — the leak above was invisible to the static guards.
+
 **Chinese side converged / 中文侧收敛** — both locales now share one currency model (one language, one money). Key names stay identical across `zh.yaml` / `en.yaml`; only values differ, so the two packs can never drift apart again.
 
 **More stable runtime** — flaky-free and order-independent test suite, concurrency-safe request handling, robust to empty/oversized/invalid inputs, and clean resource release on shutdown.
@@ -70,7 +77,14 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 **抽取层加固** —— 端到端实测挖出并修掉三处「静默算错」：量级单位不再吃掉下一个单词的首字母（`5000 monthly` 曾变成 **5,000,000,000**）；常见英文薪资说法（`4 employees earning $3,500 each`、`payroll 4500 per head`、`each gets 4000 a month`）现在能抽到了——人工是最敏感的假设，此前 5 条真实说法漏 4 条；百分比不再被当成金额（`variable costs 55%` 不再凭空多出 `monthly_expense=55`）。
 
-**中文侧收敛** —— 中英两侧共用一套币种模型（一种语言一种货币）。`zh.yaml` / `en.yaml` 键名保持完全一致，只有值不同，两套语言包再也不会互相漂移。
+**英文输出现在真的是英文了** —— i18n 此前是后天 retrofit：两份 YAML 包加一条奇偶校验，硬撑着一个会漏的设计。实测英文部署发现输出里有 9 处中文（行业数据键 `餐饮` 被原样显示、跑道「无限」、以及整句基准提示「新店前 3 个月客流通常只有目标值的 40-50%」）。这次把边界划清楚了：
+
+- **数据与文案分层**：`config/industry_templates.yaml` 现在**只放数值**，用户能看到的每个词都进 `src/i18n/{zh,en}.yaml`，由 `i18n.benchmark_view()` 在出口拼装。原来「把配置抄进 `zh.yaml` 再断言两边相等」的做法被删掉了——消除的是重复本身，而不是把重复钉住。
+- **协议哨兵**：引擎的「跑道无限」标记（`INFINITE_MARK`）唯一出处在 `source_tags.py`，只在离开引擎的那一刻才翻译成文案。
+- **守卫反转**：中文扫描默认覆盖**全部** Python 模块，只有 4 个真正的 locale 数据文件登记豁免（各带原因）；豁免理由不成立会直接红。
+- **端到端守卫**：新增一条测试用 `en` 真实渲染一次扫描并断言**零中文**——上面那批泄漏静态守卫一条都查不到。
+
+**中文侧收敛** —— 中英两侧共用一套币种模型（一种语言一种货币）。`zh.yaml` / `en.yaml` 键名保持完全一致，只有值不同，两套语言包再也不会互相漂移。中文侧本轮输出**逐字不变**（`zh.yaml` 只新增键，既有值未改）。
 
 **运行更稳** —— 测试无 flaky、与顺序无关，请求处理并发安全，对空/超长/非法输入鲁棒，关闭时资源干净释放。
 

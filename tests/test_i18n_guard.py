@@ -173,23 +173,52 @@ def _config_benchmarks() -> dict:
             for k, v in cfg["industry_templates"].items()}
 
 
-def test_zh_bench_copy_matches_industry_config():
-    """zh.yaml 的 bench.* 必须与 config/industry_templates.yaml 逐字一致。
+def test_industry_config_is_locale_free():
+    """config/industry_templates.yaml 里**一个汉字都不能有**。
 
-    zh 侧的基准文案**来源就是配置**，抄一份进 yaml 是为了让渲染代码只有
-    「按行业 + locale 取键」这一条路径（不搞两套 dispatch）。
-    代价是存在重复 → 用这条测试把重复钉死：改配置不改 yaml = 测试红。
+    这是「数据 / 文案分层」的硬边界：配置文件只放与语言无关的数值。
+    历史事故：四项展示串（"80-250 杯"、"新店前 3 个月客流…"）曾经躺在配置里，
+    结构化输出直接把整个 dict 倒给用户 —— 英文部署每次扫描都漏中文，
+    而 en.yaml 干干净净，静态守卫（只扫源码和 en.yaml）查不到这种泄漏。
+
+    同时也顺带钉死：数值字段仍在（渲染层靠 *_min/*_max 算区间告警）。
+    """
+    numeric = ("traffic_min", "traffic_max", "profit_margin_min", "profit_margin_max",
+               "breakeven_months_min", "breakeven_months_max")
+    for industry, bench in _config_benchmarks().items():
+        for field, value in bench.items():
+            if isinstance(value, str):
+                assert not _CJK.search(value), (
+                    f"config/industry_templates.yaml 的 {industry}.benchmark.{field} "
+                    f"含中文：{value!r} —— 展示文案必须进 src/i18n/*/bench.*，"
+                    f"数据文件只放数值"
+                )
+        assert all(f in bench for f in numeric), (
+            f"{industry}.benchmark 缺数值字段（{numeric}）—— "
+            f"展示串可以外置，数值不能丢"
+        )
+
+
+def test_bench_i18n_covers_every_industry_in_config():
+    """i18n 是行业基准文案的**唯一出处**：配置里每个行业都得有四项。
+
+    取代旧的「zh.yaml 抄配置 + 相等断言」：那条的代价是两处真值源，
+    改配置不改 yaml 就静默过期（中文显示旧基准、英文翻旧文案）。
+    现在配置里根本没有文案，只剩「覆盖度」需要守 —— 少一个行业就会
+    静默回退 bench.fallback.*，用户看到「未知 / No data」而不是该行业的基准。
     """
     i18n.reload()
-    zh = i18n._load("zh")
-    for industry, bench in _config_benchmarks().items():
-        for group, cfg_field in _BENCH_FIELDS.items():
-            key = f"bench.{group}.{industry}"
-            assert key in zh, f"zh.yaml 缺 {key}"
-            assert zh[key] == bench.get(cfg_field), (
-                f"{key} 与配置不一致：yaml={zh[key]!r} "
-                f"config={bench.get(cfg_field)!r} —— 改了配置就要同步 zh.yaml"
-            )
+    locales = {loc: i18n._load(loc) for loc in ("zh", "en")}
+    industries = set(_config_benchmarks())
+    for loc, table in locales.items():
+        for industry in industries:
+            for group in _BENCH_FIELDS:
+                key = f"bench.{group}.{industry}"
+                assert key in table, f"{loc}.yaml 缺 {key}"
+                assert table[key], f"{loc}.yaml 的 {key} 是空串"
+        for group in _BENCH_FIELDS:  # 未识别行业的兜底四项
+            key = f"bench.fallback.{group}"
+            assert key in table and table[key], f"{loc}.yaml 缺 {key}"
 
 
 def test_en_bench_and_industry_names_are_fully_translated():
@@ -221,16 +250,41 @@ def test_t_invalid_locale_falls_back_to_default(monkeypatch):
     assert i18n.get_locale() == "en"
 
 
-# 已完成文案外置的模块（M2 起逐个加入，改一个加一个）
+# ── 扫描范围：默认全量，例外才登记 ──────────────────────────────────────────
+# 旧实现是 CONVERTED_MODULES **白名单**：改造一个模块登记一个，没登记 = 没人管。
+# 后果：~30 个模块里只登记了 19 个，从未被扫描的模块写死中文**永远抓不到**，
+# 新写的代码天然无覆盖（英文版漏中文正是从这里漏出去的）。
+# 白名单的默认方向是错的——「漏登记」的代价应该是「测试变红」，不是「静默放过」。
 #
-# 刻意**不登记**的模块（输入层数据 / 协议常量 / 司法辖区数据，非展示文案）：
-# - src/router/param_extractor.py   输入层抽取（中文数字/单位/关键词正则，与 rules/en.yaml 的英文规则同源）
-# - src/tools/pitfall_markers.py    输入层陷阱标记词表（locale 分桶：zh 词表 / en 词表）
-# - src/source_tags.py              旧中文标记协议常量 _LEGACY_MARKS（历史存档向后兼容，改=改接口）
-# - src/tools/compliance_map.py     美国证照原名（司法辖区数据，翻译=捏造法律名词）
-# - src/i18n/__init__.py            i18n 引擎自身（文案住在 {zh,en}.yaml，代码里只留内部诊断日志）
-# - src/router/rules/__init__.py    规则加载器（规则住在 rules/{zh,en}.yaml，代码里只留内部诊断日志）
-# 这些模块若被登记，只会逼出一堆「数据也当文案白名单」的脏 whitelist，稀释护栏信号。
+# 现在反过来：**所有 Python 模块默认都扫**，只有确实存放「locale 数据」的
+# 文件才登记豁免，且每条必须写明原因（下下条测试会核「豁免是否真有必要」）。
+SCAN_EXEMPT = {
+    os.path.join("src", "router", "param_extractor.py"):
+        "输入层抽取规则：中文数字/单位/关键词正则本身就是**数据**，"
+        "英文规则同源住在 router/rules/en.yaml；外置等于把规则搬走。",
+    os.path.join("src", "tools", "pitfall_markers.py"):
+        "陷阱标记词表：按 locale 分桶的**数据**（zh 词表 / en 词表），非展示文案。",
+    os.path.join("src", "tools", "compliance_map.py"):
+        "美国证照原名：司法辖区**数据**，翻译即捏造法律名词。",
+    os.path.join("src", "source_tags.py"):
+        "旧中文标记协议常量 _LEGACY_MARKS 与 INFINITE_MARK：历史存档 + 等值比较"
+        "哨兵，改值=改接口（已在 source_tags 注释中标注唯一出处）。",
+}
+
+
+def _all_python_modules() -> list:
+    """src/**/*.py 加根目录 web_server.py（排除 __pycache__）。"""
+    out = []
+    for root, dirs, fnames in os.walk(os.path.join(ROOT, "src")):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for f in fnames:
+            if f.endswith(".py"):
+                out.append(os.path.relpath(os.path.join(root, f), ROOT))
+    out.append("web_server.py")
+    return sorted(out)
+
+
+# 保留旧名：其它测试 / 文档仍按「已改造模块」引用这份清单。
 CONVERTED_MODULES = [
     os.path.join("src", "router", "formatter.py"),
     os.path.join("src", "field_model.py"),
@@ -313,13 +367,14 @@ def _cjk_string_literals(path: str):
     return out
 
 
-def test_no_hardcoded_cjk_in_converted_modules():
-    """已改造模块不得残留硬编码中文——否则英文版会出现中文残片。
+def test_no_hardcoded_cjk_in_any_module():
+    """**每个** Python 模块都不得残留硬编码中文（除登记豁免的数据模块）。
 
     白名单只允许「引擎数据值」这类必须原样匹配的字面量。
     """
-    assert CONVERTED_MODULES, "尚未登记任何已改造模块"
-    for rel in CONVERTED_MODULES:
+    for rel in _all_python_modules():
+        if rel in SCAN_EXEMPT:
+            continue
         path = os.path.join(ROOT, rel)
         leftovers = [
             (ln, v) for ln, v in _cjk_string_literals(path) if v not in ENGINE_DATA_LITERALS
@@ -328,6 +383,33 @@ def test_no_hardcoded_cjk_in_converted_modules():
             f"{rel} 仍有硬编码中文字面量（英文版会露中文）: "
             + "; ".join(f"L{ln}:{v!r}" for ln, v in leftovers)
         )
+
+
+def test_scan_exemptions_are_justified_and_real():
+    """豁免清单不能烂掉：条目必须指向真实文件，且**确实**含中文（否则不必豁免）。
+
+    两条防线：
+    1. 文件被删/改名 → 立刻红（避免豁免清单里躺着幽灵路径）；
+    2. 文件里其实没有中文字面量 → 立刻红（说明它是被顺手加进来的，
+       豁免会让它从此不再被扫描，等于给未来埋雷）。
+    """
+    for rel, reason in SCAN_EXEMPT.items():
+        assert reason.strip(), f"豁免 {rel} 没写原因——不写原因的豁免就是逃避"
+        path = os.path.join(ROOT, rel)
+        assert os.path.isfile(path), f"豁免清单里的 {rel} 已不存在"
+        assert _cjk_string_literals(path), (
+            f"{rel} 被登记豁免但**不含**中文字面量 —— 它本来就能通过扫描，"
+            f"豁免只会让它今后不再受护栏保护，请从 SCAN_EXEMPT 里删掉"
+        )
+
+
+def test_cjk_scan_covers_every_module_or_exempts_it():
+    """覆盖度自证：不存在「既没被扫、也没被豁免」的漏网模块。"""
+    covered = set(_all_python_modules())
+    exempt = set(SCAN_EXEMPT)
+    assert covered, "没扫到任何 Python 模块——扫描路径坏了"
+    unknown = exempt - covered
+    assert not unknown, f"豁免清单里有不在扫描范围内的路径：{sorted(unknown)}"
 
 
 def test_rendered_copy_has_no_unfilled_placeholders():
@@ -428,3 +510,76 @@ def test_lever_labels_never_render_as_missing():
             f"字段 {field} 的杠杆名不可解析（回退键 {key} 也不存在）：{out}"
             f"——用户会看到 [{key}] 这样的乱码"
         )
+
+
+# ── 端到端：英文部署的真实输出不得含中文 ─────────────────────────────────
+# 为什么必须加这一条：现有守卫查的是「源码字面量」与「en.yaml 的值」，
+# 而**真实渲染输出**从未被断言过。实测后果：611 条测试全绿的同时，
+# 英文版输出里躺着 9+ 处中文（含整句「建议提供更多项目细节以获得更准确分析」、
+# 「新店前 3 个月客流通常只有目标值的…」）。静态守卫查不到「数据文件里的
+# 中文展示值被原样渲染」这类泄漏——只有端到端能兜住。
+
+_CJK = _CJK  # 模块内已有定义，此处仅作引用提示
+
+
+def _scan_en(params: dict) -> dict:
+    import json
+
+    i18n.set_locale("en")
+    try:
+        from tools.workflow_engine import quick_scan
+
+        return json.loads(quick_scan.invoke({"params_json": json.dumps(params)}))
+    finally:
+        i18n.reset_locale()
+
+
+def _cjk_hits(blob: str):
+    return sorted(set(_CJK.findall(blob)))
+
+
+_EN_PARAMS = {
+    "monthly_rent": 6000, "employee_count": 4, "avg_salary": 3200,
+    "daily_traffic": 150, "price_per_unit": 13,
+    "variable_cost_ratio": 0.38, "total_investment": 150000,
+}
+
+
+def test_english_rendered_output_has_no_chinese():
+    """英文部署：真实渲染输出**零中文**（端到端，不靠静态扫描）。
+
+    覆盖两条路径：① 未识别行业（走 fallback 模板）② 已识别行业（餐饮）。
+    泄漏源各不相同：fallback 露出「无数据 / 建议提供更多项目细节…」，
+    已识别行业露出 benchmark 的「杯 / 个月 / 新店前…」与行业数据键。
+    """
+    import json
+
+    for label, params in (
+        ("fallback 行业", dict(_EN_PARAMS)),
+        ("已识别行业=餐饮", dict(_EN_PARAMS, industry="餐饮")),
+    ):
+        d = _scan_en(params)
+        blob = json.dumps(d, ensure_ascii=False)
+        hits = _cjk_hits(blob)
+        assert not hits, (
+            f"英文输出含中文（{label}）：{hits}\n"
+            + "\n".join(
+                f"  字段 {k}: {_cjk_hits(json.dumps(v, ensure_ascii=False))}"
+                for k, v in d.items()
+                if _CJK.search(json.dumps(v, ensure_ascii=False))
+            )
+        )
+
+
+def test_chinese_rendered_output_is_unchanged():
+    """反向护栏：中文部署的输出必须仍然含中文（不得被上面的修复误伤）。"""
+    import json
+
+    i18n.set_locale("zh")
+    try:
+        from tools.workflow_engine import quick_scan
+
+        d = json.loads(quick_scan.invoke({"params_json": json.dumps(_EN_PARAMS)}))
+    finally:
+        i18n.reset_locale()
+    assert _CJK.search(json.dumps(d, ensure_ascii=False)), "中文部署的输出不该变成英文"

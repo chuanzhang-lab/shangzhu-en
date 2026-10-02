@@ -836,6 +836,14 @@ industry:
 bench:
   note: "以上为行业参考区间（人民币口径），非预测值"
   no_benchmark: "该行业暂无行业参考基准；以上数字仅为模型输出。"
+  # 未识别行业（走 fallback_template）时的四项展示值。
+  # 原值是 config/industry_templates.yaml 的 fallback_template.benchmark 里的
+  # 中文串 —— 英文部署会原样漏给用户，故一并上移到文案层。
+  fallback:
+    traffic: 未知
+    margin: 无数据
+    breakeven: 无数据
+    warning: 建议提供更多项目细节以获得更准确分析
   label:
     traffic_range: "日均客流"
     profit_margin: "典型利润率"

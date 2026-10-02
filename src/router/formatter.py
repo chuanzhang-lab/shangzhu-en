@@ -16,13 +16,13 @@ import re
 from typing import Any, Dict, List, Optional
 
 from i18n import has, industry_name, t
-from source_tags import INCOMPLETE
+from source_tags import INCOMPLETE, INFINITE_MARK
 
 # 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
 # 这三个是 formatter.py 里仅有的中文字面量，护栏测试按白名单放行。
 _ENGINE_MISSING_MARK = "[缺失]"
 _ENGINE_VC_HINT = "变动成本"
-_ENGINE_INFINITE_MARK = "无限"
+_ENGINE_INFINITE_MARK = INFINITE_MARK  # 协议哨兵，唯一出处在 source_tags
 
 
 def _fmt_benchmark_lines(bench: Dict, industry_key: str = "") -> List[str]:

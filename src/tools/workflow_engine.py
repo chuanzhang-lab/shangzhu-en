@@ -23,9 +23,10 @@ from typing import Optional
 import yaml
 from langchain.tools import tool
 
-from i18n import industry_name, t
+from i18n import benchmark_view, industry_name, t
 import source_tags as st
-from source_tags import CANDIDATE, CONFLICT, DERIVED, INCOMPLETE, MISSING, USER
+from source_tags import (CANDIDATE, CONFLICT, DERIVED, INCOMPLETE,
+                        INFINITE_MARK, MISSING, USER)
 
 from tools.financial_calculator import (
     _calc_breakeven,
@@ -1052,6 +1053,32 @@ def _project_trend_12m(params: dict) -> dict:
     return result
 
 
+def _rw_display(v):
+    """跑道值的**出口映射**：协议哨兵 → 展示文案，数值原样透传。
+
+    引擎内部多处用 `== INFINITE_MARK` 等值比较识别「跑道无限」（见
+    decision_engine / financial_calculator / report_generator），所以哨兵必须
+    在**离开引擎的那一刻**才翻译成文案 —— 早翻译会打断比较，不翻译会让
+    英文部署的结构化字段露出中文。本函数是这个「唯一出口」。
+    中文侧 t("fmt.common.infinite") == "无限"，故中文输出**逐字不变**。
+    """
+    return t("fmt.common.infinite") if v == INFINITE_MARK else v
+
+
+def _rw_display_dict(rw):
+    """`_calc_runway` 的产物是 dict，哨兵藏在 `runway_months` 里。
+
+    只映射 `_rw_display(rw)` 是**静默无效**的（整个 dict 永远不等于哨兵），
+    英文输出会照旧漏中文。故 dict 形态要单独透一层。
+    """
+    if not isinstance(rw, dict):
+        return _rw_display(rw)
+    out = dict(rw)
+    if "runway_months" in out:
+        out["runway_months"] = _rw_display(out["runway_months"])
+    return out
+
+
 def _safe_runway(params: dict):
     """可用现金或变动成本缺失时返回 '未知'，否则返回跑道月数（避免 None 参与除法崩溃）。
 
@@ -1065,7 +1092,8 @@ def _safe_runway(params: dict):
     rev = params["monthly_revenue"]
     if isinstance(rev, (list, tuple)):
         rev = rev[0] if rev else 0
-    return _calc_runway(params["available_cash"], burn, rev).get("runway_months", "N/A")
+    rw = _calc_runway(params["available_cash"], burn, rev).get("runway_months", "N/A")
+    return _rw_display(rw)
 
 
 # ─── 精确推算层（推算式：由用户给出基础值 → 确定公式 → 关联参数）─────────
@@ -1129,7 +1157,7 @@ def _build_skeleton(state: dict) -> dict:
     """门禁拦下时的统一骨架（参数不足，不输出误报结论）。"""
     return {
         "insufficient": True,
-        "project_type": state["params"]["industry_name"],
+        "project_type": industry_name(state["params"]["industry_name"]),
         "stage": state["params"]["stage"],
         "template_mode": state["params"].get("_template_mode", ""),
         "message": t("wf.skeleton.message"),
@@ -1247,7 +1275,10 @@ def _build_scenarios(params: dict, src: dict) -> dict:
             "base": _round_or_none(base_profit),
             "worst": _round_or_none(worst_profit),
         },
-        "runway": {"best": best_runway, "base": base_runway, "worst": worst_runway},
+        "runway": {k: _rw_display(v)
+                   for k, v in (("best", best_runway),
+                                ("base", base_runway),
+                                ("worst", worst_runway))},
         "drivers": drivers,
         "driver_codes": driver_codes,
         "has_uncertainty": bool(drivers),
@@ -1424,7 +1455,7 @@ def quick_scan(params_json: str) -> str:
             is_tech_project=(params["industry_name"] in ["SaaS", "软件"]),
             project_description=raw.get("description", ""),
             tam_description=params["tam_description"],
-            industry=params["industry_name"],
+            industry=industry_name(params["industry_name"]),
         )
 
         # ── 模块 5: 情景/区间（③⑥）与 叙事（⑤）──
@@ -1452,7 +1483,7 @@ def quick_scan(params_json: str) -> str:
                 cash_status = t("wf.status.cash_tight")
             else:
                 cash_status = t("wf.status.cash_safe")
-        elif rw_months == "无限":
+        elif rw_months == INFINITE_MARK:
             cash_status = t("wf.status.cash_positive")
         else:
             cash_status = t("wf.status.cash_unknown")
@@ -1477,7 +1508,7 @@ def quick_scan(params_json: str) -> str:
                                    else t("wf.status.margin_low")))
 
         dashboard = {
-            "project_type": params["industry_name"],
+            "project_type": industry_name(params["industry_name"]),
             "stage": params["stage"],
             "template_applied": not params.get("_skip_template", False),
             "mixed_industry_warning": mixed_warning,
@@ -1491,7 +1522,7 @@ def quick_scan(params_json: str) -> str:
                 "monthly_profit": round(params["monthly_profit"], 0) if params["monthly_profit"] is not None else None,
                 "daily_breakeven": daily_be,
                 "breakeven_revenue_monthly": rev_based_be,
-                "runway_months": rw_months,
+                "runway_months": _rw_display(rw_months),
                 # S3：内部 0~1，对外展示语义仍是百分数（60 表示 60%），
                 # 故此处 ×100 保住 formatter / decision_engine 的既有契约。
                 "gross_margin_percent": (round(params["gross_margin"] * 100, 1)
@@ -1558,10 +1589,13 @@ def quick_scan(params_json: str) -> str:
             "narrative": narrative,
             "scenarios": scenarios,
             "breakeven": be,
-            "runway": rw,
+            "runway": _rw_display_dict(rw),
             "sensitivity": sens,
             "pitfalls": pits,
-            "benchmark": params["benchmark"],
+            # 出口视图：数值取自配置，四项展示串取自 i18n。
+            # 直接倒 params["benchmark"] 会把数据文件里的中文漏给用户（见
+            # i18n.benchmark_view 的 docstring）——英文部署每次扫描都中招。
+            "benchmark": benchmark_view(params["industry_name"], params["benchmark"]),
             # 真实可计算的 benchmark 对比（数值区间超界告警）
             "benchmark_check": _benchmark_check(params, params["benchmark"]),
             # 行业典型成本结构占比（差异化参考）
@@ -1717,7 +1751,7 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
             is_tech_project=(base_p["industry_name"] in ["SaaS", "软件"]),
             project_description="",
             tam_description="",
-            industry=base_p["industry_name"],
+            industry=industry_name(base_p["industry_name"]),
         )
         alt_pits = _do_full_scan(
             price=alt_p["price_per_unit"],
@@ -1731,7 +1765,7 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
             is_tech_project=(alt_p["industry_name"] in ["SaaS", "软件"]),
             project_description="",
             tam_description="",
-            industry=alt_p["industry_name"],
+            industry=industry_name(alt_p["industry_name"]),
         )
 
         comparison = {
@@ -1838,7 +1872,7 @@ def cashflow_projection(params_json: str) -> str:
             payment_rhythm=rhythm,
             months=12,
         )
-        result["project_type"] = state["params"].get("industry_name")
+        result["project_type"] = industry_name(state["params"].get("industry_name") or "")
         result["opening_now"] = opening
         result["basis"] = state["basis"]
         result["notes"] = []

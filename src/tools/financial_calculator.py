@@ -10,6 +10,9 @@ from typing import Optional
 from langchain.tools import tool
 
 from i18n import t
+# INFINITE_MARK 是「跑道无限」协议哨兵的唯一出处（历史值「无限」，靠等值比较识别）。
+# 引擎内部多处 `== INFINITE_MARK` 依赖它，故产出侧必须引用同一常量而不是写字面量。
+from source_tags import INFINITE_MARK
 
 
 # ─── 公共计算函数（非 tool，可被多个 tool 复用）─────────────────────────────
@@ -126,7 +129,7 @@ def _calc_runway(
                 "note": t("fc.runway.cash_missing")}
     net_burn = monthly_burn_rate - monthly_revenue
     if net_burn <= 0:
-        return {"runway_months": "无限", "net_monthly_burn": net_burn, "congratulations": True}
+        return {"runway_months": INFINITE_MARK, "net_monthly_burn": net_burn, "congratulations": True}
     r = round(current_cash / net_burn, 1)
     return {"runway_months": r, "net_monthly_burn": round(net_burn, 2)}
 
@@ -557,7 +560,7 @@ def calculate_runway(
         net_burn = monthly_burn_rate - monthly_revenue
         if net_burn <= 0:
             return json.dumps({
-                "runway_months": "无限",
+                "runway_months": INFINITE_MARK,
                 "net_monthly_burn": net_burn,
                 "interpretation": t("fc.runway.positive"),
                 "congratulations": True

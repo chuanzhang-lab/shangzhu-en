@@ -841,6 +841,14 @@ industry:
 bench:
   note: "Industry reference ranges (USD basis), not a forecast"
   no_benchmark: "No industry reference available for this project type yet; the figures above are model outputs only."
+  # Fallback values for an unrecognised industry (fallback_template).
+  # These used to be Chinese strings inside config/industry_templates.yaml and
+  # were rendered verbatim into the English deployment — moved to the text layer.
+  fallback:
+    traffic: Unknown
+    margin: No data
+    breakeven: No data
+    warning: Add more project details for a more accurate analysis
   label:
     traffic_range: "Daily traffic"
     profit_margin: "Typical profit margin"
