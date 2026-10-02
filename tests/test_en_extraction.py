@@ -207,6 +207,42 @@ def test_oversized_number_does_not_hide_the_right_one(en):
     assert _params("we are 5 people and each gets 4000 a month").get("employee_count") == 5.0
 
 
+def test_common_english_salary_phrasings_are_extracted(en):
+    """常见英文薪资说法必须抽出 avg_salary（人工是最敏感的假设）。
+
+    E-02 实测：5 条真实说法漏 4 条（只抽出人数、薪资为空）→ 固定成本被低估。
+    覆盖：earning / each gets / payroll … per head / making。
+    """
+    for text, want in (
+        ("4 employees earning $3,500 each", 3500.0),
+        ("we are 5 people and each gets 4000 a month", 4000.0),
+        ("5 staff members, payroll 4500 per head", 4500.0),
+        ("3 employees making 3200 per month", 3200.0),
+    ):
+        p = _params(text)
+        assert p.get("avg_salary") == want, f"{text}: avg_salary={p.get('avg_salary')}"
+        assert p.get("employee_count") is not None, f"{text}: 人数也丢了"
+
+
+def test_salary_words_never_steal_price_or_revenue(en):
+    """负例：扩了薪资词表后，真售价 / 真营收不得被抢走。
+
+    最危险的一条是 `earning` 是 `earnings` 的子串 ——
+    若把它塞进 avg_salary.keywords，「monthly earnings 30000」会变成月薪 30000
+    （营收变薪资，量级 100% 错）。故它只放在 labor_pair_patterns（要求
+    「N employees … 数字」相邻，营收句进不来）。
+    """
+    assert _params("price per cup 15").get("price_per_unit") == 15.0
+    assert _params("we sell 15 each").get("price_per_unit") == 15.0
+    assert _params("80 customers a day at 15 each").get("price_per_unit") == 15.0
+    # 营收不是薪资
+    assert "avg_salary" not in _params("monthly earnings 30000")
+    assert "avg_salary" not in _params("revenue 50000 monthly")
+    assert "avg_salary" not in _params("monthly revenue 30000 with 3 employees")
+    # 客流不是薪资
+    assert "avg_salary" not in _params("we get 100 customers a day")
+
+
 def test_window_and_cap_fixes_do_not_break_chinese(zh):
     """上述改动不得改变中文抽取结果（中文侧是既有 oracle）。
 

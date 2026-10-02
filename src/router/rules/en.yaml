@@ -229,12 +229,23 @@ fields:
       staff: 'after'
       workers: 'after'
   - field: 'avg_salary'
-    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head', 'paid', 'pays']
+    # E-02：英文真实说法大面积漏抽（5 条实测漏 4 条），人工是结果最敏感的假设，
+    # 漏抽 → 固定成本被低估 → 利润/回本偏乐观。故补齐常见动词与人头口径写法。
+    # ⚠️ 这里**不加 earning/earns**：它们是 `earnings` 的子串，而通用字段的
+    # reject_context 只看关键词两侧，看不到被关键词自己劈开的那个词 ——
+    # 实测「monthly earnings 30000」会被读成月薪 30000（营收变薪资）。
+    # 这两个词改由 `labor_pair_patterns` 认领（那里要求「N employees … 数字」
+    # 相邻，营收句根本进不来）。
+    keywords: ['average salary', 'avg salary', 'salary per person', 'monthly salary', 'salary', 'wage', 'wages', 'pay per employee', 'payroll per head', 'paid', 'pays',
+               'making', 'gets', 'per head', 'pay per head', 'per employee']
     position: 'before'
     units: ['$', 'usd', 'cny', 'rmb', 'yuan', 'dollars', 'k', 'thousand']
     kw_position: {}
     # 「paid 8000 rent」是房租不是薪资：paid 是薪资动词，但后面紧跟租金语境时拒收。
-    reject_context: ['rent', 'lease', 'rental', 'mortgage', 'deposit', 'for rent']
+    # 「monthly earnings 30000」是营收不是薪资：加营收语境词，配合上面的
+    # `earning` 是 `earnings` 子串这一事实，防止营收被读成月薪。
+    reject_context: ['rent', 'lease', 'rental', 'mortgage', 'deposit', 'for rent',
+                     'earnings', 'revenue', 'sales', 'turnover']
   - field: 'daily_traffic'
     keywords:
       - 'daily traffic'
@@ -673,7 +684,11 @@ annual_rent_patterns:
 # Labor pair: "2 employees at 6000 each" / "salary 6000 x 2" — capture both at once
 # so the headcount is never mistaken for the salary (and vice versa).
 labor_pair_patterns:
-  - regex: '(\d+)\s*(?:employees|employee|staff|people|persons|person|workers|worker|heads|head|hires|hire)\s*(?:at|with|×|x|\*|@)?\s*(?:salary|wage|pay|each|a month|per month|monthly)?\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
+  # E-02：中间的连接词补 `earning/earns/making/get` —— 「4 employees earning $3,500 each」
+  # 这类说法在英语里极常见，旧正则只认 at/with/each 等，连接词不匹配就整条漏抽。
+  # `earning` 放在**这里**而不是 avg_salary.keywords：这里要求「N employees … 数字」
+  # 相邻，「monthly earnings 30000」（营收）根本进不来，天然不会把营收读成薪资。
+  - regex: '(\d+)\s*(?:employees|employee|staff|people|persons|person|workers|worker|heads|head|hires|hire)\s*(?:at|with|×|x|\*|@|earning|earns|making|makes|get|gets)?\s*(?:salary|wage|pay|each|a month|per month|monthly)?\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?'
     count_group: 1
     salary_group: 2
   - regex: '(?:salary|wage|pay)\s*\$?(\d+(?:\.\d+)?)\s*(?:k|thousand)?\s*(?:×|x|\*|for|times|each)?\s*(\d+)\s*(?:employees|employee|staff|people|persons|person|workers|worker|heads|head|hires|hire)?'
