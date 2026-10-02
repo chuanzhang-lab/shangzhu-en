@@ -8,8 +8,8 @@ fmt:
   common:
     project_type_default: "Project"
     qual_suffix: " ({s})"
-    money: "{v} CNY"
-    delta_money: "+{v} CNY"
+    money: "${v}"
+    delta_money: "+${v}"
     unknown: "Unknown"
     unknown_pending: "Unknown / to be filled"
     infinite: "Unlimited"
@@ -53,7 +53,7 @@ fmt:
     core_header: "## Core metrics"
     core_table_header: "| Metric | Value | Status |"
     vc_gap_note1: "> 📌 **Variable cost ratio not provided — profit and break-even are not settled yet.**"
-    vc_gap_note2: "> Add one line such as \"variable cost ratio 55%\" or \"cost per unit X CNY\" to get a hard conclusion."
+    vc_gap_note2: "> Add one line such as \"variable cost ratio 55%\" or \"cost per unit $X\" to get a hard conclusion."
     profit_unknown: "⚪ Unknown (needs variable cost ratio)"
     profit_up: "🟢 Profitable"
     profit_down: "🔴 Loss-making"
@@ -100,8 +100,8 @@ fmt:
     revenue_row: "| Monthly revenue | {base} | {alt} | {diff} |"
     fixed_row: "| Monthly fixed cost | {base} | {alt} | {diff} |"
     verdict: "## Verdict: {verdict}"
-    profit_diff: "\nProfit difference: {value} CNY/month"
-    revenue_diff: "Revenue difference: {value} CNY/month"
+    profit_diff: "\nProfit difference: ${value}/month"
+    revenue_diff: "Revenue difference: ${value}/month"
     ops_hint: "Actions: change parameters | trend forecast | parameter suggestions | export PDF"
 
   # ── suggest_params ────────────────────────────────────────────────────
@@ -109,9 +109,9 @@ fmt:
     error: "## ⚠️ Parameter suggestions failed\n\n{error}"
     title: "## 💡 Parameter tuning suggestions"
     expectation_header: "## Expected after adjustment"
-    current_profit: "- Current monthly profit: **{value} CNY**"
-    projected_profit: "- Monthly profit after adjustment: **{value} CNY**"
-    total_improvement: "- Total improvement: **{value} CNY/month**"
+    current_profit: "- Current monthly profit: **${value}**"
+    projected_profit: "- Monthly profit after adjustment: **${value}**"
+    total_improvement: "- Total improvement: **${value}/month**"
     verdict: "- Verdict: {verdict}"
     issues_header: "## Issues detected"
     issues_table_header: "| Severity | Issue |"
@@ -138,13 +138,13 @@ fmt:
     cannot_title: "## 💰 Cost attribution not settled yet"
     cannot_message: "Cost data is insufficient for attribution analysis."
     title: "## 💰 Cost structure attribution"
-    total_cost: "**Total monthly cost**: {total} CNY (fixed {fixed} + variable {variable})"
+    total_cost: "**Total monthly cost**: ${total} (fixed {fixed} + variable {variable})"
     ratio: "**Fixed / variable ratio**: {fixed:.0%} / {variable:.0%}"
     components_header: "### Component breakdown"
     components_table_header: "| Item | Amount | Share | Source |"
-    component_row: "| {name} | {amount} CNY | {pct} | {source} |"
+    component_row: "| {name} | ${amount} | {pct} | {source} |"
     chart_header: "### Cost share chart"
-    top_component: "**Largest cost item**: {name} ({amount} CNY, {pct} of total)"
+    top_component: "**Largest cost item**: {name} (${amount}, {pct} of total)"
     warnings_header: "### Risk notes"
     ops_hint: "Actions: change parameters | sensitivity analysis | compare scenarios | trend forecast"
 
@@ -161,7 +161,7 @@ fmt:
     margin: "**Safety margin**: {value} ({pct}) · direction: {direction}"
     curve_header: "### Profit as the variable changes"
     curve_table_header: "| {label} | Monthly profit | Status |"
-    curve_row: "| {value} | {profit} CNY | {status} |"
+    curve_row: "| {value} | ${profit} | {status} |"
     ops_hint: "Actions: change parameters | cost attribution | compare scenarios | trend forecast"
 
   # ── Cash flow ─────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ fmt:
     table_header: "| Month | Cash in | Cash out | Net | Closing cash |"
     zero_cash: "📉 **Cash hits zero**: with no external funding, cash runs out around month **{month}**."
     no_zero_cash: "🟢 **Cash is not exhausted within 12 months** (based on current inputs; the conclusion moves if assumptions do)."
-    max_shortfall: "💰 **Largest cumulative shortfall**: about **{value} CNY** (the gap after the zero-cash month)."
+    max_shortfall: "💰 **Largest cumulative shortfall**: about **${value}** (the gap after the zero-cash month)."
     note: "> Cash flow tracks actual receipts and payments only (one-off large items, collection delays, quarterly payments) and is decoupled from profit (P&L)."
 
 # ── Field model (src/field_model.py) ────────────────────────────────────
@@ -213,10 +213,13 @@ field:
     available_cash: "Available cash"
 
   unit:
-    yuan: "CNY"
-    yuan_per_month: "CNY/month"
-    yuan_per_year: "CNY/year"
-    yuan_per_unit: "CNY/unit"
+    # 键名 yuan / yuan_per_month 是**历史内部标识**（跨 locale 键集合必须一致，
+    # 改名会打破 test_locale_key_parity_between_zh_and_en）；值才是展示币种。
+    # 本部署为 USD，故值是 $ —— 改币种只改这里，不要去动键名。
+    yuan: "$"
+    yuan_per_month: "$/month"
+    yuan_per_year: "$/year"
+    yuan_per_unit: "$/unit"
     person_per_day: "customers/day"
     person: "people"
     ratio: "0~1"
@@ -348,12 +351,12 @@ wf:
     derived: Derived
     incomplete: Incomplete
   framework:
-    revenue_known: "Monthly revenue = {rev} CNY (known)"
+    revenue_known: "Monthly revenue = ${rev} (known)"
     revenue_unknown: "Monthly revenue: unknown (needs monthly revenue or daily traffic × unit price)"
-    cost: "Monthly fixed cost ≈ rent {rent} CNY"
-    labor_part: " + labor {labor} CNY"
+    cost: "Monthly fixed cost ≈ rent ${rent}"
+    labor_part: " + labor ${labor}"
     labor_none: " (labor not given, treated as 0)"
-    cash_known: "Available cash = {cash} CNY"
+    cash_known: "Available cash = ${cash}"
     cash_unknown: "Available cash: unknown (needs total investment)"
   readiness:
     no_vcr: Variable cost ratio not given (or not derivable); cannot compute monthly profit and trend
@@ -382,8 +385,8 @@ wf:
   narrative:
     confident: All key parameters were provided by you; confidence is high. The figures below are safe to use as decision references.
     profit_unknown: "Monthly profit: not yet computable (needs variable cost ratio)"
-    profit_range: "Under current assumptions, monthly profit ≈ {base} CNY (optimistic {best} / conservative {worst})"
-    profit_approx: "Monthly profit ≈ {v} CNY"
+    profit_range: "Under current assumptions, monthly profit ≈ ${base} (optimistic {best} / conservative {worst})"
+    profit_approx: "Monthly profit ≈ ${v}"
     risk_focus: "Risk focus: the elasticity of the conclusion mainly comes from the \"{lead}\" assumption. {rng}. It is what you should verify/fill in first — once it changes, the figures above will move with it."
     extra_risks: " There are also {n} structured risks to watch (see \"Risks\" below)."
   scenario:
@@ -463,7 +466,7 @@ fc:
     must_gt_full: Price must exceed variable cost, otherwise it can never be profitable
     suggestion: "Current price {price} ≤ variable cost {vc}; every sale loses money. Raise the price or lower the variable cost."
     formula: "Breakeven = fixed cost / (price − variable cost) = {fc} / ({price} − {vc})"
-    interpretation: "Need to sell ~{units} units, or achieve revenue of {revenue} CNY, to break even."
+    interpretation: "Need to sell ~{units} units, or achieve revenue of ${revenue}, to break even."
   runway:
     cash_missing: Cash missing; runway cannot be computed
     positive: The company is already cash-flow positive; no additional financing needed.
@@ -471,7 +474,7 @@ fc:
     advice_ok: Runway is acceptable; consider starting the next round in ~6 months.
     advice_tight: Runway is tight; start financing or cut spending immediately.
     advice_critical: "🚨 Runway under 6 months! Act now: cut costs, accelerate revenue, or raise emergency financing."
-    note: "At a net burn of {burn} CNY/month, cash runs out in ~{months} months."
+    note: "At a net burn of ${burn}/month, cash runs out in ~{months} months."
   ue:
     cac_gt0: CAC must be greater than 0
     acquisition_gt0: Customer acquisition cost must be greater than 0
@@ -543,7 +546,7 @@ de:
     traffic_exp: Record actual foot traffic for 7 consecutive days and compare with the estimate
     traffic_watch: Daily traffic
     price_what: Unit price
-    price_exp: Raise price slightly for 3 days (e.g. 0.5 CNY) and observe order-volume change
+    price_exp: Raise price slightly for 3 days (e.g. $0.50) and observe order-volume change
     price_watch: Price −0.5 → order change
     vcr_what: Variable cost ratio
     vcr_exp: Review the last month's purchasing/ingredient cost share
@@ -560,7 +563,7 @@ de:
   first_validation:
     none: All key parameters were provided by you; no assumption clearly needs validation first
   decide:
-    profit: "Under current data, monthly profit is {profit} CNY"
+    profit: "Under current data, monthly profit is ${profit}"
     above_be: Above breakeven traffic
     be_gap: "{gap} {unit}/day short of breakeven traffic"
     runway: "Cash runway {rw} months"
@@ -570,7 +573,7 @@ de:
     fill_gaps: Add the missing items above
     cf_incomplete: Cash-flow detail is not yet determinable (opening cash or monthly revenue not given).
     cf_exhaust: "Without external funding, cash runs out around month **{zc}**"
-    cf_shortfall: "; cumulative shortfall then is ~**{ms} CNY**"
+    cf_shortfall: "; cumulative shortfall then is ~**${ms}**"
     cf_basis: Based on opening cash (derived from total investment) and monthly flows; one-time items / receipt lag / payment rhythm are included
     cf_survives: Under current inputs, cash is not exhausted within 12 months.
     cf_changes: If revenue/expense assumptions change, the conclusion will shift
@@ -583,7 +586,7 @@ de:
     mutually_exclusive: "Each is independent and mutually exclusive; reply \"**apply A/B/C**\" to execute one (the LLM does not change directly)."
     reversible: Reversible
     hard_to_revert: Proceed with caution (hard to revert)
-    option_line: "- **{tag}** {label} ({chg}) | estimated monthly-profit change **{delta} CNY** | {rev}"
+    option_line: "- **{tag}** {label} ({chg}) | estimated monthly-profit change **${delta}** | {rev}"
     min_exp: "- Minimal experiment: {exp}"
     watch: "- What to watch: {metric}"
     validate_line: "- Validate first: {what}"
@@ -610,7 +613,7 @@ ss:
   fmt:
     "yes": "Yes"
     "no": "No"
-    yuan: CNY
+    yuan: $
   ctx:
     industry: "Industry: "
   view:
@@ -834,7 +837,7 @@ industry:
 # zh 侧的值必须与 config/industry_templates.yaml 的 benchmark 逐字一致，
 # 由 test_bench_copy_matches_config 守住；改配置不改这里 = 测试红。
 bench:
-  note: "Industry reference ranges (CNY basis), not a forecast"
+  note: "Industry reference ranges (USD basis), not a forecast"
   no_benchmark: "No industry reference available for this project type yet; the figures above are model outputs only."
   label:
     traffic_range: "Daily traffic"
@@ -897,11 +900,12 @@ bench:
 # ─── Parameter guard (param_guard) ────────────────────────────────────────
 pg:
   unit:
-    per_month: "CNY/month"
-    cny: "CNY"
+    # 键名 cny 同样是历史内部标识，值才是展示币种（本部署 USD）。
+    per_month: "$/month"
+    cny: "$"
     per_day: "units/day"
     person: "people"
-    per_unit: "CNY/unit"
+    per_unit: "$/unit"
     ratio_or_pct: "0-1 or 0-100%"
     pct: "%"
     none: ""
@@ -927,29 +931,29 @@ pa:
     down: "Cut"
     none: "No change needed"
   issue:
-    negative_profit: "Monthly loss of {loss} CNY"
+    negative_profit: "Monthly loss of ${loss}"
     short_runway: "Cash runway is only {runway} months"
     tight_runway: "Cash runway is {runway} months — tight"
-    low_price: "Unit price {price} CNY is low; typical for food & beverage / retail is 20-35 CNY"
+    low_price: "Unit price ${price} is low; typical for food & beverage is $12-22"
     low_margin: "Gross margin {gm}% is below the industry benchmark of {bench}%"
     high_rent: "Rent is {ratio}% of revenue; it should be under 15%"
     low_traffic: "Current traffic is only {pct}% of break-even"
   sug:
-    raise_price_cover: "Raising the price by {delta} CNY would cover the monthly loss of {loss} CNY (at current traffic)"
-    cut_fixed: "Cut monthly fixed cost by {cut} CNY (from {cur} to {new})"
+    raise_price_cover: "Raising the price by ${delta} would cover the monthly loss of ${loss} (at current traffic)"
+    cut_fixed: "Cut monthly fixed cost by ${cut} (from {cur} to {new})"
     cashflow_positive: "Cash flow is positive"
-    runway_target: "To reach a {months}-month runway, monthly spend must drop by {cut} CNY"
-    price_typical: "Typical industry price is {lo}-{hi} CNY; a conservative increase goes to {target} CNY"
-    price_aggressive: "Aggressive: move to the industry median price of {mid} CNY (may lose 10-20% of customers)"
+    runway_target: "To reach a {months}-month runway, monthly spend must drop by ${cut}"
+    price_typical: "Typical industry price is ${lo}-{hi}; a conservative increase goes to ${target}"
+    price_aggressive: "Aggressive: move to the industry median price of ${mid} (may lose 10-20% of customers)"
     vc_at_benchmark: "Already close to the industry benchmark gross margin of {gm}%"
     vc_improve: "Raise gross margin from {cur}% to {target}%: switch suppliers / buy at larger volume / optimise the recipe"
-    rent_cut: "Bring rent down to 15% of revenue ({target} CNY), saving {cut} CNY/month. How: relocate / expand to spread the cost / sublet"
+    rent_cut: "Bring rent down to 15% of revenue (${target}), saving ${cut}/month. How: relocate / expand to spread the cost / sublet"
     traffic_insufficient: "Insufficient parameters"
     traffic_target: "Daily traffic needs to reach {be} ({delta}) to break even. How: promotions / more channels / a better location"
   summary:
     healthy: "Parameters are healthy; no adjustment needed"
     turnaround: "These changes turn the loss into a profit"
-    improve: "Profit improves by {delta} CNY/month"
+    improve: "Profit improves by ${delta}/month"
     need_more: "A deeper strategic change is needed"
     note: "Directional suggestions based on industry benchmarks. The advisor can add implementation detail on top."
     error: "suggest_params failed: {err}"
@@ -1244,10 +1248,10 @@ ws:
     conflict: "⚠️ **Data conflict**: {msg}"
     header: "## ⚠️ Parameter gatekeeping (confirm first, then compute)\n"
   ops:
-    current_profit: "Current monthly profit **{v} CNY**. Candidate preview (recomputed by the engine):"
+    current_profit: "Current monthly profit **${v}**. Candidate preview (recomputed by the engine):"
     rejected: "- **{option}** ❌ rejected: {reason} ({label})"
     row: "- **{option}** {label} ({changes}) → estimated monthly profit **{profit}**  ｜ reply \"**{apply}{tag}**\" to apply  ｜ LLM only proposes, the engine computes"
-    money: "{v} CNY"
+    money: "${v}"
     dash: "—"
     joiner: ", "
   apply:
@@ -1276,11 +1280,11 @@ ws:
     word_up: rises
   var_label:
     daily_traffic: Daily traffic (cups/day)
-    monthly_rent: Monthly rent (CNY)
+    monthly_rent: Monthly rent ($)
     variable_cost_ratio: Variable cost ratio (%)
     employee_count: Headcount (people)
-    avg_salary: Average monthly salary (CNY)
-    price_per_unit: Unit price (CNY)
+    avg_salary: Average monthly salary ($)
+    price_per_unit: Unit price ($)
   app_title: Founder Workbench
 
 # ─── config/settings (LLM config read/write) ─────────────────────────────

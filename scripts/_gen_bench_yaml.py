@@ -140,7 +140,9 @@ def build(locale: str) -> str:
     if locale == "zh":
         out.append('  note: "以上为行业参考区间（人民币口径），非预测值"')
     else:
-        out.append('  note: "Industry reference ranges (CNY basis), not a forecast"')
+        # 币种口径必须与展示侧一致（本部署 USD）——生成器若仍写人民币口径，
+        # i18n/en.yaml 的下次重生成会把美元符号悄悄改回去。
+        out.append('  note: "Industry reference ranges (USD basis), not a forecast"')
     out.append("  label:")
     if locale == "zh":
         out.append('    traffic_range: "日均客流"')

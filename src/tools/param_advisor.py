@@ -20,6 +20,23 @@ from tools.workflow_engine import _fill_params, _resolve_industry, INDUSTRY_TEMP
 from field_model import DAYS_PER_MONTH
 
 
+# ─── 行业典型客单价区间（USD / 单件）───────────────────────────────────────
+# 唯一出处：既用于「客单价偏低」判定，也用于提价建议的目标区间。
+# 旧实现把「低于 15 元」硬编码在 _check_issues 里、把 (20,35) 硬编码在
+# _suggest_price_up 里 —— 两处各写一遍金额，改币种时必然只改一处、另一处悄悄失真。
+#
+# 口径：美国市场，2026-10 设定。不是人民币折算—— ¥20-35 ≈ $2.8-4.9，
+# 在美国餐饮语境下是荒谬的低价；同理零售/宠物的数值在美元下反而基本可用。
+TYPICAL_UNIT_PRICE_RANGES = {
+    "餐饮": (12, 22),   # 快餐/休闲餐一份主食（$12-22）
+    "零售": (30, 80),   # 专营店平均客单（$30-80）
+    "宠物": (50, 150),  # 美容/基础诊疗一次（$50-150）
+}
+# 「保守提价」的最小步长（USD）。旧值 +5 是按人民币写的，
+# 对一份 $12 的餐意味着一次涨 42%，与「保守」名不符实。
+_CONSERVATIVE_PRICE_STEP = 2
+
+
 # ─── 建议规则 ────────────────────────────────────────────────────────────────
 
 def _check_issues(params: dict) -> list[dict]:
@@ -70,8 +87,10 @@ def _check_issues(params: dict) -> list[dict]:
     # ── 3. 客单价异常低（vs 行业 benchmark）──
     price = params.get("price_per_unit", 0)
     if price > 0 and industry in INDUSTRY_TEMPLATES:
-        # 不同行业有合理范围，简化处理：低于 15 元为偏低价
-        if price < 15 and industry in ["餐饮", "零售", "宠物"]:
+        # 阈值不写死金额，直接取「行业典型区间下限」——金额只在
+        # TYPICAL_UNIT_PRICE_RANGES 里出现一次，改币种不会漏改。
+        pr = TYPICAL_UNIT_PRICE_RANGES.get(industry)
+        if pr and price < pr[0]:
             issues.append({
                 "code": "low_price",
                 "severity": "high",
@@ -253,18 +272,12 @@ def _suggest_raise_price(params: dict) -> list[dict]:
     traffic = params.get("daily_traffic", 0)
     vc_ratio = params["variable_cost_ratio"]
 
-    # 行业典型价区间（简化）
-    typical_ranges = {
-        "餐饮": (20, 35),
-        "零售": (30, 80),
-        "宠物": (50, 150),
-    }
-    range_info = typical_ranges.get(industry, (price * 1.2, price * 1.5))
+    range_info = TYPICAL_UNIT_PRICE_RANGES.get(industry, (price * 1.2, price * 1.5))
 
     suggestions = []
 
     # 保守提价：到区间下限
-    conservative = max(price + 5, range_info[0])
+    conservative = max(price + _CONSERVATIVE_PRICE_STEP, range_info[0])
     delta = conservative - price
     if traffic > 0 and (1 - vc_ratio) > 0:
         profit_gain = traffic * DAYS_PER_MONTH * (1 - vc_ratio) * delta

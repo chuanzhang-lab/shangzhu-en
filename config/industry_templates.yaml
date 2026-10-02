@@ -1,3 +1,19 @@
+# ─── 币种口径 ────────────────────────────────────────────────────────────────
+# 本文件所有**金额**字段（avg_salary）为 **USD / 月·人（税前工资）**，2026-10 设定。
+#
+# ⚠️ 这些数字不是人民币按汇率折算出来的，是按美国市场重设的。汇率折算会系统性
+#    低估人力成本：餐饮 ¥7,000/月 ÷ 7.2 ≈ $972，而美国餐饮从业者实际约 $3,200/月
+#    （BLS OEWS May 2025：餐厅厨师 $37-38k/年、快餐柜台 $32,150/年）。
+#
+# 主要依据：U.S. BLS Occupational Employment and Wage Statistics, May 2025
+#   - 快餐/柜台 $32,150/年；餐厅厨师 ~$37-38k/年；零售销售 $37,310/年
+#   - 注册护士 $101,420/年；软件工程师中位数 $135,980/年
+#   - 全行业平均 $69,770/年、中位数 $50,980/年
+#
+# 仍未本地化的中国口径（已知，待办）：
+#   - labor_burden（雇主负担）：仍是中国社保公积金口径 0.3~0.4；
+#     美国法定负担约 0.10~0.15（FICA 7.65% + 失业/工伤险），含商业医保约 0.22~0.30。
+#   - seasonal_profile：按中国节假日（春节/双11）设定，美国应为圣诞/暑期/返校季。
 industry_templates:
   餐饮:
     # 季节系数：12个月，1.0为基准。餐饮春节旺、夏季饮品旺、年末聚餐旺
@@ -6,7 +22,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.4
       employee_count: 3
-      avg_salary: 7000
+      avg_salary: 3200
       equipment_ratio: 0.6
       labor_burden: 0.4
       cost_structure:
@@ -32,7 +48,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.55
       employee_count: 2
-      avg_salary: 4500
+      avg_salary: 3000
       equipment_ratio: 0.5
       labor_burden: 0.35
       cost_structure:
@@ -56,7 +72,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.25
       employee_count: 3
-      avg_salary: 15000
+      avg_salary: 9500
       equipment_ratio: 0.1
       labor_burden: 0.3
       cost_structure:
@@ -80,7 +96,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.3
       employee_count: 3
-      avg_salary: 8000
+      avg_salary: 3800
       equipment_ratio: 0.3
       labor_burden: 0.35
       cost_structure:
@@ -106,7 +122,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.6
       employee_count: 2
-      avg_salary: 7000
+      avg_salary: 4200
       equipment_ratio: 0.1
       labor_burden: 0.35
       cost_structure:
@@ -130,7 +146,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.65
       employee_count: 5
-      avg_salary: 6000
+      avg_salary: 3800
       equipment_ratio: 0.5
       labor_burden: 0.45
       cost_structure:
@@ -154,7 +170,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.35
       employee_count: 2
-      avg_salary: 5000
+      avg_salary: 3200
       equipment_ratio: 0.4
       labor_burden: 0.4
       cost_structure:
@@ -178,7 +194,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.25
       employee_count: 5
-      avg_salary: 10000
+      avg_salary: 6000
       equipment_ratio: 0.55
       labor_burden: 0.45
       cost_structure:
@@ -202,7 +218,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.15
       employee_count: 5
-      avg_salary: 20000
+      avg_salary: 8000
       equipment_ratio: 0.05
       labor_burden: 0.5
       cost_structure:
@@ -226,7 +242,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.2
       employee_count: 2
-      avg_salary: 8000
+      avg_salary: 5000
       equipment_ratio: 0.1
       labor_burden: 0.3
       cost_structure:
@@ -250,7 +266,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.3
       employee_count: 3
-      avg_salary: 8000
+      avg_salary: 4800
       equipment_ratio: 0.2
       labor_burden: 0.4
       cost_structure:
@@ -274,7 +290,7 @@ industry_templates:
     hypotheses:
       variable_cost_ratio: 0.3
       employee_count: 3
-      avg_salary: 12000
+      avg_salary: 7800
       equipment_ratio: 0.1
       labor_burden: 0.4
       cost_structure:
@@ -298,7 +314,7 @@ fallback_template:
   hypotheses:
     variable_cost_ratio: 0.4
     employee_count: 2
-    avg_salary: 6000
+    avg_salary: 4000
     equipment_ratio: 0.4
     labor_burden: 0.4
     cost_structure:
