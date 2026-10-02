@@ -143,20 +143,26 @@ ENDPOINT = get_base_url()
 
 
 def _read_app_version() -> str:
-    """版本单源：优先读 pyproject.toml 的 project.version，失败回落 0.1.0。"""
+    """版本单源：读 pyproject.toml 的 project.version。
+
+    ⚠️ 读不到时**不回落一个写死的版本号**。旧实现回落 `0.1.0`，那是第二个
+    版本真值源：升版漏改它 → /health 静默报一个过期版本，且不报错。
+    按项目「缺失不冒充」同一条原则，回落成显式的 `unknown` —— 宁可让人看见
+    「读不到」，也不要看见一个看起来正常但是错的版本号。
+    """
     pyproject = os.path.join(SCRIPT_DIR, "pyproject.toml")
     try:
         with open(pyproject, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("version") and "=" in line:
-                    # version = "0.1.0"
+                    # version = "0.3.0"
                     val = line.split("=", 1)[1].strip().strip('"').strip("'")
                     if val:
                         return val
     except OSError:
         pass
-    return "0.1.0"
+    return "unknown"
 
 
 APP_VERSION = _read_app_version()

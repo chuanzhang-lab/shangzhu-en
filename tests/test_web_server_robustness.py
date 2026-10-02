@@ -3,6 +3,7 @@
 
 固定 llm_advise 为桩（不真实联网），聚焦 HTTP/路由/解析层稳定性。
 """
+import inspect as _inspect
 import os
 import sys
 
@@ -150,6 +151,31 @@ def test_health_includes_version_and_uptime():
     detailed = _client.get("/health?detail=1").json()
     assert "sessions" in detailed
     assert "active_sessions" in detailed["sessions"]
+
+
+def test_version_has_a_single_source_of_truth():
+    """版本号只能来自 pyproject.toml，不得有第二个写死的真值源。
+
+    事故原型：`_read_app_version()` 读不到 pyproject 时回落一个**写死的**
+    `0.1.0`。升版只改 pyproject → /health 静默报一个过期版本号，
+    不报错、不崩，只有对照 release 才发现。对项目「缺失不冒充」同一条原则：
+    读不到就说读不到（unknown），不要给一个看起来正常的错值。
+    """
+    import re as _re
+
+    assert ws.APP_VERSION == ws._read_app_version()
+    # 回落分支不得返回任何形似版本号的字面量
+    src = _inspect.getsource(ws._read_app_version)
+    tail = src.split("except OSError:")[-1]
+    stale = _re.findall(r'return\s+["\'](\d+\.\d+(?:\.\d+)?)["\']', tail)
+    assert not stale, (
+        f"版本回落分支里写死了版本号 {stale} —— 这是第二个真值源，"
+        f"升版漏改就会静默报过期版本"
+    )
+    # pyproject 读得到时必须是真版本号（不是 unknown）
+    assert _re.match(r"^\d+\.\d+\.\d+$", ws.APP_VERSION), (
+        f"/health 报出的版本号不是合法 semver：{ws.APP_VERSION!r}"
+    )
 
 
 def test_oversized_input_returns_400():
