@@ -1,6 +1,6 @@
 [project]
 name = "vibe-coding"
-version = "0.1.0"
+version = "0.2.0"
 description = "创业者财务分析工作台 — 本地独立工作台 (A)"
 requires-python = ">=3.12"
 # ── 本地工作台 (A) 必需依赖 ──

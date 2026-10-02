@@ -6,6 +6,8 @@ A local-first financial modeling workbench for micro-entrepreneurs opening a noo
 
 **Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
+**Version / 版本：`0.2.0`**
+
 ---
 
 ## How it differs from a "financial calculator"
@@ -26,11 +28,47 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 ---
 
-## What's New
+## What's New / 更新内容
 
-**English-only output** — Chinese copy removed from every rendered output path (reports, formatting, UI). Runtime CJK-leak guards now enforce English-only output on all user-visible surfaces.
+### English
+
+**Currency is USD, end to end (`0.2.0`)** — the English edition no longer prices a US small business in RMB:
+
+- **Display**: money renders as `$57,600/month` — symbol *before* the number — consistently in both the report and the web UI.
+- **Numbers**: industry pay scales were **reset to US market levels** (BLS OEWS), not converted by an exchange rate. Rent / salary / ticket-size examples in prompts were re-scaled to US magnitudes.
+- **Seasonality**: seasonal factors now follow the **US calendar** (December peak, not Chinese New Year).
+- **Compliance**: license/permit names replaced with **US-jurisdiction** ones (Business License, Food Service Establishment Permit, FDA Food Facility Registration, …), and English keyword matching was fixed — it previously matched Chinese industry keys and silently returned zero findings.
+
+**Two silent extraction bugs fixed** — both were "looks normal on screen, wrong underneath":
+
+- The keyword-neighbourhood window no longer **cuts a number in half**: `3 employees with average salary $3200` used to yield a headcount of **32** (10× the labor cost, and 32 passes every sanity check).
+- An **oversized number no longer hides the correct one** behind it: `monthly revenue $57,600 and 3 employees` used to drop the headcount entirely.
+
+**Fixed costs that are missing a core component are now tagged `incomplete`** — rent given but labor not: the total is still shown, but flagged as systematically *underestimating* cost, with a warning above the key metrics.
+
+**Chinese side converged / 中文侧收敛** — both locales now share one currency model (one language, one money). Key names stay identical across `zh.yaml` / `en.yaml`; only values differ, so the two packs can never drift apart again.
 
 **More stable runtime** — flaky-free and order-independent test suite, concurrency-safe request handling, robust to empty/oversized/invalid inputs, and clean resource release on shutdown.
+
+### 中文
+
+**币种整体切到美元（`0.2.0`）** —— 英文版不再用人民币给美国小店定价：
+
+- **展示**：金额渲染成 `$57,600/month`，货币符号在数字**前面**，报表与网页界面两处规则一致。
+- **数值**：行业薪资按**美国市场水平重设**（BLS OEWS），不是汇率折算；prompt 里的租金/薪资/客单价示例也改成美元量级。
+- **季节系数**：改为**美国日历**（12 月为峰值，不再是春节）。
+- **合规证照**：替换为**美国口径**（Business License、Food Service Establishment Permit、FDA Food Facility Registration 等），并修复英文匹配静默失效——此前关键词是中文行业名，在英文部署下恒返回 0 条。
+
+**修复两处静默算错** —— 都是「界面上看不出来」的错误：
+
+- 关键词邻域窗口不再把数字**截成两半**：`3 employees with average salary $3200` 曾把人数抽成 **32**（人工成本差 10 倍，且 32 能通过所有合理性检查）。
+- **超限数字不再挡住它后面的正确值**：`monthly revenue $57,600 and 3 employees` 曾整条丢失员工数。
+
+**固定成本缺核心组件时标注 `incomplete`** —— 只给了租金、人工未提供时，总额照常给出但标注为**系统性低估**，并在核心指标上方给出提示。
+
+**中文侧收敛** —— 中英两侧共用一套币种模型（一种语言一种货币）。`zh.yaml` / `en.yaml` 键名保持完全一致，只有值不同，两套语言包再也不会互相漂移。
+
+**运行更稳** —— 测试无 flaky、与顺序无关，请求处理并发安全，对空/超长/非法输入鲁棒，关闭时资源干净释放。
 
 ---
 
