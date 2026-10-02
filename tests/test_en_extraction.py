@@ -163,6 +163,33 @@ def test_keyword_window_never_cuts_a_number_in_half(en):
     assert _params("3 employees with average salary 3200").get("employee_count") == 3.0
 
 
+def test_magnitude_unit_never_eats_the_next_word(en):
+    """量级单位不得吃掉后面单词的首字母：「5000 monthly」不能 ×1e6。
+
+    en 的 number_units 含 `m: 1e6`，而 "5000 monthly" 是合法英文（每月 5000）：
+    没有字母边界时 `m` 命中 monthly 的首字母 → 静默放大 100 万倍。
+    实测三例（同一根因两种症状：放大 / 被 guard 判废后整条丢参）：
+      「lease costs 5000 monthly」→ monthly_expense = 5,000,000,000
+      「profit 3000 monthly」     → monthly_profit  = 3,000,000,000
+      「revenue 50000 monthly」   → monthly_revenue = 50,000,000,000
+      「rent 5000 monthly」       → 5e9 被出口 guard 判废 → 租金静默丢失
+    """
+    assert _params("lease costs 5000 monthly").get("monthly_expense") == 5000.0
+    assert _params("profit 3000 monthly").get("monthly_profit") == 3000.0
+    assert _params("revenue 50000 monthly").get("monthly_revenue") == 50000.0
+    assert _params("rent 5000 monthly").get("monthly_rent") == 5000.0
+
+
+def test_real_magnitude_shorthands_still_apply(en):
+    """负例：真量级简写不得被字母边界误伤（1.2m / 150k / 5000 million）。
+
+    「5000 monthly」与「5000 million」只差两个字母，修过头就会把后者改成 5000。
+    """
+    assert _params("initial investment 1.2m").get("total_investment") == 1200000.0
+    assert _params("total investment 150k").get("total_investment") == 150000.0
+    assert _params("initial investment 5000 million").get("total_investment") == 5000000000.0
+
+
 def test_oversized_number_does_not_hide_the_right_one(en):
     """同一侧里超限的数字不能挡住它后面的正确值。
 
@@ -181,10 +208,16 @@ def test_oversized_number_does_not_hide_the_right_one(en):
 
 
 def test_window_and_cap_fixes_do_not_break_chinese(zh):
-    """上述两处改动不得改变中文抽取结果（中文侧是既有 oracle）。"""
+    """上述改动不得改变中文抽取结果（中文侧是既有 oracle）。
+
+    含中文量级单位回归：`万/千/w/k` 后面接的是汉字，不属于 [A-Za-z]，
+    字母边界不得把它们也挡掉。
+    """
     assert _params("3名员工，平均工资3200").get("employee_count") == 3.0
     assert _params("2人8000").get("employee_count") == 2.0
     assert _params("月营收57600，3名员工").get("employee_count") == 3.0
+    assert _params("总投资1万5").get("total_investment") == 15000.0
+    assert _params("月租2千").get("monthly_rent") == 2000.0
 
 
 def test_continuation_and_reset_commands_are_detected(en):

@@ -174,15 +174,31 @@ def _parse_number(raw: str) -> Optional[float]:
     # ⚠️ 必须**锚定**匹配（数字紧邻单位），不能用 `unit in raw` 子串匹配：
     # 英文 "80/month" 含字母 m，子串匹配会把它静默 ×1e6 —— 与项目已发生的
     # 「静默算错」同类事故。锚定后 "/" 打断匹配，"1.2m" 仍正常命中。
+    #
+    # ⚠️ 但**锚定不等于安全**：空格不打断匹配。实测事故（E-01，量级 100 万倍）：
+    #   en 的 number_units 含 `m: 1e6`，而 "5000 monthly" 是合法英文（每月 5000）——
+    #   `^(\d+)\s*m` 命中 monthly 的 m → 静默 ×1e6：
+    #     「lease costs 5000 monthly」→ monthly_expense = 5,000,000,000
+    #     「profit 3000 monthly」     → monthly_profit  = 3,000,000,000
+    #     「revenue 50000 monthly」   → monthly_revenue = 50,000,000,000
+    #   同一根因的另一症状：「rent 5000 monthly」的 5e9 被出口 guard 判废 →
+    #   租金**整条静默丢失**（不是算错，是丢参）。
+    # 修法：量级单位后**不得紧跟 ASCII 字母**。于是：
+    #   - "5000 monthly" 的 m 后面是 o → 不命中 → 回落普通数字 5000 ✅
+    #   - "1.2m" / "150k" / "5000 m"（真·百万简写）后面不是字母 → 照旧命中 ✅
+    #   - "5000 million"：m 后面是 i → 不命中 m，继续循环到 million → 5e6 ✅
+    #   - 中文单位是 万/千/w/k，其后接汉字不受 `(?![A-Za-z])` 影响 ✅
     for unit, scale in rules.number_units().items():
         if not unit:
             continue
         # 口语缩写：「1万5」= 15000、「1千5」= 1500（尾数按「单位/10」计）
-        m_abbr = re.match(rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}\s*([0-9])", raw)
+        m_abbr = re.match(
+            rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}\s*([0-9]){_NOT_LETTER}", raw)
         if m_abbr:
             val = float(m_abbr.group(1)) * scale + float(m_abbr.group(2)) * (scale // 10)
             return -val if negative else val
-        m_plain = re.match(rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}", raw)
+        m_plain = re.match(
+            rf"^([0-9]+(?:\.[0-9]+)?)\s*{re.escape(unit)}{_NOT_LETTER}", raw)
         if m_plain:
             val = float(m_plain.group(1)) * scale
             return -val if negative else val
@@ -212,6 +228,20 @@ def _parse_number(raw: str) -> Optional[float]:
 # 拆成词表即变语义，故整条存储）。抽取时走 rules.boundary_re() 无参调用，
 # 按当前 locale 取规则。
 _KW_WINDOW = 24  # 关键词邻域：禁止用整段 after_text 的第一个「万」
+
+# 量级单位的**字母边界**（E-01）：单位后不得紧跟 ASCII 字母。
+#
+# 英文 number_units 含 `m: 1e6` / `k: 1e3`，而 "5000 monthly" 是合法英文（每月 5000）：
+# 没有这个边界，`m` 会吃掉 monthly 的首字母 → 静默放大 100 万倍。
+#
+# 两处都用它，但**作用不同**（负向验证实测：只回退 _parse_number 那处，测试不红）：
+#   - `_find_number`（切数字）是**主防线**：它决定「5000 m」会不会被从
+#     "5000 monthly" 里切出来。堵住这里，下游根本看不到那个 m。
+#   - `_parse_number`（读数字）是**同口径兜底**：当前所有调用方传进来的都是
+#     正则捕获出的纯数字片段，这处约束暂时不是承重的；保留它是为了将来任何
+#     直接传入未切分文本的调用方也不会重演同一事故。
+# 对中文单位（万/千/w/k）无影响 —— 其后接的是汉字，不属于 [A-Za-z]。
+_NOT_LETTER = r"(?![A-Za-z])"
 
 # 千分位分隔符：仅在「数字,3位数字」且后面不再是数字时才是分隔符（"2,800" / "10,000"）。
 # 为什么在这里统一归一、而不是让每条正则各写一遍：售价那条路径认得逗号（能抽出 2800），
@@ -513,7 +543,12 @@ def _find_number(text: str, units, strict: bool = False,
         units_list = units if isinstance(units, list) else [units]
         for u in units_list:
             # 数字 + 单位
-            m = re.search(rf"((?:{_SIGN})?{_NUM}\s*{re.escape(u)})", text)
+            # E-01 主防线：单位后不得紧跟 ASCII 字母 —— 否则单位 `m`(1e6) 会从
+            # "5000 monthly" 里切出 "5000 m"，再被 _parse_number 读成 5e9。
+            # 负向验证：只回退这一处，`test_magnitude_unit_never_eats_the_next_word`
+            # 立刻转红；只回退 _parse_number 那处则不红 —— 承重的是这里。
+            m = re.search(
+                rf"((?:{_SIGN})?{_NUM}\s*{re.escape(u)}{_NOT_LETTER})", text)
             if m:
                 val = _parse_number(m.group(1))
                 if val is not None:
