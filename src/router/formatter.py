@@ -15,7 +15,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-from i18n import has, industry_name, t
+from i18n import has, industry_display, industry_name, t
 from source_tags import INCOMPLETE, INFINITE_MARK
 
 # 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
@@ -201,15 +201,19 @@ def _fmt_scan(data: Dict) -> str:
     sensitivity = data.get("sensitivity", {}).get("scenarios", [])
     pitfalls = data.get("pitfalls", {}).get("pitfalls", [])
     bench = data.get("benchmark", {})
-    # 基准是**按行业取**的，需要行业数据键（project_type 就是它，未经展示名映射）
-    industry_key = data.get("project_type") or ""
+    # 基准是**按行业取**的，需要行业**数据键**（engine 侧单独给的 industry_key）。
+    # ⚠️ 不能拿 project_type 当键：它已本地化成 "Food & Beverage"，
+    #    用它查 bench.traffic.<key> 恒查不到 → 静默降级成"暂无基准"（无报错、
+    #    无中文，只有内容悄悄少一块）。这正是「展示名/数据键混用一个字段」的代价。
+    industry_key = data.get("industry_key") or ""
 
     lines = []
 
     # 标题 + 项目类型
     # 括号内只呈现**已知**信息：stage/template_mode 缺失时不得渲染成字面量「None」
-    # project_type 是**行业数据键**，展示前映射成展示名（键本身永不变）
-    project_type = (industry_name(data.get("project_type"))
+    # project_type 在引擎出口通常**已经**是展示名，但历史/存档 scan 里可能还是
+    # 数据键 —— 故用**幂等**的 industry_display：是键才映射，已是展示名则原样。
+    project_type = (industry_display(data.get("project_type"))
                     or t("fmt.common.project_type_default"))
     _quals = [s for s in (data.get("stage"), data.get("template_mode")) if s]
     # 连括号都是文案：中文用全角「（）」，英文用半角 " ()"，写死就混血
@@ -793,7 +797,8 @@ def _fmt_cashflow(data: Dict) -> str:
         return "\n".join(md)
 
     md = [t("fmt.cashflow.title"), ""]
-    project_type = (industry_name(data.get("project_type"))
+    # 同上：幂等映射，兼容「已映射」与「仍是数据键」两种来源。
+    project_type = (industry_display(data.get("project_type"))
                     or t("fmt.common.project_type_default"))
     md.append(t("fmt.cashflow.opening", project_type=project_type, value=_fmt_num_cf(data.get("opening_now"))))
     if data.get("notes"):

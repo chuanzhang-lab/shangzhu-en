@@ -545,6 +545,13 @@ _EN_PARAMS = {
 }
 
 
+# 数据面字段：值里带中文是**设计**，不是泄漏。
+# `industry_key` 与 `/chat` 回包里的 `params.industry` 同类 —— 前端要靠它
+# 回传、引擎要靠它查模板，本地化了反而查不到。展示名走 `project_type`。
+# 这里逐个点名而不是「忽略所有非展示字段」，避免滥开豁免把真泄漏也放过去。
+_DATA_PLANE_FIELDS = {"industry_key"}
+
+
 def test_english_rendered_output_has_no_chinese():
     """英文部署：真实渲染输出**零中文**（端到端，不靠静态扫描）。
 
@@ -559,16 +566,59 @@ def test_english_rendered_output_has_no_chinese():
         ("已识别行业=餐饮", dict(_EN_PARAMS, industry="餐饮")),
     ):
         d = _scan_en(params)
-        blob = json.dumps(d, ensure_ascii=False)
+        shown = {k: v for k, v in d.items() if k not in _DATA_PLANE_FIELDS}
+        blob = json.dumps(shown, ensure_ascii=False)
         hits = _cjk_hits(blob)
         assert not hits, (
             f"英文输出含中文（{label}）：{hits}\n"
             + "\n".join(
                 f"  字段 {k}: {_cjk_hits(json.dumps(v, ensure_ascii=False))}"
-                for k, v in d.items()
+                for k, v in shown.items()
                 if _CJK.search(json.dumps(v, ensure_ascii=False))
             )
         )
+
+
+def test_english_markdown_report_has_no_chinese_and_no_missing_key():
+    """英文部署：渲染成 **markdown** 后仍零中文，且不得出现 missing 键标记。
+
+    为什么单有上一条还不够（实测教训）：
+    上一条只扫 `quick_scan` 的 **JSON**。把 `project_type` 在引擎出口本地化后，
+    下游 formatter 拿它**二次映射** —— JSON 干净、markdown 里刷
+    `i18n: missing key industry.name.Food & Beverage` 的 ERROR，同时基准查找
+    拿展示名当数据键 → 恒查不到 → 静默降级成「暂无基准」。
+    两种症状都不含中文，上一条完全看不到。所以必须**渲染到 markdown 再断言**。
+    """
+    from router.formatter import format_response
+
+    for label, params in (
+        ("fallback 行业", dict(_EN_PARAMS)),
+        ("已识别行业=餐饮", dict(_EN_PARAMS, industry="餐饮")),
+    ):
+        d = _scan_en(params)
+        i18n.set_locale("en")
+        try:
+            md = format_response("quick_scan", d)
+            # ⚠️ 期望串必须在 en 会话内取：出了这个块 i18n.t 会按部署默认（zh）
+            #    返回中文，拿中文串去比对英文 md 永远不命中 —— 断言形同虚设
+            #    （第一版就是这么写的，负向验证直接漏过）。
+            no_bench = i18n.t("bench.no_benchmark")
+        finally:
+            i18n.reset_locale()
+
+        hits = _cjk_hits(md)
+        assert not hits, f"英文 markdown 含中文（{label}）：{hits}"
+        assert "[i18n:missing:" not in md, (
+            f"英文 markdown 出现缺失键标记（{label}）——多半是某个字段被"
+            f"**二次本地化**（拿已翻译的展示名再去查 i18n 键）：\n"
+            + "\n".join(l for l in md.splitlines() if "[i18n:missing:" in l)
+        )
+        # 已识别行业必须拿到行业基准，而不是静默降级成「暂无基准」
+        if label.startswith("已识别"):
+            assert no_bench not in md, (
+                "已识别行业（餐饮）却渲染成「暂无基准」—— 基准查找用的"
+                "行业键被换成了展示名（project_type），应改用 industry_key"
+            )
 
 
 def test_chinese_rendered_output_is_unchanged():

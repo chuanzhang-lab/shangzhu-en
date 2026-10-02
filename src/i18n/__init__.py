@@ -157,6 +157,24 @@ _BENCH_OUT_FIELDS = {
 }
 
 
+def industry_display(value: str) -> str:
+    """**幂等**的行业展示名映射：数据键 → 展示名；已是展示名 → 原样返回。
+
+    为什么必须幂等（实测踩到的坑）：引擎出口已经映射过一次，下游
+    （formatter / report_generator）再调 `industry_name()`，就会拿
+    "Food & Beverage" 去查 `industry.name.<key>` → 缺键 → 每次渲染刷一条
+    ERROR。日久天长没人看 ERROR（告警被训练成噪音），真缺键时也就没人发现了。
+
+    判据是「这个值是不是已知的数据键」，不是「它长得像不像中文」——
+    后者会把合法英文行业名误判成需要映射。
+    """
+    if not value:
+        return ""
+    if has(f"industry.name.{value}"):
+        return industry_name(value)
+    return value
+
+
 def benchmark_view(industry_key: str, bench: dict) -> dict:
     """行业基准的**出口视图**：数值来自配置，词来自 i18n。
 

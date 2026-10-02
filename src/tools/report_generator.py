@@ -11,7 +11,7 @@ import tempfile
 from typing import Optional
 from langchain.tools import tool
 
-from i18n import has, industry_name, t
+from i18n import has, industry_display, industry_name, t
 from source_tags import INFINITE_MARK
 
 # 「无限」是引擎的**数据标记**（靠等值比较识别，见 financial_calculator._calc_runway、
@@ -290,9 +290,10 @@ def build_report_markdown(scan: dict, title: Optional[str] = None) -> str:
     # 默认标题不能在签名里写死成文案：默认参数在 import 时求值，会把语言冻结
     title = title or t("rg.report.default_title")
     lines = [f"# {title}", ""]
-    # project_type 是**行业数据键**（如 餐饮），展示前必须映射成展示名，
-    # 否则英文报告里会直接印出中文键 —— 数据面永不变，只在渲染时翻译
-    pt = industry_name(scan.get("project_type")) or t("rg.report.unknown")
+    # 幂等映射：引擎出口通常已映射成展示名，但存档 scan 里可能仍是数据键
+    # （如「餐饮」）—— 直接不映射会让英文报告印出中文键，套 industry_name
+    # 又会对已映射值刷缺键 ERROR。industry_display 两者都对。
+    pt = industry_display(scan.get("project_type")) or t("rg.report.unknown")
     lines.append(t("rg.report.project_type", v=pt))
     lines.append(t("rg.report.stage", v=scan.get("stage") or t("rg.report.unknown")))
     lines.append("")

@@ -1158,6 +1158,9 @@ def _build_skeleton(state: dict) -> dict:
     return {
         "insufficient": True,
         "project_type": industry_name(state["params"]["industry_name"]),
+        # 数据键与展示名**分两个字段**：project_type 已本地化，不能被下游当键用
+        # （基准按行业键查 bench.traffic.<key>；拿展示名去查 = 静默降级成"无基准"）。
+        "industry_key": state["params"]["industry_name"],
         "stage": state["params"]["stage"],
         "template_mode": state["params"].get("_template_mode", ""),
         "message": t("wf.skeleton.message"),
@@ -1509,6 +1512,8 @@ def quick_scan(params_json: str) -> str:
 
         dashboard = {
             "project_type": industry_name(params["industry_name"]),
+            # 同 _build_skeleton：展示名与数据键分开，基准查找只认 industry_key。
+            "industry_key": params["industry_name"],
             "stage": params["stage"],
             "template_applied": not params.get("_skip_template", False),
             "mixed_industry_warning": mixed_warning,
@@ -1873,6 +1878,7 @@ def cashflow_projection(params_json: str) -> str:
             months=12,
         )
         result["project_type"] = industry_name(state["params"].get("industry_name") or "")
+        result["industry_key"] = state["params"].get("industry_name") or ""
         result["opening_now"] = opening
         result["basis"] = state["basis"]
         result["notes"] = []
