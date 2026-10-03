@@ -164,7 +164,10 @@ async function loadTasks() {
   return _loadTasksInFlight;
 }
 async function _loadTasksInner() {
-  try { const r = await fetch('/tasks'); if (!r.ok) throw new Error('HTTP ' + r.status); const tasks = await r.json(); taskList.innerHTML = '';
+  // 失败阶段标记：catch 里据此区分「服务端/网络问题」还是「前端渲染异常」——
+  // 同一句 toast 曾让用户误以为是老 bug 复发（见 2026-10-03 排查记录）。
+  let phase = 'network/HTTP GET /tasks';
+  try { const r = await fetch('/tasks'); if (!r.ok) throw new Error('HTTP ' + r.status); phase = 'parse+render 任务列表'; const tasks = await r.json(); taskList.innerHTML = '';
     // 循环参数必须叫 task 而不是 t：全局 t 是 i18n 翻译函数，被参数遮蔽后
     // 翻译调用变成「拿任务对象当函数调」→ TypeError → 被外层
     // catch 吞掉 → 前端永远弹「任务列表加载失败」。i18n 迁移引入的回归。
@@ -201,7 +204,7 @@ async function _loadTasksInner() {
     } else {
       updateCatDisabled(); updateBadges(); updateControls();
     }
-  } catch (e) { console.error('[loadTasks] 失败:', e); setToast(t('ui.toast.tasks_load_fail'), '#d97706'); } }
+  } catch (e) { console.error('[loadTasks] 失败于[' + phase + ']:', e); setToast(t('ui.toast.tasks_load_fail'), '#d97706'); } }
 
 // 空项目引导示例卡（新建任务/切到空任务时复用，保持与首屏一致）
 const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>' + t('ui.empty_title') + '</h2><p>' + t('ui.empty_desc') + '</p><div class="examples">' +

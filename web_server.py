@@ -903,12 +903,46 @@ async def require_xhr_for_writes(request: Request, call_next):
             return JSONResponse({"error": "missing X-Requested-With header"}, status_code=403)
     return await call_next(request)
 
+
+@app.middleware("http")
+async def no_cache_runtime_assets(request: Request, call_next):
+    """动态/版本化资源强制回源校验（Cache-Control: no-cache）。
+
+    背景（2026-10-03 报障「Failed to load task list」的缓存侧根因）：
+    `/static/*` 与 `/i18n.js` 此前只有 ETag/Last-Modified、没有 Cache-Control，
+    浏览器按「启发式新鲜度」(≈10%×(now−Last-Modified)) 直接用旧副本，长开的
+    标签页更是永不重取 JS——app.js 修好的 bug 在用户页面上照旧复现。
+
+    no-cache ≠ no-store：仍可拿 ETag/Last-Modified 走 304（省流量），
+    只杜绝「不回源就用旧副本」。`/` 是动态外壳（locale/模型名/版本号都在
+    渲染时注入），同样必须每次校验，否则旧外壳会指向旧的 ?v= 资源 URL。
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path in ("/", "/i18n.js"):
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
 # M3：前端静态资源（app.css / app.js）从 CHAT_HTML 内联抽取为独立文件，
 # 由 FastAPI StaticFiles 挂载到 /static。抽取后 CHAT_HTML 仅剩 HTML 骨架。
 import os as _os
 _STATIC_DIR = _os.path.join(SCRIPT_DIR, "src", "web_static")
 if _os.path.isdir(_STATIC_DIR):
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+def _static_ver(rel: str) -> str:
+    """静态资源版本号 = 文件 mtime（整秒），拼进 `?v=` 做缓存失效。
+
+    以前 `?v=20260413a` 写死、从不更新：改了 app.js，浏览器拿到的 URL 却
+    一个字节没变 → 旧缓存/旧标签页继续跑修复前的代码（2026-10-01 的
+    翻译函数遮蔽 bug 就是这样在用户页面上「阴魂不散」的）。
+    现在文件一改 → mtime 变 → URL 变 → 缓存条目天然失效，无需手工 bump。
+    """
+    try:
+        return str(int(os.path.getmtime(os.path.join(_STATIC_DIR, rel))))
+    except (OSError, TypeError, ValueError):
+        return "0"  # 文件读不到也不把 ?v=__APP_JS_VER__ 这种字面量吐给浏览器
 
 
 # ─── 聊天界面 HTML ─────────────────────────────────────────────────────────
@@ -921,7 +955,7 @@ CHAT_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>__T[ws.html.title]__</title>
-<link rel="stylesheet" href="/static/app.css?v=20260413a">
+<link rel="stylesheet" href="/static/app.css?v=__APP_CSS_VER__">
 </head>
 <body>
 <header>
@@ -996,7 +1030,7 @@ CHAT_HTML = """<!DOCTYPE html>
   </aside>
 </div>
 <script src="/i18n.js"></script>
-<script src="/static/app.js?v=20260413a"></script>
+<script src="/static/app.js?v=__APP_JS_VER__"></script>
 </body>
 </html>
 """
@@ -1044,7 +1078,11 @@ async def index():
     # 文案同样在返回前替换：页面骨架是静态的，语言只能在渲染时决定
     html = _render_html_template(CHAT_HTML)
     html = html.replace("__LOCALE__", get_locale())
-    return html.replace("__MODEL_NAME__", get_model_name())
+    html = html.replace("__MODEL_NAME__", get_model_name())
+    # 资源版本号：mtime 动态注入（见 _static_ver）。占位符名故意不用 __T[..]__
+    # 形式，避免被 i18n 替换器当成文案键。
+    html = html.replace("__APP_CSS_VER__", _static_ver("app.css"))
+    return html.replace("__APP_JS_VER__", _static_ver("app.js"))
 
 
 @app.get("/i18n.js", response_class=Response)
@@ -1077,6 +1115,9 @@ async def health(request: Request):
         "status": "ok",
         "model": get_model_name(),
         "version": APP_VERSION,
+        # 观测位：用户页面跑的是哪一版 app.js，不用开浏览器也能查到。
+        # 这个值本来就在 HTML 的 ?v= 里公开，不属于需要藏的内部信息。
+        "static_ver": _static_ver("app.js"),
         "uptime_seconds": uptime_seconds,
         "llm_configured": has_api_key(),
     }

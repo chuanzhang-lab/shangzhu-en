@@ -6,7 +6,7 @@ A local-first financial modeling workbench for micro-entrepreneurs opening a noo
 
 **Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
-**Version / 版本：`0.4.0`**
+**Version / 版本：`0.4.1`**
 
 ---
 
@@ -29,6 +29,32 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 ---
 
 ## What's New / 更新内容
+
+### `0.4.1` — Frontend asset caching: dynamic version + no-cache
+
+#### English
+
+A fixed bug could keep reproducing on your screen because the browser was still running an old copy of `app.js`. Two causes, both fixed:
+
+- **The `?v=` version was hardcoded.** `app.js?v=20260413a` had never been updated since the first commit — edit the file, the URL stays byte-identical, so the browser has no way to know it should fetch a new copy. It is now the file's mtime: change the file → the URL changes → the cache entry expires by itself, no manual bumping.
+- **No `Cache-Control` on `/static/*`, `/i18n.js`, or `/`.** With only ETag/Last-Modified, browsers fall back to heuristic freshness (≈10% × age) and reuse the stale copy; a long-open tab never re-fetches the JS at all. All three now send `Cache-Control: no-cache` — that still allows a 304 via ETag (so it's not `no-store`, bandwidth is preserved), it just forbids "use the old copy without checking".
+
+Also:
+
+- `/health` now reports `static_ver`, so you can see which `app.js` a user's page is running without opening a browser. A guard test asserts it equals the `?v=` actually served — otherwise the observation point would be a second source of truth.
+- When the task list fails to load, the console now says **which phase** failed (`network/HTTP GET /tasks` vs `parse+render 任务列表`). Previously both paths printed the same toast, which made a server/network blip look like the old rendering bug coming back.
+
+#### 中文
+
+修好的 bug 可能在你屏幕上照旧复现——因为浏览器跑的还是旧的那份 `app.js`。两个原因，都已修：
+
+- **`?v=` 版本号写死。** `app.js?v=20260413a` 从项目第一个 commit 起从未更新：改了文件、URL 一个字节没变，浏览器无从知道该换副本。现在改成文件 mtime——改文件 → URL 变 → 缓存条目天然失效，不用手工 bump。
+- **`/static/*`、`/i18n.js`、`/` 没有 `Cache-Control`。** 只有 ETag/Last-Modified 时，浏览器按「启发式新鲜度」（≈10% × 存活时长）直接用旧副本，长开的标签页更是永不重取 JS。这三个路径现在都发 `Cache-Control: no-cache`——仍可走 ETag 拿 304（不是 `no-store`，省流量不丢），只是杜绝「不回源就用旧副本」。
+
+另外：
+
+- `/health` 新增 `static_ver`：不用开浏览器就能查出用户页面跑的是哪一版 `app.js`。护栏测试断言它必须与实际下发的 `?v=` 相等，否则观测位自己就成了第二个真值源。
+- 任务列表加载失败时，控制台会打印**失败发生在哪个阶段**（`network/HTTP GET /tasks` 还是 `parse+render 任务列表`）。此前两条路径弹同一句提示，导致一次网络抖动被误认成旧的渲染 bug 复发。
 
 ### `0.4.0` — Multiple minor fixes
 
