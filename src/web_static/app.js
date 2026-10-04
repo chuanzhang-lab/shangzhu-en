@@ -80,7 +80,7 @@ function applyModelName(displayName) {
 }
 fetch('/health').then(r => r.json()).then(d => {
   applyModelName(d.model);
-}).catch(() => { status.textContent = t('ui.connect_failed'); status.style.color = '#f87171'; });
+}).catch(e => { reportClientError('health', 'HEALTH_LOAD_FAILED', e); status.textContent = t('ui.connect_failed'); status.style.color = '#f87171'; });
 
 // ── 模型设置弹窗（点击右上角模型名打开）──
 function testLlmConfig(body) {
@@ -98,7 +98,7 @@ function testLlmConfig(body) {
       setToast(t('ui.toast.saved_test_fail') + err, '#d97706');
     }
   })
-  .catch(() => setToast(t('ui.toast.saved_req_fail'), '#d97706'));
+  .catch(e => { reportClientError('llmTest', 'TEST_REQ_FAILED', e); setToast(t('ui.toast.saved_req_fail'), '#d97706'); });
 }
 
 function openModelSettings() {
@@ -147,10 +147,10 @@ function openModelSettings() {
           // 保存后自动连通性探测
           testLlmConfig(body);
         })
-        .catch(() => setToast(t('ui.toast.save_req_fail'), '#d97706'));
+        .catch(e => { reportClientError('llmSave', 'SAVE_REQ_FAILED', e); setToast(t('ui.toast.save_req_fail'), '#d97706'); });
     });
     m.focus();
-  }).catch(() => setToast(t('ui.toast.load_cfg_fail'), '#d97706'));
+  }).catch(e => { reportClientError('llmLoad', 'CFG_LOAD_FAILED', e); setToast(t('ui.toast.load_cfg_fail'), '#d97706'); });
 }
 status.addEventListener('click', openModelSettings);
 const settingsBtn = document.getElementById('settings-btn');
@@ -176,19 +176,19 @@ async function _loadTasksInner() {
       const div = document.createElement('div'); div.className = 'task-item' + (task.id === currentTaskId ? ' active' : ''); div.dataset.id = task.id;
       div.innerHTML = '<span class="tname"></span><span class="tmenu" title="' + t('ui.rename_title') + '">⋯</span><span class="tdel" title="' + t('ui.delete_title') + '">×</span>';
       div.querySelector('.tname').textContent = task.name || t('ui.unnamed_task');
-      div.querySelector('.tname').addEventListener('click', () => switchTask(task.id));
+      div.querySelector('.tname').addEventListener('click', () => switchTask(task.id).catch(e => reportClientError('switchTask', 'SWITCH_FAILED', e)));
       div.querySelector('.tmenu').addEventListener('click', e => { e.stopPropagation(); taskMenu(task, div); });
       div.querySelector('.tdel').addEventListener('click', e => { e.stopPropagation(); deleteTask(task, div); });
       taskList.appendChild(div); });
     // 刷新后自动恢复最近任务（否则分类按钮无参数状态、真实参数不加载）
     if (!currentTaskId && tasks.length > 0) {
-      switchTask(tasks[0].id);  // /tasks 按 updated_at DESC，第一个是最近任务
+      switchTask(tasks[0].id).catch(e => reportClientError('switchTask', 'SWITCH_FAILED', e));  // /tasks 按 updated_at DESC，第一个是最近任务
     } else if (currentTaskId) {
       // F6：检查当前任务是否已被删除（不在最新列表中）
       const stillExists = tasks.some(task => task.id === currentTaskId);
       if (!stillExists && tasks.length > 0) {
         setToast(t('ui.toast.task_deleted'), '#d97706');
-        switchTask(tasks[0].id);
+        switchTask(tasks[0].id).catch(e => reportClientError('switchTask', 'SWITCH_FAILED', e));
       } else if (!stillExists) {
         // 当前任务被删且无其他任务 → 重置状态
         currentTaskId = null; hasParams = false; lastParams = null;
@@ -204,7 +204,7 @@ async function _loadTasksInner() {
     } else {
       updateCatDisabled(); updateBadges(); updateControls();
     }
-  } catch (e) { console.error('[loadTasks] 失败于[' + phase + ']:', e); setToast(t('ui.toast.tasks_load_fail'), '#d97706'); } }
+  } catch (e) { reportClientError('loadTasks', 'TASKS_LOAD_FAILED', e, phase); setToast(t('ui.toast.tasks_load_fail'), '#d97706'); } }
 
 // 空项目引导示例卡（新建任务/切到空任务时复用，保持与首屏一致）
 const EMPTY_STATE_HTML = '<div class="empty" id="empty"><h2>' + t('ui.empty_title') + '</h2><p>' + t('ui.empty_desc') + '</p><div class="examples">' +
@@ -227,7 +227,7 @@ async function newTask() {
     const r = await fetch('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ name: t('ws.task.new') }) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const task = await r.json(); currentTaskId = task.id; ok = true;
-  } catch (e) { console.error('[newTask] 新建任务失败:', e); currentTaskId = null; }
+  } catch (e) { reportClientError('newTask', 'TASK_CREATE_FAILED', e); currentTaskId = null; }
   if (!ok) { setToast(t('ui.toast.new_task_fail'), '#d97706'); }
   clearChat(); activeTaskUi(); loadTasks(); input.focus();
 }
@@ -248,7 +248,7 @@ async function switchTask(id) {
     // 补挂只会产生「点击必失败」的死按钮（当前会话里没有生成过名为 A 的候选方案）。
     // 应用按钮仅在 send 实时返回 ops_available=true 时挂到当前轮消息上。
     msgs.forEach(m => { addMessage(m.role, m.content, false, 'all'); });
-  } catch (e) { console.warn('[switchTask] 加载消息历史失败:', e.message); }
+  } catch (e) { reportClientError('switchTask', 'HISTORY_LOAD_FAILED', e); }
   input.focus();
 }
 
@@ -264,7 +264,7 @@ async function restoreTaskParams(id) {
       const ts = await r.json();
       const fresh = ts.find(x => x.id === id);
       if (fresh) { tasksCache[id] = fresh; tp = fresh.params || {}; task = fresh; }
-    } catch (e) { console.warn('[restoreTaskParams] 刷新任务缓存失败:', e.message); }
+    } catch (e) { reportClientError('restoreTaskParams', 'CACHE_REFRESH_FAILED', e); }
   }
   hasParams = Object.keys(tp).length > 0;
   lastParams = hasParams ? tp : null;
@@ -325,7 +325,7 @@ function taskMenu(task, div) {
         loadTasks();
         setToast(t('ui.toast.renamed') + clean, '#059669');
       })
-      .catch(() => { restore(); setToast(t('ui.toast.rename_fail'), '#d97706'); });
+      .catch(e => { reportClientError('rename', 'TASK_RENAME_FAILED', e); restore(); setToast(t('ui.toast.rename_fail'), '#d97706'); });
   };
 
   renameInput.addEventListener('keydown', onKey);
@@ -363,7 +363,7 @@ async function executeDelete(task, div) {
     await loadTasks();
     setToast(t('ui.toast.deleted') + (task.name || t('ui.unnamed_task')), '#666');
   } catch (e) {
-    console.error('[executeDelete] 删除失败:', e);
+    reportClientError('executeDelete', 'TASK_DELETE_FAILED', e);
     resetDeleteButton(tdel);
     setToast(t('ui.toast.delete_fail') + (e.message || t('ui.toast.retry')), '#d97706');
   }
@@ -662,6 +662,24 @@ function resetCatState() {
 // ── Markdown 渲染（不变）──
 function escape(html) { return html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+// ── E-05 前端错误统一上报（静默失败治理）──────────────────────────────────
+// 「降级必有痕 / 异常不吞」前端版：所有 catch-all 必须走这里——阶段 + 错误码 +
+// console.error 打 [失败于[stage:code]] 事故标记（2026-10-01 事故报障原话的
+// 标记形态），运行期错误不再只弹个 toast 就消失。detail 可选（如 loadTasks
+// 的 phase），追加在标记后，保留「网络段还是渲染段」的区分能力。
+// 节流：同 (stage,code) 60 秒内只走一次上报链路，防错误风暴。
+// E-06 将在此接 sendBeacon → /client-log 落服务端 WEBCLIENT 日志。
+const _reportSeen = {};
+function reportClientError(stage, code, err, detail) {
+  const msg = (err && (err.message || String(err))) || 'unknown';
+  console.error('[失败于[' + stage + ':' + code + ']]' + (detail ? ' @' + detail : ''), err || msg);
+  const key = stage + ':' + code;
+  const now = Date.now();
+  if (_reportSeen[key] && now - _reportSeen[key] < 60000) return;
+  _reportSeen[key] = now;
+  checkVersionHandshake();  // 出错时顺带核对版本：旧前端缓存是静默失败的头号嫌疑
+}
+
 // F3/F5：轻量 toast 反馈（右上角浮动提示，3s 自动消失）
 let _toastTimer = null;
 function setToast(msg, color) {
@@ -783,7 +801,7 @@ function previewAdvisorAction(idx) {
       if (d.ok) setToast(t('ui.toast.preview_ok') + (d.preview || ''), '#059669');
       else setToast('⚠️ ' + (d.reason || t('ui.preview_fail')), '#d97706');
     })
-    .catch(() => setToast(t('ui.toast.preview_req_fail'), '#d97706'));
+    .catch(e => { reportClientError('preview', 'PREVIEW_REQ_FAILED', e); setToast(t('ui.toast.preview_req_fail'), '#d97706'); });
 }
 
 function applyAdvisorAction(idx) {
@@ -800,7 +818,7 @@ function applyAdvisorAction(idx) {
     } else {
       setToast('⚠️ ' + (d.reason || t('ui.apply_fail')), '#d97706');
     }
-  }).catch(() => setToast(t('ui.toast.apply_req_fail'), '#d97706'));
+  }).catch(e => { reportClientError('applyParam', 'APPLY_REQ_FAILED', e); setToast(t('ui.toast.apply_req_fail'), '#d97706'); });
 }
 
 let _advisorData = null;
@@ -816,7 +834,8 @@ function refreshAdvisor() {
       _advisorVersion = d.params_version;
       renderAdvisorPanel(d);
     })
-    .catch(() => {
+    .catch(e => {
+      reportClientError('advisor', 'ADVISOR_LOAD_FAILED', e);
       if (advisorList) advisorList.innerHTML = '<div class="advisor-empty">' + t('ui.advisor_unavailable') + '</div>';
     });
 }
@@ -1017,6 +1036,7 @@ function addAdviceButton(el, adviceMeta, tid) {
       btn.textContent = t('ui.retry');
     }).catch(e => {
       const isTimeout = e && e.name === 'AbortError';
+      reportClientError('advice', isTimeout ? 'ADVICE_TIMEOUT' : 'ADVICE_REQ_FAILED', e);
       setStatus(isTimeout ? t('ui.advice_timeout') : t('ui.net_error_retry'), isTimeout ? 'timeout' : 'error');
       btn.disabled = false;
       btn.textContent = t('ui.retry');
@@ -1108,6 +1128,7 @@ async function send() {
     if (sentTaskId !== currentTaskId) { placeholder.remove(); return; }  // 已切任务，丢弃
     placeholder.classList.remove('streaming');
     const isTimeout = (e && e.name === 'AbortError');
+    reportClientError('chat', isTimeout ? 'CHAT_TIMEOUT' : 'CHAT_NETWORK_ERROR', e);
     setMsgBody(placeholder, '<em style="color:#dc2626">' + (isTimeout ? t('ui.req_timeout') : t('ui.net_error_prefix') + escape(e.message)) + '</em>');
     input.value = text; drafts[currentCat] = text;   // F7：失败保草稿
   }
