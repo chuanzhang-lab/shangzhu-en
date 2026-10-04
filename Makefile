@@ -1,5 +1,5 @@
 # 创业者工作台 (A) — 常用工程命令
-.PHONY: help sync test smoke start health compile lint hooks e2e
+.PHONY: help sync test smoke start health compile lint hooks e2e drift
 
 PY ?= .venv/bin/python3
 # 端口统一口径：与 start.sh / web_server.py 默认值一致（8081）
@@ -12,6 +12,7 @@ help:
 	@echo "make compile  - 字节码编译检查"
 	@echo "make lint     - ESLint 前端门禁（no-shadow/no-undef 错误级）"
 	@echo "make e2e      - 浏览器端到端冒烟（真 Chromium：新建任务 + 零报错断言）"
+	@echo "make drift    - 双副本 drift 报告（EN 违规硬失败；中文仓违规仅 DRIFT 警告）"
 	@echo "make hooks    - 安装本地 pre-commit 门禁（版本化 .githooks/）"
 	@echo "make start    - 启动本地服务 (PORT=$(PORT))"
 	@echo "make health   - curl /health（需服务已启动）"
@@ -40,6 +41,11 @@ lint:
 # 不依赖本地 PG，不碰任何真实数据。chromium 走 ~/Library/Caches/ms-playwright 缓存。
 e2e:
 	node tests/e2e/smoke.mjs
+
+# E-11 双副本 drift 护栏：三区边界（同源锚点/有意分化区/EN 独有不变量）。
+# 只读取中文仓做对比，零写入；中文仓不可达时自动跳过跨副本对比（CI 常态）。
+drift:
+	$(PY) scripts/copy_drift_report.py
 
 # E-09 本地提交门禁：与 .github/workflows/ci.yml 同口径三件套。
 # 钩子本体版本化在 .githooks/，这里只做一次性激活（重克隆后跑一次即可）。
