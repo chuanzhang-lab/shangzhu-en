@@ -16,13 +16,31 @@ import re
 from typing import Any, Dict, List, Optional
 
 from i18n import has, industry_display, industry_name, t
-from source_tags import INCOMPLETE, INFINITE_MARK
+from source_tags import INCOMPLETE, INFINITE_MARK, MISSING, code_of_display
 
-# 引擎侧写死的数据标记（非文案）——M4 引擎 i18n 后需改为状态码。
-# 这三个是 formatter.py 里仅有的中文字面量，护栏测试按白名单放行。
-_ENGINE_MISSING_MARK = "[缺失]"
+# 引擎侧的**语义绳**常量（非文案）——M4 引擎 i18n 后只剩这一个过渡兜底：
+# `变动成本` 用于识别历史存档里「中文 cash_status」的缺 VC 状态；
+# 当前语言的判定统一走 `wf.status.cash_unknown_vc` 的等值比较（见 `_is_unknown_vc`）。
 _ENGINE_VC_HINT = "变动成本"
 _ENGINE_INFINITE_MARK = INFINITE_MARK  # 协议哨兵，唯一出处在 source_tags
+
+
+def _is_unknown_vc(cash_status: str) -> bool:
+    """现金状态是否为「缺变动成本率」导致的未知。
+
+    为什么不用 `_ENGINE_VC_HINT in status` 一句到底：cash_status 是
+    `t("wf.status.cash_unknown_vc")` 的**本地化产物**，en 下是
+    "⚪ Unknown (needs variable cost ratio)"，中文子串永不匹配 →
+    该分支静默落到 `runway_unknown_invest`，**告诉用户去补总投资**
+    （真实原因是缺变动成本率）——误导用户补错参数。
+
+    现按「同一键的当前语言值」等值比较，双语都成立；保留中文子串兜底
+    只为兼容历史存档里的中文 status（数据与 locale 不同语言的极端情形）。
+    """
+    status = str(cash_status or "")
+    if not status:
+        return False
+    return status == t("wf.status.cash_unknown_vc") or _ENGINE_VC_HINT in status
 
 
 def _fmt_benchmark_lines(bench: Dict, industry_key: str = "") -> List[str]:
@@ -281,7 +299,7 @@ def _fmt_scan(data: Dict) -> str:
 
     runway = core.get("runway_months")
     cash_status = status.get("cash", "")
-    if _ENGINE_VC_HINT in str(cash_status):
+    if _is_unknown_vc(cash_status):
         lines.append(t("fmt.scan.runway_unknown_vc", status=cash_status))
     elif runway is not None and runway != _ENGINE_INFINITE_MARK:
         lines.append(t("fmt.scan.runway_months", value=runway, status=cash_status or "—"))
@@ -312,7 +330,10 @@ def _fmt_scan(data: Dict) -> str:
             if src and not k.startswith("_"):
                 val = params_data.get(k, "")
                 if val == "" or val is None:
-                    if src.startswith(_ENGINE_MISSING_MARK):
+                    # [缺失] 字段明确标出，而非静默跳过。
+                    # E-03 修复：判据走状态码（en 下展示串是 "[Missing]"，
+                    # startswith("[缺失]") 会永远假，缺字段会被当成不缺）。
+                    if code_of_display(src) == MISSING:
                         val_str = t("fmt.common.unknown_pending")  # [缺失] 字段明确标出，而非静默跳过
                     else:
                         continue

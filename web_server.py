@@ -74,6 +74,8 @@ from router import rules
 # 文案：展示走 i18n.t()，输入层匹配词走 router.rules（两者不得混放）
 from i18n import get_locale, has as i18n_has, t
 
+import source_tags as _src_tags
+
 # Phase 3：跨轮会话状态（唯一真相源）+ 续算/重置识别 + LLM 接地上下文
 from session_state import (
     apply_turn,
@@ -352,9 +354,13 @@ def _build_advise_context(tid: str, scan: dict) -> dict:
     meta = get_advise_meta(tid)
     snap = to_llm_view(tid)
 
-    # 缺失参数（[param_sources] 含 [缺失] 的字段）
+    # 缺失参数（param_sources 里来源状态码为 missing 的字段）
+    # E-03 修复：判据必须是**状态码**——en 下展示串是 "[Missing]"，
+    # startswith("[缺失]") 恒假 → missing_params 恒空 → LLM 拿不到缺失清单，
+    # 于是不再追问核心参数（多轮采集在英文部署下静默失效）。
     param_sources = (scan or {}).get("param_sources", {})
-    missing_params = [k for k, v in param_sources.items() if isinstance(v, str) and v.startswith("[缺失]")]
+    missing_params = [k for k, v in param_sources.items()
+                      if isinstance(v, str) and _src_tags.code_of(param_sources, k) == _src_tags.MISSING]
 
     # 可用动作
     available_actions = (scan or {}).get("available_actions", ["quick_scan"])

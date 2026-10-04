@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from i18n import industry_name, t
 
+import source_tags
+
 # ── 校验级别 ──────────────────────────────────────────────────────────────
 LEVEL_OK = "ok"
 LEVEL_WARNING = "warning"      # 超出常识但可能合法
@@ -42,33 +44,56 @@ BASIS_USER = "user"
 BASIS_MISSING = "missing"
 BASIS_HYPOTHESIS = "hypothesis"
 
+# 来源**状态码** → basis。映射入口唯一，判据是机器读的码，不是人读的文案。
+_BASIS_BY_CODE = {
+    source_tags.USER: BASIS_USER,        # 用户亲口给出
+    source_tags.DERIVED: BASIS_USER,     # 由用户给出的基础值推导（[推算]/[推导]）
+    source_tags.CONFLICT: BASIS_USER,    # 用户给出但自相矛盾：仍是用户输入的事实，待澄清
+    source_tags.INCOMPLETE: BASIS_USER,  # 值算出来了但缺核心组件 → 基础仍是用户输入
+    source_tags.CANDIDATE: BASIS_HYPOTHESIS,
+    source_tags.MISSING: BASIS_MISSING,
+}
+
+
+def basis_for_code(code: str) -> str:
+    """来源状态码 → basis。**未知码返回 missing**——未知绝不冒充 user。"""
+    return _BASIS_BY_CODE.get(code, BASIS_MISSING)
+
 
 def classify_basis(source_tag: str, has_candidate: bool = False) -> str:
-    """按来源标注判 basis。
+    """按来源标注判 basis：展示串 → 状态码 → basis，**不比对展示文本**。
 
-    - [用户]/[推导]（源自用户给出的值）→ user
-    - [缺失] → missing
-    - [候选]（行业模板猜测）→ hypothesis（需确认才进计算，除非无候选）
+    E-03 修复（2026-10-05，真产品 bug）：旧实现用 ``startswith("[用户]")``
+    拿**展示文案**做语义判定，而 en 部署下 ``t("src.mark.user") == "[User]"``
+    —— 六个标记一律匹配不上，全部落到旧代码末尾的 ``return BASIS_USER`` 兜底。
+    后果是**缺失字段被标成 user**：下游 hypothesis 层 / LLM 会把「用户没说过
+    的数」当用户事实去讲，正是「缺失不冒充」公约的反面
+    （``tests/test_hypothesis_layer.py::test_h5_basis_classification`` 在 en 下必红）。
+
+    修法与 ``source_tags`` 的既有设计对齐：状态码是语言无关 SSOT，
+    展示串只给人看。解析不出状态码 → **missing**，不冒充 user。
+
+    ``has_candidate`` 是历史遗留参数：当前所有调用方都不传
+    （候选与否已由状态码 ``candidate`` 表达），保留签名仅为兼容既有调用。
     """
-    if not source_tag:
+    code = source_tags.code_of_display(source_tag)
+    if not code:  # 空串 / 未知标记：宁可标 missing，不让没依据的数冒充输入
         return BASIS_MISSING
-    if source_tag.startswith(("[用户]", "[推导]")):
-        return BASIS_USER
-    if source_tag.startswith("[缺失]"):
-        return BASIS_MISSING
-    if source_tag.startswith("[候选]"):
-        # 有候选才算 hypothesis；候选即模板默认本身，总标记为 hypothesis
-        return BASIS_HYPOTHESIS
-    return BASIS_USER  # [推算] 由用户给出的基础值推导而来，视为 user 衍生
+    return basis_for_code(code)
 
 
 def derive_basis_map(param_sources: dict) -> Dict[str, str]:
-    """批量从来源标注推导每个字段的 basis。"""
+    """批量推导每个字段的 basis：优先走 ``_codes`` 状态码通道。
+
+    ``source_tags.code_of()`` 先看 ``_codes``（语言无关、AI/引擎自产 src 必备），
+    只有外部手写/历史存档这类没有 ``_codes`` 的 src 才回退旧中文标记解析——
+    这样既走 SSOT 又不破坏历史数据。
+    """
     out = {}
     for k, s in (param_sources or {}).items():
         if not isinstance(s, str):
             continue
-        out[k] = classify_basis(s)
+        out[k] = basis_for_code(source_tags.code_of(param_sources, k))
     return out
 
 

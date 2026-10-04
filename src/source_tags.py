@@ -51,6 +51,10 @@ CODES_KEY = "_codes"
 # decision_engine 三处都在比较它，散落定义 = 漂移来源。
 INFINITE_MARK = "无限"
 
+# ── 状态码全集（顺序固定，供展示文案反查遍历使用）──────────────────────────
+CODING_ORDER_NOTE = "新增状态码必须写进 _ALL_CODES，否则展示文案反查会漏掉它"
+_ALL_CODES = (USER, DERIVED, CANDIDATE, MISSING, CONFLICT, INCOMPLETE)
+
 # 旧中文标记 → 状态码。仅用于「没有 _codes 的 src 字典」的兼容回退。
 # ⚠️ 这里不是文案，是**协议常量**：改动它等价于改接口，必须与历史存档对齐。
 _LEGACY_MARKS = (
@@ -63,10 +67,31 @@ _LEGACY_MARKS = (
 )
 
 
+def code_of_display(display: str) -> str:
+    """展示文案 → 状态码：**按当前 locale 反查**，再兜底历史中文标记。
+
+    为什么需要它：`legacy_code()` 只能解析**中文**标记，en 部署下
+    ``mark(MISSING) == "[Missing]"`` 一律解析不出来（返回 ""）。
+    所以"展示串 → 状态码"这条逆路径必须由 ``mark()`` 这个 SSOT 生成端自己
+    来反查 —— 逐个码生成当前语言的标记再比对，**新增语言无需改本函数**。
+
+    顺序：先当前 locale 的 mark 值（绝大多数），再 legacy 中文标记
+    （历史存档/手写 fixture）；两者都查不出返回 ""（未知就是未知，不冒充）。
+    """
+    tag = (display or "").strip()
+    if not tag:
+        return ""
+    for code in _ALL_CODES:
+        m = mark(code)
+        if m and tag.startswith(m):
+            return code
+    return legacy_code(tag)
+
+
 def legacy_code(tag: str) -> str:
     """从旧中文标记解析状态码；解析不出返回空串（未知就是未知，不冒充）。"""
-    for mark, code in _LEGACY_MARKS:
-        if tag.startswith(mark):
+    for mark_, code in _LEGACY_MARKS:
+        if tag.startswith(mark_):
             return code
     return ""
 
@@ -84,7 +109,7 @@ def code_of(param_sources: Dict[str, Any], key: str) -> str:
         got = codes.get(key)
         if isinstance(got, str) and got:
             return got
-    return legacy_code(str(param_sources.get(key) or ""))
+    return code_of_display(str(param_sources.get(key) or ""))
 
 
 def mark(code: str) -> str:

@@ -314,10 +314,15 @@ CONVERTED_MODULES = [
 # - session_state 的输入层关键词与续算/重置提示词：与 field_model.aliases 同类
 #   （输入匹配数据，非展示），改它会破坏参数抽取与意图识别。
 ENGINE_DATA_LITERALS = {
-    # param_guard 的来源标注前缀：classify_basis 靠 startswith 判定 basis，
-    # 是**语义判定依据**不是展示文案；改英文会让 basis 分类静默降级。
-    # 真正要展示的来源串由 source_tags.mark() 生成（已走 i18n）。
-    "[缺失]", "变动成本", "无限", "[用户]", "[推导]", "[候选]",
+    # ⚠️ 来源标记前缀（[缺失]/[用户]/[推导]/[候选]）**已于 2026-10-05 从本白名单移除**。
+    # 它们一度被当作「语义判定依据」放行，结果正是本次事故：param_guard.classify_basis、
+    # decision_engine gaps、router/formatter、field_model、web_server._build_advise_context
+    # 五处拿中文展示串做语义判定，en 部署下标记变成 [Missing]/[User] → 五个分支全部静默
+    # 落空（缺失冒充成 user / 缺口清单恒空 / LLM 不再追问缺失参数）。
+    # 现五处统一走 source_tags 状态码通道（code_of / code_of_display），
+    # 中文标记的唯一合法出处只剩 source_tags._LEGACY_MARKS（协议常量，兼容历史存档）。
+    # → 此后任何文件再出现这四个字面量，本守卫立刻红。
+    "变动成本", "无限",
     "咖啡", "宠物", "养老", "医疗", "教育", "电商", "内容",
     "餐饮", "零售", "制造", "软件", "自定义", "其他",
     "杯", "假设/缺失", "推算", "用户", "缺失",

@@ -17,7 +17,7 @@ from typing import Optional
 import yaml
 
 from i18n import t
-from source_tags import INFINITE_MARK
+from source_tags import INFINITE_MARK, MISSING, code_of
 
 _POLICY_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -85,7 +85,9 @@ def build_evidence(scan: dict, basis: dict = None) -> dict:
         },
         "basis": basis,
         # 缺口（缺失且无已采纳假设的关键事实）
-        "gaps": [f for f in ps if isinstance(ps.get(f), str) and ps[f].startswith("[缺失]")],
+        # E-03 修复：判据必须是**状态码**，不能是展示文案（en 下是 "[Missing]"，
+        # startswith("[缺失]") 一律落空 → gaps 恒为空，缺口被藏着掖着）。
+        "gaps": [f for f in ps if isinstance(ps.get(f), str) and code_of(ps, f) == MISSING],
         "assumptions": (scan or {}).get("assumptions") or [],
     }
 

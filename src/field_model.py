@@ -28,8 +28,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from i18n import t
 
-# 引擎侧写死的数据标记（非文案）——与 formatter 的同名常量同源
-_USER_SOURCE_MARK = "[用户]"
+import source_tags
+
+# 注：原 `_USER_SOURCE_MARK = "[用户]"` 已删除——它是拿**展示文案**当状态码，
+# en 下恒不匹配。来源判定统一走 `source_tags.code_of_display()`。
 
 
 def _L(suffix: str) -> str:
@@ -662,9 +664,9 @@ def derived_values(params: Dict[str, Any], src: Optional[Dict[str, str]] = None)
         }
         if val is not None:
             item["value"] = round(disp_val, 2) if isinstance(disp_val, float) else disp_val
-            # 公式说明：仅「用户可直接给」且来源确为[用户]时写「用户直接给出」
-            s = src.get(name, "")
-            if s.startswith(_USER_SOURCE_MARK) and spec.get("user_direct_ok"):
+            # 公式说明：仅「用户可直接给」且来源确为 [用户]（状态码 user）时写「用户直接给出」
+            # 注意用 src 整体取码：引擎自产的 src 带 `_codes`，语义权威在那儿。
+            if source_tags.code_of(src, name) == source_tags.USER and spec.get("user_direct_ok"):
                 item["formula"] = t("field.src.user_direct")
             else:
                 item["formula"] = m.get("formula", t("field.src.derived"))
