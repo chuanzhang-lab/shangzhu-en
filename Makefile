@@ -1,5 +1,5 @@
 # 创业者工作台 (A) — 常用工程命令
-.PHONY: help sync test smoke start health compile lint hooks
+.PHONY: help sync test smoke start health compile lint hooks e2e
 
 PY ?= .venv/bin/python3
 # 端口统一口径：与 start.sh / web_server.py 默认值一致（8081）
@@ -11,6 +11,7 @@ help:
 	@echo "make smoke    - 导入 + health 结构冒烟（不启服务）"
 	@echo "make compile  - 字节码编译检查"
 	@echo "make lint     - ESLint 前端门禁（no-shadow/no-undef 错误级）"
+	@echo "make e2e      - 浏览器端到端冒烟（真 Chromium：新建任务 + 零报错断言）"
 	@echo "make hooks    - 安装本地 pre-commit 门禁（版本化 .githooks/）"
 	@echo "make start    - 启动本地服务 (PORT=$(PORT))"
 	@echo "make health   - curl /health（需服务已启动）"
@@ -34,6 +35,11 @@ compile:
 # no-shadow/no-undef 错误级（事故形态 → 面规则），其余 warn 不阻塞。
 lint:
 	npx eslint src/web_static
+
+# E-10 浏览器 e2e：脚本自带隔离（临时 JSON 存储 + 必败 PG 地址），
+# 不依赖本地 PG，不碰任何真实数据。chromium 走 ~/Library/Caches/ms-playwright 缓存。
+e2e:
+	node tests/e2e/smoke.mjs
 
 # E-09 本地提交门禁：与 .github/workflows/ci.yml 同口径三件套。
 # 钩子本体版本化在 .githooks/，这里只做一次性激活（重克隆后跑一次即可）。

@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
-    "globals": "^15.15.0"
+    "globals": "^15.15.0",
+    "playwright": "1.63.0"
   }
 }
