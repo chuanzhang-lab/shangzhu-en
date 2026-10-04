@@ -923,7 +923,8 @@ app.add_middleware(
 @app.middleware("http")
 async def require_xhr_for_writes(request: Request, call_next):
     """POST/PUT/DELETE 要求 X-Requested-With 头，防止恶意站点 <form> 跨站伪造。"""
-    if request.method in ("POST", "PUT", "DELETE"):
+    # /client-log 豁免（E-06）：navigator.sendBeacon 无法携带自定义请求头。
+    if request.method in ("POST", "PUT", "DELETE") and request.url.path != "/client-log":
         if request.headers.get("X-Requested-With", "").lower() != "xmlhttprequest":
             return JSONResponse({"error": "missing X-Requested-With header"}, status_code=403)
     return await call_next(request)
@@ -1158,6 +1159,38 @@ async def health(request: Request):
             "sessions": stats,
         })
     return body
+
+
+# ── 前端错误上报（E-06）────────────────────────────────────────────────────
+@app.post("/client-log")
+async def client_log(request: Request):
+    """前端错误上报落盘：console 之外的服务端观测点（logs/web_server.log, WEBCLIENT）。
+
+    「用户看到了什么」从此服务端可查，排查不再依赖口述。防滥用四闸：
+    body 限 2KB / 字段白名单 / message 截断 500 字符 / 前端 60s 同键节流。
+    响应恒 {"ok": true}（上报端点绝不给前端制造二次错误）；非 JSON 才 400。
+    """
+    raw = await request.body()
+    if len(raw) > 2048:
+        return JSONResponse({"error": "payload too large"}, status_code=400)
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("body must be a JSON object")
+    except Exception:
+        return JSONResponse({"error": "body must be JSON object"}, status_code=400)
+
+    # 字段白名单 + 截断：只收已知形状，杜绝借上报通道注入任意长文本
+    stage = str(data.get("stage", ""))[:40]
+    code = str(data.get("code", ""))[:40]
+    message = str(data.get("message", ""))[:500]
+    page_ver = str(data.get("page_ver", ""))[:20]
+    ts = str(data.get("ts", ""))[:40]
+    logger.info(
+        "WEBCLIENT stage=%s code=%s ver=%s ts=%s msg=%s",
+        stage or "-", code or "-", page_ver or "-", ts or "-", message,
+    )
+    return {"ok": True}
 
 
 # ── 模型设置 API（运行时切换 LLM 配置）──────────────────────────────────────

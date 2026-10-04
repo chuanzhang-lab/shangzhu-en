@@ -2,7 +2,14 @@
 // t(key) 只读后端字典，前端不维护第二份文案；缺失键显式暴露，不静默返回空串。
 function t(key) {
   let s = (window.__I18N__ || {})[key];
-  if (s === undefined) return '[i18n:missing:' + key + ']';
+  if (s === undefined) {
+    // E-06 缺键专项上报：英文文案缺键从「等用户截图」变成服务端日志可查
+    // （code=i18n_missing_key，message 携带 key 名）。reportClientError 是
+    // 函数声明（hoisted），此处先于其定义调用也安全；节流键含 key 名，
+    // 每个缺键 60s 内只报一条，互不吞掉。
+    reportClientError('i18n', 'i18n_missing_key', { message: 'missing key: ' + key }, key);
+    return '[i18n:missing:' + key + ']';
+  }
   for (let i = 1; i < arguments.length; i++) {
     s = s.replace(new RegExp('\\{' + (i - 1) + '\\}', 'g'), arguments[i]);
   }
@@ -662,21 +669,36 @@ function resetCatState() {
 // ── Markdown 渲染（不变）──
 function escape(html) { return html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-// ── E-05 前端错误统一上报（静默失败治理）──────────────────────────────────
+// ── E-05/E-06 前端错误统一上报（静默失败治理）──────────────────────────────
 // 「降级必有痕 / 异常不吞」前端版：所有 catch-all 必须走这里——阶段 + 错误码 +
 // console.error 打 [失败于[stage:code]] 事故标记（2026-10-01 事故报障原话的
 // 标记形态），运行期错误不再只弹个 toast 就消失。detail 可选（如 loadTasks
 // 的 phase），追加在标记后，保留「网络段还是渲染段」的区分能力。
-// 节流：同 (stage,code) 60 秒内只走一次上报链路，防错误风暴。
-// E-06 将在此接 sendBeacon → /client-log 落服务端 WEBCLIENT 日志。
+// 节流：同 (stage:code:detail) 60 秒内只报 1 条，防错误风暴打爆日志。
+// E-06：sendBeacon → /client-log 落服务端 logs/web_server.log（WEBCLIENT 标签）。
 const _reportSeen = {};
 function reportClientError(stage, code, err, detail) {
   const msg = (err && (err.message || String(err))) || 'unknown';
   console.error('[失败于[' + stage + ':' + code + ']]' + (detail ? ' @' + detail : ''), err || msg);
-  const key = stage + ':' + code;
+  const key = stage + ':' + code + (detail ? ':' + detail : '');
   const now = Date.now();
   if (_reportSeen[key] && now - _reportSeen[key] < 60000) return;
   _reportSeen[key] = now;
+  const payload = JSON.stringify({
+    stage: String(stage).slice(0, 40),
+    code: String(code).slice(0, 40),
+    message: String(msg).slice(0, 500),
+    page_ver: window.__APP_JS_VER__ || '0',
+    ts: new Date().toISOString(),
+  });
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon('/client-log', new Blob([payload], { type: 'application/json' }));
+    } else {
+      // 旧浏览器兜底：keepalive 保证页面卸载也不丢
+      fetch('/client-log', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: payload, keepalive: true }).catch(() => {});
+    }
+  } catch { /* 上报失败绝不二次打扰用户 */ }
   checkVersionHandshake();  // 出错时顺带核对版本：旧前端缓存是静默失败的头号嫌疑
 }
 
