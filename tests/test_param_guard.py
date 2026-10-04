@@ -77,7 +77,7 @@ def test_validate_rate_6000_critical_autofix():
     assert r["level"] == LEVEL_CRITICAL, r
     assert r["needs_confirmation"] is True
     assert r["auto_fix"] is not None and abs(r["auto_fix"] - 60.0) < 1e-9, r
-    assert "确认" in r["message"]
+    assert "confirm" in r["message"]
 
 
 def test_validate_ratio_0_6_ok():
@@ -116,7 +116,7 @@ def test_contradiction_detection_ratio():
     history = {"variable_cost_ratio": 0.06}  # 历史 6%，本次 60% → 矛盾
     res = validate_params(new, history_params=history)
     assert len(res["contradictions"]) == 1
-    assert "矛盾" in res["contradictions"][0]["message"]
+    assert "typo" in res["contradictions"][0]["message"]
 
 
 def test_contradiction_detection_big_jump():
@@ -136,13 +136,13 @@ def test_no_contradiction_similar():
 # ── 抽取层集成 ────────────────────────────────────────────────────────────
 
 def test_extract_6000_percent_flagged():
-    p = extract_params("变动成本率6000%，月租金1500")
+    p = extract_params("variable cost rate 6000%, monthly rent 1500")
     assert "_guard" in p, p
     assert p["_guard"]["has_critical"] or p["_guard"]["needs_confirmation"], p["_guard"]
 
 
 def test_extract_60_percent_normalized():
-    p = extract_params("变动成本率60%，月租金1500")
+    p = extract_params("variable cost rate 60%, monthly rent 1500")
     assert abs(p.get("variable_cost_ratio", 0) - 0.6) < 1e-9, p
 
 
@@ -188,9 +188,9 @@ def test_full_chain_6000_percent():
     """完整链路：用户说「变动成本率6000%」→ 抽取标记 + 矛盾 + 引擎护栏。"""
     tid = "guard-full"
     reset_state(tid)
-    p = extract_params("开羊肉汤店，月租金1500，日售50杯，单价15，变动成本率6000%")
+    p = extract_params("Open a soup shop, monthly rent 1500, 50 cups a day, price per cup 15, variable cost rate 6000%")
     assert "_guard" in p, p
-    st, guard = apply_turn_guarded(tid, p, "变动成本率6000%", p.get("industry"))
+    st, guard = apply_turn_guarded(tid, p, "variable cost rate 6000%", p.get("industry"))
     assert guard["needs_confirmation"] or guard["contradictions"], guard
     d = _scan(st["params"])
     # 不应出现荒谬利润

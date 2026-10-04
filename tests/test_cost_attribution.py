@@ -53,7 +53,7 @@ class TestCostAttribution:
 
         # 验证最大分量（变动成本 20000 > 人工 12000）
         top = result["top_component"]
-        assert top["name"] == "变动成本"
+        assert top["name"] == "Variable cost"
         assert top["amount"] == 20000
 
         # 验证固定/变动比例
@@ -125,9 +125,9 @@ class TestAttributionPartial:
         # 只有 3 个分量：租金、人工、变动成本
         assert len(components) == 3
         names = [c["name"] for c in components]
-        assert "租金" in names
-        assert "人工" in names
-        assert "变动成本" in names
+        assert "Rent" in names
+        assert "Labor" in names
+        assert "Variable cost" in names
 
 
 # ─── A5: 集成测试 ──────────────────────────────────────────────────────────

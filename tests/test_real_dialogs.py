@@ -89,7 +89,7 @@ def test_t3_op_rejects_derived_field():
     op = {"propose":"set", "field":"monthly_labor", "value": 5000}
     ok, reason = validate_op(op)
     assert not ok
-    assert "派生" in reason, reason
+    assert "derived" in reason, reason
 
 
 def test_t3_op_rejects_absurd_value():

@@ -44,7 +44,7 @@ def test_create_and_list_task():
 def test_default_task_name():
     r = client.post("/tasks", json={}, headers=_XHR)
     assert r.status_code == 200
-    assert r.json()["name"] == "新任务"
+    assert r.json()["name"] == "New task"
 
 
 def test_rename_task():

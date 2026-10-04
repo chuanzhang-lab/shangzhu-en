@@ -71,9 +71,9 @@ def test_g6_missing_vc_insufficient():
     d = _scan(p)
     res = decide("turnaround", d, d.get("basis"), p, None)
     assert res["confidence"] == "insufficient"
-    assert "变动成本率" in res.get("gaps", [])
+    assert "Variable cost ratio" in res.get("gaps", [])
     md = render_decision(res)
-    assert "还不能定" in md
+    assert "Not yet determinable" in md
 
 
 def test_forbidden_tone_scan():

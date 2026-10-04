@@ -60,7 +60,7 @@ def test_fm4_consistency_rules():
     """FM4：一致性规则——打架即报、一致不报、缺输入不报。"""
     conflict = {**_FULL, "monthly_revenue": 20000, "daily_traffic": 100, "price_per_unit": 12}
     issues = consistency_issues(conflict)
-    assert any("月营收" in i["message"] and "36,000" in i["message"] for i in issues), issues
+    assert any("Monthly revenue" in i["message"] and "36,000" in i["message"] for i in issues), issues
     ok = {**_FULL, "monthly_revenue": 36000, "daily_traffic": 100, "price_per_unit": 12}
     assert consistency_issues(ok) == []
     missing = {**_FULL, "monthly_revenue": 20000}

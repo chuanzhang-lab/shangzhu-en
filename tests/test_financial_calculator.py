@@ -221,7 +221,7 @@ def test_safe_runway_no_cash_unknown():
     from tools.workflow_engine import _safe_runway
     r = _safe_runway({"available_cash": None, "monthly_fixed_cost": 10000,
                       "monthly_variable_cost": 0, "monthly_revenue": 20000})
-    assert r == "未知"
+    assert r == "Unknown"
 
 
 def test_cashflow_check_revenue_none_no_crash():

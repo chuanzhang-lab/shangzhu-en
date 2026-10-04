@@ -34,11 +34,11 @@ def test_h2_missing_vc_not_conclusion():
     d = _scan({"monthly_rent": 8000, "monthly_revenue": 50000})
     assert d.get("error") is None
     assert d["core_metrics"]["monthly_profit"] is None
-    assert d["param_sources"]["variable_cost_ratio"].startswith("[缺失]")
+    assert d["param_sources"]["variable_cost_ratio"].startswith("[Missing]")
     kinds = {a["field"]: a["kind"] for a in d["assumptions"]}
-    assert kinds.get("variable_cost_ratio") == "缺失"
+    assert kinds.get("variable_cost_ratio") == "Missing"
     md = format_response("quick_scan", d)
-    assert "还不能定" in md or "变动成本率" in md
+    assert "not settled yet" in md or "Variable cost ratio" in md
 
 
 def test_h4_benchmark_not_in_formula():

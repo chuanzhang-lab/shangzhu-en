@@ -30,7 +30,7 @@ def test_c1_revenue_vs_traffic_price_conflict():
                "daily_traffic": 100, "price_per_unit": 12, "monthly_rent": 15000,
                "employee_count": 3, "avg_salary": 3000, "variable_cost_ratio": 0.5})
     issues = d.get("derived_issues") or []
-    assert any("月营收" in i.get("message", "") for i in issues), issues
+    assert any("Monthly revenue" in i.get("message", "") for i in issues), issues
     assert any("36,000" in i.get("message", "") for i in issues), issues
 
 
@@ -40,8 +40,8 @@ def test_c2_render_conflict_banner():
                "daily_traffic": 100, "price_per_unit": 12, "monthly_rent": 15000,
                "employee_count": 3, "avg_salary": 3000, "variable_cost_ratio": 0.5})
     md = format_response("quick_scan", d)
-    assert "数据冲突" in md, "应渲染数据冲突提示"
-    assert "请确认口径" in md
+    assert "Data conflicts" in md, "conflict banner should be rendered"
+    assert "please confirm the definitions" in md
 
 
 def test_c3_no_conflict_when_consistent():

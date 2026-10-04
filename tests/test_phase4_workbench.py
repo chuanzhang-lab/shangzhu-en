@@ -63,7 +63,8 @@ def test_c1_partial_no_total():
     d = _scan(params)
     # 只给了租金 → fixed=12000（人工未给，不计入也不虚构）
     assert d["params"]["monthly_fixed_cost"] == 12000, d["params"]["monthly_fixed_cost"]
-    assert "组件求和" in d["param_sources"]["monthly_fixed_cost"]
+    # 来源标签串按 i18n 同 key 取 en 值：src.fixed_cost_sum_incomplete → "... Component sum (...)"
+    assert "Component sum" in d["param_sources"]["monthly_fixed_cost"]
 
 
 # ── P4-1 单位变动成本 ─────────────────────────────────────────────────────
@@ -80,7 +81,10 @@ def test_p41_derives_ratio():
     p, src, _ = _fill_params({"unit_variable_cost": 12, "price_per_unit": 15,
                               "monthly_revenue": 20000, "total_investment": 200000})
     assert abs(p["variable_cost_ratio"] - 0.80) < 1e-6, p["variable_cost_ratio"]
-    assert "推导" in src["variable_cost_ratio"]
+    # 中文「推导」专指 src.derived.vcr_from_unit_cost（"[推导] 单位变动成本÷客单价"）；
+    # en 侧该 key 值为 "[Derived] Unit variable cost ÷ unit price"——mark 与其它派生
+    # 同为 [Derived]，故断言该 key 的独有短语（等价且不弱于中文侧的判别力）。
+    assert "Unit variable cost ÷ unit price" in src["variable_cost_ratio"]
 
 
 # ── P4-2 营收派生（C2：显式优先，不被派生覆盖）──
@@ -92,7 +96,8 @@ def test_p42_derive_only_when_missing():
     """无显式营收 + 有 price×traffic → 派生 15×40×30=18000[推算]。"""
     p, src, _ = _fill_params({"price_per_unit": 15, "daily_traffic": 40, "total_investment": 200000})
     assert p["monthly_revenue"] == 15 * 40 * 30, p["monthly_revenue"]
-    assert "推算" in src["monthly_revenue"]
+    # 中文「推算」= src.mark.derived 标记；en 同 key 为 "[Derived]"（判别力等价）
+    assert "[Derived]" in src["monthly_revenue"]
 
 
 def test_p42_merge_keeps_explicit_revenue():
@@ -114,7 +119,8 @@ def test_p45_missing_cash():
     """current_cash 为 None → [缺失]，不计算、不"无限"。"""
     rw = fc_calc_runway(None, 28000, 20000)
     assert rw.get("runway_months") is None, rw
-    assert "缺失" in rw.get("note", "")
+    # note 串按 i18n 同 key 取 en 值：fc.runway.cash_missing → "Cash missing; runway cannot be computed"
+    assert "Cash missing" in rw.get("note", "")
 
 
 def test_p45_positive_infinite():
@@ -221,20 +227,26 @@ def test_p47_anomaly_report_clean():
 # "员工2人共8000"不会抽薪资）。此处用「用户意图等价、引擎能正确解析」的表述回放，
 # 锁定的是契约行为（C1 自动求和 / C2 营收优先 / C3 路由收口 / 跑道有限 / 不误抓1.0），
 # 与 PLAN.md (d) 节 12 轮 oracle 逐行对应。
+#
+# E-03：轮次文本是「用户输入」，随部署语言走英文；每条与中文原文在 zh 下的
+# extract_params / detect_intent 结果逐字段一致（同参数、同意图、同数值）。
+# 例外说明：T11 中文「日均40」（裸日均、无量词）本就不抽 daily_traffic
+# （D9 只认「日均+数字+量词」），英文侧用 "about 40/day" 同样不触发客流抽取，
+# 保持两侧抽取结果一致，而不是把一侧的漏抽补成另一侧的多抽。
 
 _TURNS = {
-    "T1":       "开羊肉汤店，投资20万，客单价15，人工2人4000，月营收2万",
-    "T3":       "月租金8000元，变动成本率40%，怎么收支平衡",
-    "T4":       "月固定成本一共20000,客单价15,每天流量40",
-    "T5":       "租金12000,人工2人4000,其他1000",
-    "T9":       "羊肉汤店：每份成本12元,水电800,包装260,提成1000",
-    "T10":      "月租减半到6000好，还是客单价提到20好",
-    "T11":      "变动成本率75%,客单价15,日均40,月租12000",
-    "T12":      "月租改6000,需卖多少流量保本",
-    "T14":      "我把月固定成本每一项都给你了，还得给总数？",
-    "T_rent12": "月租金12000元",
-    "T_rent6":  "月租金6000元",
-    "T_ratio75":"变动成本率75%",
+    "T1":       "Open a mutton soup shop, total investment 200000, unit price 15, 2 employees at 4000 each, monthly revenue 20000",
+    "T3":       "monthly rent 8000, variable cost rate 40%, how do I break even?",
+    "T4":       "total fixed costs 20000, unit price 15, 40 customers a day",
+    "T5":       "rent 12000, 2 employees at 4000 each, other fixed 1000",
+    "T9":       "mutton soup shop: cost per bowl 12, utilities 800, packaging 260, commission 1000",
+    "T10":      "is it better to halve the monthly rent to 6000, or raise the unit price to 20?",
+    "T11":      "variable cost rate 75%, unit price 15, about 40/day, monthly rent 12000",
+    "T12":      "change monthly rent to 6000, how many customers a day to break even?",
+    "T14":      "I already gave you every item of the monthly fixed costs; do you still need a total?",
+    "T_rent12": "monthly rent 12000",
+    "T_rent6":  "monthly rent 6000",
+    "T_ratio75":"variable cost rate 75%",
 }
 
 
@@ -255,8 +267,10 @@ def test_p46_t3_breakeven_routed_and_computed():
     breakeven 问句路由引擎(意图=breakeven)，引擎算保本客流；不追问总数。"""
     merged, d = _oracle_replay(["T1", "T3"])
     assert d["params"]["monthly_fixed_cost"] == 16000, d["params"]["monthly_fixed_cost"]
-    assert "组件求和" in d["param_sources"]["monthly_fixed_cost"]
-    assert "待澄清" not in d["param_sources"]["monthly_fixed_cost"]  # 无矛盾，不追问
+    # 来源标签串按 i18n 同 key 取 en 值：src.fixed_cost_sum → "{mark} Component sum ({comp})"
+    assert "Component sum" in d["param_sources"]["monthly_fixed_cost"]
+    # 「待澄清」的 en 同 key 串是 "to clarify"（fixed_cost_sum_conflict 尾注）
+    assert "to clarify" not in d["param_sources"]["monthly_fixed_cost"]  # 无矛盾，不追问
     # 路由收口：保本问句归引擎
     intent, _ = detect_intent(_TURNS["T3"])
     assert intent == "breakeven", intent
@@ -270,10 +284,13 @@ def test_p46_t4_contradiction_not_silent():
     绝不静默取20000；营收仍2万(C2)。"""
     merged, d = _oracle_replay(["T1", "T3", "T4"])
     assert d["params"]["monthly_fixed_cost"] == 16000, d["params"]["monthly_fixed_cost"]
-    assert "矛盾" in d["param_sources"]["monthly_fixed_cost"], d["param_sources"]["monthly_fixed_cost"]
+    # 中文「矛盾」出自 src.fixed_cost_sum_conflict 文案「…与显式总数{total}矛盾→待澄清」；
+    # en 同 key 为 "{mark} Component sum ({comp}) conflicts with explicit total {total} → to clarify"
+    # （mark 取组件状态码 [User]，非 [Conflict]），判别词是 "conflicts"。
+    assert "conflicts" in d["param_sources"]["monthly_fixed_cost"], d["param_sources"]["monthly_fixed_cost"]
     # 营收显式2万不被覆盖
     assert d["core_metrics"]["monthly_revenue"] == 20000
-    assert d["param_sources"]["monthly_revenue"].startswith("[用户]")
+    assert d["param_sources"]["monthly_revenue"].startswith("[User]")
 
 
 def test_p46_t9_fixed_sum_and_derived_ratio():
@@ -281,10 +298,11 @@ def test_p46_t9_fixed_sum_and_derived_ratio():
     unit12+price15 → ratio=0.80[推导](C1核心断言)。"""
     merged, d = _oracle_replay(["T1", "T_rent12", "T9"])
     assert d["params"]["monthly_fixed_cost"] == 22060, d["params"]["monthly_fixed_cost"]
-    assert "组件求和" in d["param_sources"]["monthly_fixed_cost"]
+    assert "Component sum" in d["param_sources"]["monthly_fixed_cost"]
     # 出口为数值契约（0~1）；百分比展示由前端格式化，不要在这里断言展示串
     assert abs(d["params"]["variable_cost_ratio"] - 0.8) < 1e-9, d["params"]["variable_cost_ratio"]
-    assert "推导" in d["param_sources"]["variable_cost_ratio"]
+    # 「推导」→ en 同 key（src.derived.vcr_from_unit_cost）独有短语，见 test_p41 注释
+    assert "Unit variable cost ÷ unit price" in d["param_sources"]["variable_cost_ratio"]
 
 
 def test_p46_t12_breakeven_minimal_14000():
@@ -321,19 +339,24 @@ def test_p46_full_replay_invariants():
         d = _scan(st["params"])
         # 营收恒定
         assert d["core_metrics"]["monthly_revenue"] == 20000, (k, d["core_metrics"]["monthly_revenue"])
-        assert d["param_sources"]["monthly_revenue"].startswith("[用户]"), k
+        # 中文「[用户]」标记 → en 同 key（src.mark.user）值 "[User]"
+        assert d["param_sources"]["monthly_revenue"].startswith("[User]"), k
         # 薪资恒定
         assert d["params"]["avg_salary"] == 4000, (k, d["params"]["avg_salary"])
         # 现金不缺失（总投资已给 → available_cash 存在）。
         # 变动成本率缺失时跑道必须是未知，不得把变动成本当 0 算出「无限」。
         rw = d["core_metrics"]["runway_months"]
         if d["core_metrics"]["monthly_profit"] is None:
-            assert rw is None or rw == "未知", (k, rw, "缺变动成本率时跑道应未知")
+            # 中文「未知」是展示文案（wf.common.unknown），en 同 key 值为 "Unknown"
+            assert rw is None or rw == "Unknown", (k, rw, "缺变动成本率时跑道应未知")
         else:
             assert rw is not None, (k, "跑道缺失(cash缺失bug)")
-        # 亏损时跑道必须有限（修旧"无限"假象）：仅盈利(net_burn<=0)才"无限"
+        # 亏损时跑道必须有限（修旧"无限"假象）：仅盈利(net_burn<=0)才"无限"。
+        # "无限" 是引擎哨兵 INFINITE_MARK（数据标记，保持原样）；出口 _rw_display
+        # 在 en 下把它映射成 fmt.common.infinite="Unlimited"，两个名字都拒收，
+        # 否则 en 部署下该护栏对「亏损却显示无限」静默失效。
         if d["core_metrics"]["monthly_profit"] is not None and d["core_metrics"]["monthly_profit"] < 0:
-            assert rw != "无限", (k, rw)
+            assert rw != "无限" and rw != "Unlimited", (k, rw)
         # 不误抓 1.0
         assert d["params"]["monthly_fixed_cost"] != 1.0, (k, d["params"]["monthly_fixed_cost"])
 

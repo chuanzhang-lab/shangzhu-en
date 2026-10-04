@@ -31,8 +31,10 @@ from session_state import (
 )
 from tools.workflow_engine import quick_scan
 
-TURN1 = "开羊肉汤店，投资20万，单价15，月营收2万，房租一万二"
-TURN2 = "人工成本2人8000，固定成本2500，变动成本率40%，你再算一下"
+# E-03：轮次文本是「用户输入」，随部署语言走英文；抽取结果与中文原文在 zh 下
+# 逐字段一致（同参数、同意图、同数值），见 docs/test-reclassification-en-20261004.md。
+TURN1 = "Open a mutton soup shop, total investment 200000, unit price 15, monthly revenue 20000, monthly rent 12000"
+TURN2 = "labor cost 2 employees at 8000 each, fixed costs 2500, variable cost rate 40%, please recalculate"
 TID = "test-phase3"
 
 
@@ -77,8 +79,9 @@ def test_full_dashboard_after_merge():
     assert d["params"]["avg_salary"] == 8000.0
     # P4-0 C1：Turn1 租金12000 + Turn2 人工16000(2×8000，无默认社保负担) 已为组件，显式「固定成本2500」
     # 与组件和 28000 矛盾 → 标矛盾而非静默取 2500（旧语义掩盖了真矛盾）
+    # 断言串按 i18n 同 key 取 en 值：src.fixed_cost_sum_conflict → "... conflicts with explicit total ..."
     assert d["params"]["monthly_fixed_cost"] == 28000.0, d["params"]["monthly_fixed_cost"]
-    assert "矛盾" in d["param_sources"]["monthly_fixed_cost"]
+    assert "conflicts" in d["param_sources"]["monthly_fixed_cost"]
     # 月营收从 Turn1 带入，未因 Turn2 缺失而丢失
     assert d["core_metrics"]["monthly_revenue"] == 20000.0
 

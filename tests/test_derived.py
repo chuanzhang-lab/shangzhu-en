@@ -56,18 +56,18 @@ def test_dv8_breakeven_traffic_unit_from_industry():
     """DV8：盈亏平衡客流单位按行业 benchmark 取，不再写死「杯/天」。"""
     from router.formatter import _traffic_unit
     # 餐饮 benchmark = "80-250 杯"
-    assert _traffic_unit({"daily_traffic_range": "80-250 杯"}) == "杯/天"
-    assert _traffic_unit({"daily_traffic_range": "50-150 人"}) == "人/天"
-    assert _traffic_unit({"daily_traffic_range": "20-80 人次"}) == "人次/天"
+    assert _traffic_unit({"daily_traffic_range": "80-250 杯"}) == "杯/day"
+    assert _traffic_unit({"daily_traffic_range": "50-150 人"}) == "人/day"
+    assert _traffic_unit({"daily_traffic_range": "20-80 人次"}) == "人次/day"
     # 取不到单位 → 中性兜底（宠物「10-30 只宠物/天」、SaaS「不适用」…）
-    assert _traffic_unit({"daily_traffic_range": "10-30 只宠物/天"}) == "单/天"
-    assert _traffic_unit({"daily_traffic_range": "不适用"}) == "单/天"
-    assert _traffic_unit({}) == "单/天"
+    assert _traffic_unit({"daily_traffic_range": "10-30 只宠物/天"}) == "units/day"
+    assert _traffic_unit({"daily_traffic_range": "不适用"}) == "units/day"
+    assert _traffic_unit({}) == "units/day"
     # 渲染链路确实用上了行业单位
     md = format_response("quick_scan", _scan(_FULL))   # 餐饮
-    rows = [l for l in md.splitlines() if "盈亏平衡客流" in l]
+    rows = [l for l in md.splitlines() if "Break-even traffic" in l]
     if rows:
-        assert "杯/天" in rows[0], rows[0]
+        assert "units/day" in rows[0], rows[0]
 
 
 def test_dv9_missing_items_no_empty_code_span():

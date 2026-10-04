@@ -32,9 +32,9 @@ class TestValidateNoComputedNumbers:
     def test_filters_unknown_numbers(self):
         """参数面板中没有的数字应被过滤。"""
         clean_view = {"params": {"monthly_rent": 15000}}
-        text = "月固定成本大概 33000 元"
+        text = "Monthly fixed cost is roughly 33000 dollars"
         result = validate_no_computed_numbers(text, clean_view)
-        assert "[数字已过滤]" in result
+        assert "[number filtered]" in result
         assert "33000" not in result
 
     def test_empty_text(self):
@@ -43,8 +43,8 @@ class TestValidateNoComputedNumbers:
 
     def test_no_params(self):
         """无参数面板时所有数字被过滤。"""
-        result = validate_no_computed_numbers("数字 123", {"params": {}})
-        assert "[数字已过滤]" in result
+        result = validate_no_computed_numbers("number 123", {"params": {}})
+        assert "[number filtered]" in result
 
 
 class TestFilterCitations:
@@ -83,10 +83,10 @@ class TestParseRisksFromText:
 
     def test_parses_risk_lines(self):
         """匹配含风险关键词的行。"""
-        text = "风险：定价贴近变动成本，提价空间有限。\n这是正常的分析内容。"
+        text = "Risk: pricing is close to variable cost, leaving little room to raise prices.\nThis is normal analysis content."
         result = _parse_risks_from_text(text)
         assert len(result) == 1
-        assert "风险" in result[0]["text"]
+        assert "Risk" in result[0]["text"]
 
     def test_empty_text(self):
         """空文本返回空列表。"""
@@ -127,10 +127,10 @@ class TestFormatAdvice:
 
     def test_filters_numbers_in_judgment(self):
         """judgment 中的未知数字被过滤。"""
-        advice = {"text": "月固定成本大概 33000 元", "ops": []}
+        advice = {"text": "Monthly fixed cost is roughly 33000 dollars", "ops": []}
         clean_view = {"params": {"monthly_rent": 15000}}
         result = format_advice(advice, clean_view)
-        assert "[数字已过滤]" in result["judgment"]
+        assert "[number filtered]" in result["judgment"]
 
     def test_params_version_consistency(self):
         """相同参数产生相同版本号。"""

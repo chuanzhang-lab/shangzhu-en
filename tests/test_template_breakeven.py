@@ -35,7 +35,7 @@ def build_case(industry: str, tpl: dict) -> dict:
     """构造一个「带新增参数 + 修改参数」的测试输入。
 
     - 修改参数：覆盖模板默认值（employee_count / avg_salary / variable_cost_ratio），
-      用于验证模板默认值可被用户覆盖且来源标注为 [用户]。
+      用于验证模板默认值可被用户覆盖且来源标注为 [User]。
     - 新增参数：模板里原本没有、但引擎支持的字段
       （daily_traffic / price_per_unit / total_investment / monthly_rent /
       融资 / 创始人 / 城市 / 竞品 / 增长 / 季节 / 阶段 / TAM / 点位）。
@@ -61,19 +61,19 @@ def build_case(industry: str, tpl: dict) -> dict:
         "total_investment": 300000,
         "monthly_rent": 12000,
         "has_financing": True,
-        "funding_round": "天使轮",
+        "funding_round": "Angel round",
         "funding_amount": 800000,
         "founder_count": 2,
         "has_tech_cofounder": True,
         "has_market_cofounder": True,
         "has_ops_cofounder": False,
-        "city": "上海",
+        "city": "Shanghai",
         "competitor_count": 6,
         "monthly_growth_rate": 0.08,
         "seasonal_factor": 1.1,
-        "stage": "验证期",
-        "tam_description": "目标市场约 50 亿元",
-        "location_type": "核心商圈",
+        "stage": "Validation phase",
+        "tam_description": "Target market about 5 billion yuan",
+        "location_type": "Prime commercial area",
     }
     return params
 
@@ -89,18 +89,18 @@ def run_one(industry: str) -> dict:
     assert raw.get("template_applied") is True, f"{industry} 模板未应用"
     assert raw.get("insufficient") is not True, f"{industry} 被误判不充分（参数已齐）"
 
-    # —— 断言：修改参数确实覆盖模板默认（来源=[用户]）——
+    # —— 断言：修改参数确实覆盖模板默认（来源=[User]）——
     src = raw.get("param_sources", {})
-    assert src.get("employee_count", "").startswith("[用户]"), \
-        f"{industry} employee_count 未标记为[用户]（修改参数未生效）"
-    assert src.get("avg_salary", "").startswith("[用户]"), \
-        f"{industry} avg_salary 未标记为[用户]（修改参数未生效）"
-    assert src.get("variable_cost_ratio", "").startswith("[用户]"), \
-        f"{industry} variable_cost_ratio 未标记为[用户]（修改参数未生效）"
+    assert src.get("employee_count", "").startswith("[User]"), \
+        f"{industry} employee_count 未标记为[User]（修改参数未生效）"
+    assert src.get("avg_salary", "").startswith("[User]"), \
+        f"{industry} avg_salary 未标记为[User]（修改参数未生效）"
+    assert src.get("variable_cost_ratio", "").startswith("[User]"), \
+        f"{industry} variable_cost_ratio 未标记为[User]（修改参数未生效）"
 
     # —— 断言：新增参数被引擎采纳（出现在输出）——
     out_params = raw.get("params", {})
-    assert out_params.get("city") == "上海", f"{industry} 新增参数 city 未写入输出"
+    assert out_params.get("city") == "Shanghai", f"{industry} 新增参数 city 未写入输出"
     assert out_params.get("founder_count") == 2, f"{industry} 新增参数 founder_count 未写入输出"
 
     # —— 断言：收支平衡的建议存在 ——

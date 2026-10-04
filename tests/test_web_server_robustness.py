@@ -99,10 +99,10 @@ def test_compare_routes_and_uses_alt_params():
     # 对比意图应调用 compare_scenarios，并解析「如果」后的参数作为方案 B
     tid = "rb-compare"
     r1 = _chat([{"role": "user",
-                  "content": "奶茶店月租金1万员工2人工资各5000客单价15日售50杯"}], tid=tid)
+                  "content": "Open a milk tea shop. Monthly rent 10000, 2 employees at 5000 each, price per cup 15, 50 cups sold per day"}], tid=tid)
     assert r1.status_code == 200
     r2 = _chat([{"role": "user",
-                  "content": "如果日售提高到80杯，对比一下"}], tid=tid)
+                  "content": "What if daily sales increase to 80 cups, compare"}], tid=tid)
     assert r2.status_code == 200
     body = r2.json()
     assert body["mode"] == "structured"
@@ -111,8 +111,8 @@ def test_compare_routes_and_uses_alt_params():
 
 def test_benchmark_and_market_routed_200():
     # 行业基准与市场调研意图都应稳定返回结构化数据，不 500
-    for tid, text in [("rb-bench", "查一下奶茶行业毛利率基准"),
-                      ("rb-market", "2025年奶茶市场规模")]:
+    for tid, text in [("rb-bench", "Check the milk tea industry benchmark for gross margin"),
+                      ("rb-market", "2025 milk tea market size")]:
         r = _chat([{"role": "user", "content": text}], tid=tid)
         assert r.status_code == 200
         body = r.json()
@@ -124,14 +124,14 @@ def test_report_excel_routed_200():
     # 报告意图应调用报告生成工具并返回下载链接/路径
     tid = "rb-report-excel"
     r = _chat([{"role": "user",
-                  "content": "奶茶店月租金1万员工2人工资各5000客单价15日售50杯，导出Excel"}],
+                  "content": "Open a milk tea shop. Monthly rent 10000, 2 employees at 5000 each, price per cup 15, 50 cups sold per day, export to Excel"}],
               tid=tid)
     assert r.status_code == 200
     body = r.json()
     assert body["mode"] == "structured"
     assert body["intent"] == "report_excel"
     # 本地生成路径会在 Markdown 内容里包含本地文件路径
-    assert "报告已生成" in body["content"] or "file://" in body["content"]
+    assert "Report generated" in body["content"] or "file://" in body["content"]
 
 
 def test_health_includes_version_and_uptime():
@@ -180,10 +180,12 @@ def test_version_has_a_single_source_of_truth():
 
 def test_oversized_input_returns_400():
     # 超过 _MAX_INPUT_LENGTH 字符应返回 400，不触发后续工具/LLM
-    long_text = "开奶茶店 " * 5000
+    # 1200 次 ≈ 25000 字符（与中文原量级一致）：须超 _MAX_INPUT_LENGTH(10000) 且低于
+    # ChatMessage.content 的 100000 Pydantic 上限，否则会先被 422 拦走、测不到业务层 400
+    long_text = "open a milk tea shop " * 1200
     r = _chat([{"role": "user", "content": long_text}], tid="rb-oversize")
     assert r.status_code == 400
-    assert "过长" in r.json()["error"]
+    assert "too long" in r.json()["error"]
 
 
 def test_session_params_not_mutated_by_route():
@@ -338,15 +340,15 @@ def test_sensitivity_intent_returns_analysis_not_fallback():
     """端到端：sensitivity 意图不得再退化为「无法生成结构化分析」兜底文案。"""
     tid = "rb-sensitivity-reg"
     seed = _chat([{"role": "user",
-                   "content": "开奶茶店，月租金1万，日售50杯，单价15，变动成本率60%，员工2人工资各5000"}],
+                   "content": "Open a milk tea shop, monthly rent 10000, 50 cups sold per day, unit price 15, variable cost 60%, 2 employees at 5000 each"}],
                  tid=tid)
     assert seed.status_code == 200
 
-    r = _chat([{"role": "user", "content": "做个敏感度分析"}], tid=tid)
+    r = _chat([{"role": "user", "content": "do a sensitivity analysis"}], tid=tid)
     assert r.status_code == 200
     body = r.json()
-    assert "抱歉，这条业务请求暂时无法生成结构化分析" not in body.get("content", ""), body
-    assert "敏感度" in body.get("content", "") or "安全边际" in body.get("content", ""), body
+    assert "Sorry, this business request could not produce a structured analysis" not in body.get("content", ""), body
+    assert "Sensitivity" in body.get("content", "") or "Safety margin" in body.get("content", ""), body
 
 
 def test_attribution_intent_returns_decomposition_not_missing_gap():
@@ -357,13 +359,13 @@ def test_attribution_intent_returns_decomposition_not_missing_gap():
     """
     tid = "rb-attribution-reg"
     _chat([{"role": "user",
-            "content": "开奶茶店，月租金1万，日售50杯，单价15，变动成本率60%，员工2人工资各5000"}],
+            "content": "Open a milk tea shop, monthly rent 10000, 50 cups sold per day, unit price 15, variable cost 60%, 2 employees at 5000 each"}],
           tid=tid)
 
-    r = _chat([{"role": "user", "content": "成本归因拆解"}], tid=tid)
+    r = _chat([{"role": "user", "content": "cost attribution breakdown"}], tid=tid)
     assert r.status_code == 200
     body = r.json()
     content = body.get("content", "")
-    assert "补充：月营收" not in content, f"归因仍缺月营收: {content[:200]}"
+    assert "Add: Monthly revenue" not in content, f"attribution still missing monthly revenue: {content[:200]}"
     # 应给出真实分解数据
-    assert "成本归因" in content or "占比" in content, content[:200]
+    assert "Cost attribution" in content or "Share" in content, content[:200]

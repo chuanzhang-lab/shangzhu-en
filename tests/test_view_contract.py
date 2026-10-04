@@ -45,8 +45,8 @@ def _chat(text, tid="vc"):
 
 def test_chitchat_response_carries_params():
     """纯闲聊响应也带 params：否则前端显示「未采纳（当前为-）」。"""
-    _chat("月租金8000，客单价30，客流80", tid="vc-chat-1")
-    r = _chat("你好啊", tid="vc-chat-1")
+    _chat("monthly rent 8000, price 30, daily traffic 80", tid="vc-chat-1")
+    r = _chat("hello there", tid="vc-chat-1")
     assert r.status_code == 200
     body = r.json()
     assert "params" in body, "chitchat 响应缺 params 键，前端 F3 会误报未采纳"
@@ -57,7 +57,7 @@ def test_chitchat_response_carries_params():
 
 def test_projection_adds_derived_variable_cost_ratio():
     """只给物理量（每份成本 + 客单价）时，响应也要能拿到算出来的率。"""
-    r = _chat("每份成本10元，客单价30，客流80，月租8000", tid="vc-proj-1")
+    r = _chat("unit cost 10, price 30, daily traffic 80, monthly rent 8000", tid="vc-proj-1")
     p = r.json().get("params") or {}
     assert p.get("variable_cost_ratio") is not None, "派生率未投影，参数面板会缺这个字段"
     assert abs(p["variable_cost_ratio"] - 10 / 30) < 1e-9
@@ -67,7 +67,7 @@ def test_projection_adds_derived_variable_cost_ratio():
 
 def test_projection_keeps_user_stated_ratio():
     """用户直述的率优先于物理量推算；投影只补空缺，不覆盖。"""
-    r = _chat("每份成本12元，客单价15，变动成本率75%，客流100，月租8000", tid="vc-proj-2")
+    r = _chat("unit cost 12, price 15, variable cost ratio 75%, daily traffic 100, monthly rent 8000", tid="vc-proj-2")
     p = r.json().get("params") or {}
     assert p.get("variable_cost_ratio") == 0.75
     assert p.get("unit_variable_cost") == 12.0, "物理量不能因为率被直述就丢掉"
@@ -92,8 +92,8 @@ def test_unit_cost_vs_stated_ratio_no_false_positive():
 
 def test_engine_surfaces_unit_cost_conflict():
     """端到端：规则写对了但没接线的话，单测仍全绿 —— 这条防「假绿」。"""
-    _chat("每份成本12元，客单价15，变动成本率75%，客流100，月租8000", tid="vc-e2e-1")
-    r = _chat("再算一遍", tid="vc-e2e-1")
+    _chat("unit cost 12, price 15, variable cost ratio 75%, daily traffic 100, monthly rent 8000", tid="vc-e2e-1")
+    r = _chat("recalculate", tid="vc-e2e-1")
     assert "80%" in (r.json().get("content") or "")
 
 

@@ -47,9 +47,9 @@ def test_cf1_schedule_zero_cash():
     assert isinstance(r.get("zero_cash_month"), int)
     assert r.get("max_shortfall") is not None
     md = format_response("cashflow", r)
-    assert "现金流明细" in md
-    assert "归零" in md
-    assert "缺口" in md
+    assert "Cash flow detail" in md
+    assert "hits zero" in md
+    assert "shortfall" in md
 
 
 def test_cf2_missing_investment_insufficient():
@@ -57,9 +57,9 @@ def test_cf2_missing_investment_insufficient():
     p = dict(_MILKTEA); p.pop("total_investment")
     r = _cf(p)
     assert r.get("insufficient") is True
-    assert any("期初现金" in g for g in r.get("gaps", []))
+    assert any("Opening cash" in g for g in r.get("gaps", []))
     md = format_response("cashflow", r)
-    assert "还不能定" in md
+    assert "not settled yet" in md
 
 
 def test_cf3_one_time_expense():
@@ -98,8 +98,8 @@ def test_cf6_runway_consumes_cashflow():
                         current_params=_MILKTEA, suggest_data=None,
                         cashflow_data=_cf(_MILKTEA))
     concl = res.get("conclusion") or {}
-    assert "耗尽" in concl.get("text", ""), concl
-    assert "缺口" in concl.get("text", "") or True
+    assert "runs out" in concl.get("text", ""), concl
+    assert "shortfall" in concl.get("text", "") or True
 
 
 def test_cf_schedule_pure_function():

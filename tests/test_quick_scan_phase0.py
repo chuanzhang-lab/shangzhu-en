@@ -22,13 +22,13 @@ def test_rent_plus_revenue_missing_vc_is_blocked():
     d = _scan('{"monthly_rent": 8000, "monthly_revenue": 50000}')
     assert d.get("insufficient") is not True  # 基础参数够，仍渲染（不全盘退回骨架）
     assert d["core_metrics"]["monthly_profit"] is None
-    assert d["param_sources"]["variable_cost_ratio"].startswith("[缺失]")
+    assert d["param_sources"]["variable_cost_ratio"].startswith("[Missing]")
     # 缺口信息应出现在假设清单/来源标注（替代旧 skeleton.gaps）
     kinds = {a["field"]: a["kind"] for a in d["assumptions"]}
-    assert kinds.get("variable_cost_ratio") == "缺失"
+    assert kinds.get("variable_cost_ratio") == "Missing"
     md = format_response("quick_scan", d)
-    assert "月亏" not in md
-    assert "还不能定" in md or "变动成本率" in md  # 明确提示补 vc，而非假硬数
+    assert "monthly loss" not in md.lower()
+    assert "not settled yet" in md.lower() or "variable cost ratio" in md.lower()  # 明确提示补 vc，而非假硬数
 
 
 def test_full_case_no_regression():
@@ -38,9 +38,9 @@ def test_full_case_no_regression():
               '"daily_traffic":50,"price_per_unit":25,"total_investment":300000}')
     assert d.get("insufficient") is not True
     assert d["params"]["available_cash"] is not None
-    assert d["param_sources"]["employee_count"].startswith("[用户]")
+    assert d["param_sources"]["employee_count"].startswith("[User]")
     assert "error" not in d
-    assert d["core_metrics"]["runway_months"] != "未知"
+    assert d["core_metrics"]["runway_months"] != "Unknown"
 
 
 # ─── compare_scenarios 防崩溃回归（2026-08-17）────────────────────────────

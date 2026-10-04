@@ -53,7 +53,7 @@ def test_labor_missing_marks_incomplete():
     assert d["params"]["monthly_fixed_cost"] == 8000, d["params"]
     assert _code_of(d) == st.INCOMPLETE, d["param_sources"]
     src = d["param_sources"]["monthly_fixed_cost"]
-    assert "组件求和" in src and "人工" in src, src
+    assert "Component sum" in src and "Labor" in src, src
     # 值必须是真数字，不能因为「不完整」就变成 None
     assert d["core_metrics"]["monthly_profit"] is not None
 
@@ -63,7 +63,7 @@ def test_rent_missing_marks_incomplete():
     d = _scan({**_BASE, "employee_count": 2, "avg_salary": 2800})
     assert d["params"]["monthly_fixed_cost"] == 5600, d["params"]
     assert _code_of(d) == st.INCOMPLETE, d["param_sources"]
-    assert "租金" in d["param_sources"]["monthly_fixed_cost"]
+    assert "Rent" in d["param_sources"]["monthly_fixed_cost"]
 
 
 def test_both_core_missing_names_both():
@@ -71,7 +71,7 @@ def test_both_core_missing_names_both():
     d = _scan({**_BASE, "utilities": 800})
     src = d["param_sources"]["monthly_fixed_cost"]
     assert _code_of(d) == st.INCOMPLETE
-    assert "租金" in src and "人工" in src, src
+    assert "Rent" in src and "Labor" in src, src
 
 
 # ── 反例：不该标 incomplete 的情况 ────────────────────────────────────────
@@ -103,7 +103,7 @@ def test_conflict_takes_precedence_over_incomplete():
     """显式总数与组件和矛盾 → 「待澄清」优先（比不完整更急需用户介入）。"""
     d = _scan({**_BASE, "monthly_rent": 8000, "monthly_expense": 20000})
     src = d["param_sources"]["monthly_fixed_cost"]
-    assert "矛盾" in src, src
+    assert "conflicts with" in src, src
     assert _code_of(d) != st.INCOMPLETE, src
 
 
@@ -139,7 +139,7 @@ def test_english_text_is_english():
 def test_report_surfaces_caveat_when_incomplete():
     """提示必须在报表正文里出现（不能只藏在「参数来源」表的一行里）。"""
     txt = _fmt_scan(_scan({**_BASE, "monthly_rent": 8000}))
-    assert "人工" in txt and "成本不完整" in txt, txt
+    assert "Labor" in txt and "Incomplete cost" in txt, txt
 
 
 def test_report_has_no_caveat_when_complete():
