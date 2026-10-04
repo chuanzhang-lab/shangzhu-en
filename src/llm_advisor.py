@@ -70,7 +70,8 @@ def _api_key_from_config() -> str:
     try:
         cfg = _load_llm_config()
         return (cfg.get("config", {}) or {}).get("api_key", "").strip()
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        logger.warning("llm_advisor: api key read from config failed, returning empty: %s", e)
         return ""
 
 
@@ -169,8 +170,8 @@ def get_base_url() -> str:
         url = (cfg.get("config", {}) or {}).get("base_url", "")
         if url:
             return url.strip()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning("llm_advisor: base_url read failed, falling back to DEEPSEEK_BASE_URL: %s", e)
     return DEEPSEEK_BASE_URL
 
 
@@ -306,8 +307,8 @@ def _close_llm(client) -> None:
             inner.close()
         if hasattr(client, "close") and callable(client.close):
             client.close()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — 关闭失败无害（缓存已作废），debug 级留痕
+        logger.debug("llm_advisor: llm client close failed: %s", e)
 
 
 def _get_llm() -> ChatOpenAI:
@@ -556,8 +557,8 @@ def get_llm_config_view() -> dict:
     try:
         from config.settings import get_llm_config_view as _settings_view
         return _settings_view()
-    except Exception:
-        pass  # 委托失败（极端：config 包不可导入）时退回本地读
+    except Exception as e:  # noqa: BLE001
+        logger.warning("llm_advisor: settings view delegate failed, falling back to local read: %s", e)
     cfg = _load_llm_config().get("config", {})
     return {
         "model": cfg.get("model", "deepseek-v4-flash"),
@@ -593,8 +594,8 @@ def save_llm_config(model: str, base_url: str, api_key: str) -> dict:
         return view
     except ValueError:
         raise  # 参数校验错误原样抛
-    except Exception:
-        pass  # 委托失败退回本地实现
+    except Exception as e:  # noqa: BLE001
+        logger.warning("llm_advisor: config save delegate failed, falling back to local write: %s", e)
     with _config_write_lock:
         key_raw = (api_key or "").strip()
         if key_raw and len(key_raw) < 8:
@@ -605,7 +606,8 @@ def save_llm_config(model: str, base_url: str, api_key: str) -> dict:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 full = json.load(f)
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            logger.warning("llm_advisor: llm config file unreadable, using default base: %s", e)
             full = _load_llm_config()  # 文件缺失/损坏 → 用默认基底
 
         if not isinstance(full, dict):
@@ -741,6 +743,7 @@ def test_llm_config(model: str, base_url: str, api_key: str) -> dict:
         latency = int((_time.time() - t0) * 1000)
         return {"ok": False, "status_code": None, "error": t("llm.err.conn_fail", e=e), "latency_ms": latency}
     except Exception as e:  # noqa: BLE001
+        logger.warning("llm_advisor: connectivity probe failed: %s", e)
         latency = int((_time.time() - t0) * 1000)
         return {"ok": False, "status_code": None, "error": t("llm.err.probe_error", e=e), "latency_ms": latency}
     finally:

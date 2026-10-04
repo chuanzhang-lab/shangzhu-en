@@ -1255,8 +1255,8 @@ async def test_llm_settings(req: Request):
             from config.settings import load
             current = load()
             api_key = current.get("config", {}).get("api_key", "")
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 — 留痕：失败后用户只会看到 key_empty 400，原因会失真
+            logger.warning("settings: fallback api_key read failed, request will 400 as key_empty: %s", e)
     if not api_key:
         return JSONResponse({"error": t("ws.err.key_empty")}, status_code=400)
 
@@ -1321,7 +1321,8 @@ def _build_scan_for_advisor(tid: str) -> dict:
     params_json = json.dumps(params, ensure_ascii=False)
     try:
         return json.loads(quick_scan_tool.invoke({"params_json": params_json}))
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        logger.warning("advisor: quick_scan for advisor panel failed, degrading to empty scan: %s", e)
         return {}
 
 
@@ -1813,7 +1814,8 @@ async def chat(req: ChatRequest):
                 return json.loads(quick_scan_tool.invoke({"params_json": params_json}))
 
             scan = await asyncio.to_thread(_scan_for_steward)
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            logger.warning("advisor: grounding scan failed, degrading to empty scan: %s", e)
             scan = {}
         user_text = last_user_msg or ""
         if grounding:

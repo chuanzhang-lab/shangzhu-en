@@ -407,7 +407,8 @@ class PostgresStore(BaseStore):
             from psycopg import conninfo
 
             return str(conninfo.conninfo_to_dict(self.url).get("dbname") or "?")
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            logger.debug("local_store: db name probe failed, showing '?': %s", e)
             return "?"
 
     def _ensure_db(self) -> None:
@@ -455,8 +456,8 @@ class PostgresStore(BaseStore):
         if self._conn is not None:
             try:
                 self._conn.close()
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — 关闭失败无观察面（conn 随即丢弃），但不静默吞
+                logger.debug("local_store: connection close failed, conn discarded anyway: %s", e)
             self._conn = None
 
     def _execute(self, fn):

@@ -5,6 +5,7 @@
 """
 
 import json
+import logging
 import os
 import time
 import tempfile
@@ -13,6 +14,8 @@ from langchain.tools import tool
 
 from i18n import has, industry_display, industry_name, t
 from source_tags import INFINITE_MARK
+
+logger = logging.getLogger("web.report_generator")
 
 # 「无限」是引擎的**数据标记**（靠等值比较识别，见 financial_calculator._calc_runway、
 # decision_engine、workflow_engine 的 `== INFINITE_MARK`），不是文案。渲染时必须映射成
@@ -138,6 +141,7 @@ def generate_financial_report(
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("report_generator: report build failed, returning structured error: %s", e)
         return json.dumps({
             "success": False,
             "error": t("rg.err.report_failed", err=e),
@@ -185,6 +189,7 @@ def generate_financial_excel(
     except json.JSONDecodeError:
         return json.dumps({"error": t("rg.err.sheets_json_format")}, ensure_ascii=False)
     except Exception as e:
+        logger.warning("report_generator: excel build failed, returning structured error: %s", e)
         return json.dumps({
             "success": False,
             "error": t("rg.err.excel_failed", err=e)
@@ -245,6 +250,7 @@ def generate_business_canvas_report(
     except json.JSONDecodeError:
         return json.dumps({"error": t("rg.err.canvas_json_format")}, ensure_ascii=False)
     except Exception as e:
+        logger.warning("report_generator: canvas build failed, returning structured error: %s", e)
         return json.dumps({
             "success": False,
             "error": t("rg.err.canvas_failed", err=e)

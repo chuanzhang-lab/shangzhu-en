@@ -11,6 +11,7 @@ LLM 调用此工具拿到硬数据后，可以叠加自己的判断和补充。
 """
 
 import json
+import logging
 
 from i18n import t
 from langchain.tools import tool
@@ -18,6 +19,8 @@ from langchain.tools import tool
 from tools.workflow_engine import _fill_params, _resolve_industry, INDUSTRY_TEMPLATES, FALLBACK_TEMPLATE, _parse_tool_input
 # 时间口径唯一出处（F1）：不要在本文件再写 `* 30`。
 from field_model import DAYS_PER_MONTH
+
+logger = logging.getLogger("web.param_advisor")
 
 
 # ─── 行业典型客单价区间（USD / 单件）───────────────────────────────────────
@@ -465,4 +468,5 @@ def suggest_params(params_json: str) -> str:
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("param_advisor: summary failed, returning structured error: %s", e)
         return json.dumps({"error": t("pa.summary.error", err=e)}, ensure_ascii=False)

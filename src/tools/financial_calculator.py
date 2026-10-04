@@ -6,6 +6,7 @@
 """
 
 import json
+import logging
 from typing import Optional
 from langchain.tools import tool
 
@@ -13,6 +14,8 @@ from i18n import t
 # INFINITE_MARK 是「跑道无限」协议哨兵的唯一出处（历史值「无限」，靠等值比较识别）。
 # 引擎内部多处 `== INFINITE_MARK` 依赖它，故产出侧必须引用同一常量而不是写字面量。
 from source_tags import INFINITE_MARK
+
+logger = logging.getLogger("web.financial_calculator")
 
 
 # ─── 公共计算函数（非 tool，可被多个 tool 复用）─────────────────────────────
@@ -94,6 +97,7 @@ def calculate_npv(
     except json.JSONDecodeError:
         return json.dumps({"error": t("fc.common.bad_cashflows_json")}, ensure_ascii=False)
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -393,6 +397,7 @@ def calculate_irr(cashflows_json: str, initial_investment: Optional[float] = Non
     except json.JSONDecodeError:
         return json.dumps({"error": t("fc.common.bad_cashflows_json")}, ensure_ascii=False)
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -431,6 +436,7 @@ def calculate_roi(total_return: float, total_investment: float) -> str:
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -472,6 +478,7 @@ def calculate_breakeven(
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -534,6 +541,7 @@ def calculate_unit_economics(
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -593,6 +601,7 @@ def calculate_runway(
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -651,6 +660,7 @@ def build_revenue_projection(
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -715,6 +725,7 @@ def build_cost_structure(
     except KeyError as e:
         return json.dumps({"error": t("fc.cs.missing_field", e=e)}, ensure_ascii=False)
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -791,4 +802,5 @@ def sensitivity_analysis(
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("financial_calculator: calculation failed, returning structured error: %s", e)
         return json.dumps({"error": t("fc.common.calc_fail", e=str(e))}, ensure_ascii=False)

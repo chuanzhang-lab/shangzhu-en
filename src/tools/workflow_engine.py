@@ -16,6 +16,7 @@ v2 改进：
 """
 
 import json
+import logging
 import math
 import os
 from functools import lru_cache
@@ -34,6 +35,8 @@ from tools.financial_calculator import (
     _calc_sensitivity,
     _calc_cashflow_schedule,
 )
+
+logger = logging.getLogger("web.workflow_engine")
 from tools.pitfall_detector import _do_full_scan
 from router.param_extractor import extract_params
 
@@ -1629,6 +1632,7 @@ def quick_scan(params_json: str) -> str:
         return json.dumps(dashboard, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("workflow_engine: quick_scan failed, returning structured error: %s", e)
         return json.dumps({"error": t("wf.error.quick_scan_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -1675,6 +1679,7 @@ def trend_projection(params_json: str) -> str:
         return json.dumps(trend, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("workflow_engine: trend_projection failed, returning structured error: %s", e)
         return json.dumps({"error": t("wf.error.trend_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -1829,6 +1834,7 @@ def compare_scenarios(base_json: str, alt_json: str) -> str:
         return json.dumps(comparison, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("workflow_engine: compare_scenarios failed, returning structured error: %s", e)
         return json.dumps({"error": t("wf.error.compare_fail", e=str(e))}, ensure_ascii=False)
 
 
@@ -1896,4 +1902,5 @@ def cashflow_projection(params_json: str) -> str:
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        logger.warning("workflow_engine: cashflow_projection failed, returning structured error: %s", e)
         return json.dumps({"error": t("wf.error.cashflow_fail", e=str(e))}, ensure_ascii=False)

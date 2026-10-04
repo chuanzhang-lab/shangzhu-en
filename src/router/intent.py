@@ -15,10 +15,13 @@
 多意图：按句号/问号切分输入，每段独立判意图，取最具体的非 chitchat 段为主意图。
 """
 
+import logging
 import re
 from typing import Tuple, Optional, List
 
 from . import rules
+
+logger = logging.getLogger("web.intent")
 
 
 # ─── 意图规则 ──────────────────────────────────────────────────────────────
@@ -64,11 +67,12 @@ def _looks_like_param_update(text: str) -> bool:
     """
     try:
         from router.param_extractor import extract_params
-    except Exception:  # pragma: no cover - 极端导入失败
+    except ImportError:  # pragma: no cover - 极端导入失败（只吞导入错误，其余异常不吞）
         return False
     try:
         p = extract_params(text)
-    except Exception:  # pragma: no cover
+    except Exception as e:  # noqa: BLE001 — 兜底不能炸主流程，但必须留痕（降级必有痕）
+        logger.warning("intent: extract_params raised in param-update probe, treating as non-param-update: %s", e)
         return False
     if any(f in p for f in _CORE_PARAM_FIELDS):
         return True

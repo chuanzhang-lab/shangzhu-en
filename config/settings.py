@@ -104,7 +104,8 @@ def _validate_endpoint_ssrf(base_url: str) -> Optional[str]:
     """
     try:
         from llm_advisor import _validate_llm_url
-    except Exception:  # 模块不可用时退化为仅协议检查
+    except Exception as e:  # noqa: BLE001 — 模块不可用时退化为仅协议检查（降级必有痕）
+        logger.warning("settings: llm url validator import failed, degraded to protocol-only check: %s", e)
         if (base_url or "").startswith("http://"):
             return t("llm.err.only_https", scheme="http")
         return None

@@ -157,6 +157,7 @@ def apply_op(op: dict, thread_id: str, session_apply_fn,
                 if record is not None:
                     record(thread_id, fld, cleaned[fld], hypothesis)
     except Exception as e:
+        logger.warning("op_executor: session write failed, op not applied: %s", e)
         return False, t("op.err.session_write_failed", err=e), {}
     return True, "", merged
 
@@ -166,7 +167,8 @@ def _find_hypothesis_recorder():
     try:
         from session_state import record_accepted_hypothesis
         return record_accepted_hypothesis
-    except Exception:
+    except ImportError as e:  # 只吞导入错误（循环导入场景），其余异常不吞
+        logger.debug("op_executor: hypothesis recorder unavailable (import failed): %s", e)
         return None
 
 

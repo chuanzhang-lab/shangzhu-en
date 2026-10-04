@@ -19,6 +19,7 @@
 """
 
 import json
+import logging
 import re
 from typing import Optional
 from langchain.tools import tool
@@ -27,6 +28,8 @@ from i18n import industry_name, t
 
 # 复用引擎层统一的参数提取器（唯一真相源），避免双解析器漂移
 from router.param_extractor import extract_params as _extract_params
+
+logger = logging.getLogger("web.project_manager")
 
 
 # ─── 解析器（委托给引擎层唯一真相源）─────────────────────────────────────
@@ -86,6 +89,7 @@ def create_or_update_project(text: str) -> str:
             "missing": _check_missing_params(parsed),
         }, ensure_ascii=False, indent=2)
     except Exception as e:
+        logger.warning("project_manager: parse_project_params failed, returning structured error: %s", e)
         return json.dumps({"error": t("pm.parse_fail") + f": {str(e)}"}, ensure_ascii=False)
 
 
@@ -129,6 +133,7 @@ def get_project_summary(params_json: str) -> str:
             "missing_required": _check_missing_params(params),
         }, ensure_ascii=False, indent=2)
     except Exception as e:
+        logger.warning("project_manager: create_or_update failed, returning structured error: %s", e)
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
