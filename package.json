@@ -1,0 +1,14 @@
+{
+  "name": "shangzhu-en-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "shangzhu-en frontend static-asset lint toolchain (not part of the runtime)",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src/web_static"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0"
+  }
+}

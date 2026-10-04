@@ -1,5 +1,5 @@
 # 创业者工作台 (A) — 常用工程命令
-.PHONY: help sync test smoke start health compile
+.PHONY: help sync test smoke start health compile lint
 
 PY ?= .venv/bin/python3
 # 端口统一口径：与 start.sh / web_server.py 默认值一致（8081）
@@ -10,6 +10,7 @@ help:
 	@echo "make test     - 全量回归（pytest 收集 tests/ 全部 33 个测试文件）"
 	@echo "make smoke    - 导入 + health 结构冒烟（不启服务）"
 	@echo "make compile  - 字节码编译检查"
+	@echo "make lint     - ESLint 前端门禁（no-shadow/no-undef 错误级）"
 	@echo "make start    - 启动本地服务 (PORT=$(PORT))"
 	@echo "make health   - curl /health（需服务已启动）"
 
@@ -27,6 +28,11 @@ smoke:
 
 compile:
 	$(PY) -m compileall -q src web_server.py tests
+
+# E-04 面状门禁：目录级扫描 src/web_static/**/*.js，新增前端文件自动纳入。
+# no-shadow/no-undef 错误级（事故形态 → 面规则），其余 warn 不阻塞。
+lint:
+	npx eslint src/web_static
 
 # start.sh 读取 PORT 环境变量（不接受 -p 参数，见 start.sh）。
 # SHANGZHU_LOCALE 显式传 en：部署默认语言必须是英文，不靠 start.sh 内部默认

@@ -72,8 +72,8 @@ let activeCtrl = null;  // 在飞的请求控制器：切任务时 abort，避�
 let _loadTasksInFlight = null;  // loadTasks 并发锁：防止多次调用导致重复渲染
 
 // ── 健康检查 ──
-function applyModelName(name) {
-  const n = name || t('ui.connected');
+function applyModelName(displayName) {
+  const n = displayName || t('ui.connected');
   status.textContent = n;
   status.style.color = '#4ade80';
   if (modelNameEl) modelNameEl.textContent = '· ' + n;
@@ -129,9 +129,9 @@ function openModelSettings() {
     m.value = view.model || '';
     u.value = view.base_url || '';
 
-    const close = () => overlay.remove();
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-    overlay.querySelector('#ms-cancel').addEventListener('click', close);
+    const closeOverlay = () => overlay.remove();
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
+    overlay.querySelector('#ms-cancel').addEventListener('click', closeOverlay);
     overlay.querySelector('#ms-save').addEventListener('click', () => {
       const body = { model: m.value.trim(), base_url: u.value.trim(), api_key: k.value.trim() };
       if (!body.model) { setToast(t('ui.toast.model_empty'), '#d97706'); return; }
@@ -143,7 +143,7 @@ function openModelSettings() {
           const saved = (d && d.config) || d || {};
           applyModelName(saved.model);
           setToast(t('ui.toast.saved') + saved.model, '#059669');
-          close();
+          closeOverlay();
           // 保存后自动连通性探测
           testLlmConfig(body);
         })
@@ -185,7 +185,7 @@ async function _loadTasksInner() {
       switchTask(tasks[0].id);  // /tasks 按 updated_at DESC，第一个是最近任务
     } else if (currentTaskId) {
       // F6：检查当前任务是否已被删除（不在最新列表中）
-      const stillExists = tasks.some(t => t.id === currentTaskId);
+      const stillExists = tasks.some(task => task.id === currentTaskId);
       if (!stillExists && tasks.length > 0) {
         setToast(t('ui.toast.task_deleted'), '#d97706');
         switchTask(tasks[0].id);
@@ -253,16 +253,17 @@ async function switchTask(id) {
 }
 
 // F2：从任务缓存（权威真相源）恢复 hasParams/lastParams，必要时防陈旧刷新
+// 任务对象变量一律叫 task 不叫 t：t 是全局 i18n 翻译函数（同 taskMenu 的教训）
 async function restoreTaskParams(id) {
-  let t = tasksCache[id];
-  let tp = (t && t.params) || {};
-  if (!t || Object.keys(tp).length === 0) {
+  let task = tasksCache[id];
+  let tp = (task && task.params) || {};
+  if (!task || Object.keys(tp).length === 0) {
     try {
       const r = await fetch('/tasks');
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const ts = await r.json();
       const fresh = ts.find(x => x.id === id);
-      if (fresh) { tasksCache[id] = fresh; tp = fresh.params || {}; t = fresh; }
+      if (fresh) { tasksCache[id] = fresh; tp = fresh.params || {}; task = fresh; }
     } catch (e) { console.warn('[restoreTaskParams] 刷新任务缓存失败:', e.message); }
   }
   hasParams = Object.keys(tp).length > 0;
@@ -278,17 +279,18 @@ async function restoreTaskParams(id) {
 function taskMenu(task, div) {
   const tnameEl = div.querySelector('.tname');
   const originalName = task.name || t('ui.unnamed_task');
-  // 创建行内输入框替换任务名显示
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = originalName;
-  input.className = 'task-rename-input';
-  input.style.cssText = 'font-size:13px;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;width:100%;outline:none;box-sizing:border-box;';
-  tnameEl.replaceWith(input);
-  input.focus();
-  input.select();
+  // 创建行内输入框替换任务名显示。
+  // 局部变量必须避开全局名 input（全局 input 是聊天输入框）——no-shadow 门禁同款教训
+  const renameInput = document.createElement('input');
+  renameInput.type = 'text';
+  renameInput.value = originalName;
+  renameInput.className = 'task-rename-input';
+  renameInput.style.cssText = 'font-size:13px;border:1px solid #2563eb;border-radius:4px;padding:2px 6px;width:100%;outline:none;box-sizing:border-box;';
+  tnameEl.replaceWith(renameInput);
+  renameInput.focus();
+  renameInput.select();
 
-  // 防「键漂移」：Enter 与 blur 都会触发 finish，且 restore() 移除 input 会再次
+  // 防「键漂移」：Enter 与 blur 都会触发 finish，且 restore() 移除 renameInput 会再次
   // 触发 blur → finish → 重复发改名请求（失败时无限重试）。finished 标记 +
   // cleanup() 移除监听器确保整轮改名只执行一次。
   let finished = false;
@@ -296,18 +298,18 @@ function taskMenu(task, div) {
     // IME 组合输入防护：拼音选词时的 Enter（isComposing/229）不算提交，
     // 否则会拿未完成的拼音文本去改名，且 finished 锁会让后续正确输入被丢弃
     if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === 'Enter') { e.preventDefault(); finish(input.value); }
+    if (e.key === 'Enter') { e.preventDefault(); finish(renameInput.value); }
     if (e.key === 'Escape') { e.preventDefault(); finished = true; cleanup(); restore(); }
   };
-  const onBlur = () => finish(input.value);
+  const onBlur = () => finish(renameInput.value);
   const cleanup = () => {
-    input.removeEventListener('keydown', onKey);
-    input.removeEventListener('blur', onBlur);
+    renameInput.removeEventListener('keydown', onKey);
+    renameInput.removeEventListener('blur', onBlur);
   };
   const restore = () => {
-    // 判断 input 是否仍在 DOM：在 → 换回 tnameEl（tnameEl 自 replaceWith 后已脱离 DOM，
+    // 判断 renameInput 是否仍在 DOM：在 → 换回 tnameEl（tnameEl 自 replaceWith 后已脱离 DOM，
     // 原实现判断 tnameEl.parentNode 恒为 false，导致 tnameEl 从不被放回、loadTasks 失败时任务名空白）
-    if (input.parentNode) { input.replaceWith(tnameEl); }
+    if (renameInput.parentNode) { renameInput.replaceWith(tnameEl); }
   };
   const finish = (newName) => {
     if (finished) return;
@@ -326,8 +328,8 @@ function taskMenu(task, div) {
       .catch(() => { restore(); setToast(t('ui.toast.rename_fail'), '#d97706'); });
   };
 
-  input.addEventListener('keydown', onKey);
-  input.addEventListener('blur', onBlur);
+  renameInput.addEventListener('keydown', onKey);
+  renameInput.addEventListener('blur', onBlur);
 }
 
 // Module 4: 任务删除重写 — CSS class 状态管理，不替换事件监听器
@@ -622,7 +624,7 @@ function tagMessage(el, cat) {
     if (tagEl) tagEl.remove();
   }
   // 同步更新 messageTags 数组里的 cat
-  const tag = messageTags.find(t => t.el === el);
+  const tag = messageTags.find(item => item.el === el);
   if (tag) tag.cat = cat || 'all';
 }
 
@@ -822,7 +824,7 @@ function refreshAdvisor() {
 // Tab 切换
 document.querySelectorAll('.params-tab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.params-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.params-tab').forEach(other => other.classList.remove('active'));
     tab.classList.add('active');
     const target = tab.dataset.tab;
     if (target === 'advisor') {
