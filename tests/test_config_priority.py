@@ -13,7 +13,9 @@ def test_default_db_url():
     """无 env、无 config 时回退到默认值。"""
     os.environ.pop("PGDATABASE_URL", None)
     # 临时清空 storage.json（确保回退默认）
-    assert "shangzhu" in _DEFAULT_DB_URL
+    # EN 版与中文仓物理分库（E-01）：默认必须钉 shangzhu_en——
+    # endswith 同时排除中文仓的 shangzhu（子串相似但后缀不同）。
+    assert _DEFAULT_DB_URL.endswith("/shangzhu_en"), _DEFAULT_DB_URL
     assert "localhost:5432" in _DEFAULT_DB_URL
 
 

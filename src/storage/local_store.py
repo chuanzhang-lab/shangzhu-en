@@ -74,6 +74,14 @@ class BaseStore:
     def close(self) -> None:
         """释放底层资源（如数据库连接）。内存版为空操作。"""
 
+    @property
+    def target(self) -> str:
+        """落点标识（观测位）：启动日志与 /health?detail=1 展示「数据存在哪」。
+
+        只回库名/路径等标识，**绝不回显完整连接串**（可能含密码）。
+        """
+        return type(self).__name__
+
 
 # 单任务消息数上限，防止长期运行内存无限增长
 _MAX_MESSAGES_PER_TASK = 500
@@ -136,6 +144,10 @@ class MemoryStore(BaseStore):
             self._tasks[task_id]["deleted_at"] = time.time()
             self._tasks[task_id]["updated_at"] = time.time()
             self._msgs.pop(task_id, None)
+
+    @property
+    def target(self) -> str:
+        return "memory"
 
     def close(self) -> None:
         pass
@@ -286,12 +298,18 @@ class LocalFileStore(BaseStore):
         with self._lock:
             self._flush()
 
+    @property
+    def target(self) -> str:
+        return self.path
+
     def close(self) -> None:
         pass
 
 
 # ── 数据库连接配置 ────────────────────────────────────────────────────────
-_DEFAULT_DB_URL = "postgresql://newmacbook@localhost:5432/shangzhu"
+# EN 版与中文仓物理分库（E-01，2026-10-04）：shangzhu 归中文仓，shangzhu_en 归本仓。
+# 英文版空库起步，主库既有数据归属中文仓、不做迁移（策略已拍板：英文版从零）。
+_DEFAULT_DB_URL = "postgresql://newmacbook@localhost:5432/shangzhu_en"
 
 
 # ── 表结构（DDL 单源）────────────────────────────────────────────────────
@@ -365,6 +383,8 @@ class PostgresStore(BaseStore):
        自动重建连接重试一次。PG 重启后下一个请求即恢复，不必重启工作台。
     3. **幂等建表**：首次连上时执行 `SCHEMA_SQL`（CREATE IF NOT EXISTS），
        消除「忘了跑 scripts/init_db.py 就静默没表」的失败模式。
+    4. **主动建库**：首次连接前查 `pg_database`，目标库不存在则自动创建
+       （与 scripts/init_db.py 同款），「空库起步」不必手工建库。
     """
 
     def __init__(self, url: Optional[str] = None) -> None:
@@ -374,12 +394,57 @@ class PostgresStore(BaseStore):
         self.url = url or _db_url()
         self._conn = None
         self._schema_ready = False
+        self._db_ensured = False
         # 审查修复 F9：psycopg 连接非线程安全，单连接原依赖「store 操作全在
         # 事件循环线程串行」的隐式契约。加锁后即使未来把 store 写丢进
         # asyncio.to_thread 或改多 worker，也不会交错用同一连接。
         self._conn_lock = threading.Lock()
 
+    @property
+    def target(self) -> str:
+        """落点标识：只回库名，绝不回显完整连接串（可能含密码）。"""
+        try:
+            from psycopg import conninfo
+
+            return str(conninfo.conninfo_to_dict(self.url).get("dbname") or "?")
+        except Exception:  # noqa: BLE001
+            return "?"
+
+    def _ensure_db(self) -> None:
+        """主动式建库：查 pg_database → CREATE DATABASE（与 scripts/init_db.py 同款）。
+
+        目标库不存在时自动创建并 WARNING 留痕——EN 版「空库起步」不必手工建库。
+        自检失败不拦截直连尝试：仅留痕后放行，由 _connect 的真实错误决定成败
+        （例如托管 PG 不开放管理库访问，但目标库本就存在）。
+        """
+        if self._db_ensured:
+            return
+        self._db_ensured = True
+        try:
+            from psycopg import conninfo, sql
+
+            params = conninfo.conninfo_to_dict(self.url)
+            dbname = params.get("dbname")
+            if not dbname:
+                return
+            params["dbname"] = "postgres"  # 管理库：目标库此刻还不存在，连不上它
+            params.setdefault("connect_timeout", 3)
+            admin = self._psycopg.connect(**params, autocommit=True)
+            try:
+                with admin.cursor() as cur:
+                    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+                    if cur.fetchone() is None:
+                        cur.execute(
+                            sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname))
+                        )
+                        logger.warning(t("ls.log.db_created") + f": {dbname}")
+            finally:
+                admin.close()
+        except Exception as e:  # noqa: BLE001 —— 自检失败只留痕，不拦截直连
+            logger.warning(t("ls.log.db_ensure_skip") + f" ({e})")
+
     def _connect(self) -> None:
+        self._ensure_db()
         self._conn = self._psycopg.connect(self.url, autocommit=True)
         if not self._schema_ready:
             with self._conn.cursor() as cur:
@@ -560,7 +625,7 @@ def get_store() -> BaseStore:
 
         # 3) 内存兜底：最后一道，明确标注会丢
         _store = candidate if candidate is not None else MemoryStore()
-        logger.info(t("ls.log.ready") + f": {type(_store).__name__}")
+        logger.info(t("ls.log.ready") + f": {type(_store).__name__} ({_store.target})")
     return _store
 
 

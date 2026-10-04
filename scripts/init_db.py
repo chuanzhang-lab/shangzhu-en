@@ -1,6 +1,6 @@
 """Initialize the local PostgreSQL database — idempotent.
 
-Creates the `shangzhu` database and the tasks / messages tables.
+Creates the `shangzhu_en` database and the tasks / messages tables.
 
 Usage:
     .venv/bin/python scripts/init_db.py
@@ -22,7 +22,7 @@ from psycopg import sql
 # No credentials or hostnames here — both URLs are fully environment-driven.
 # Falls back to libpq defaults (local socket / PG* variables) when unset.
 DEFAULT_ADMIN_URL = os.getenv("PGADMIN_URL", "")
-DB_NAME = "shangzhu"
+DB_NAME = "shangzhu_en"
 
 DEFAULT_URL = os.getenv("PGDATABASE_URL", "")
 

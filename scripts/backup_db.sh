@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Backup PostgreSQL database (pg_dump + gzip, date-stamped)
 # Usage: ./scripts/backup_db.sh [database_name]
-# Default database: shangzhu
+# Default database: shangzhu_en
 # Output: backups/ under the project root
 
 set -euo pipefail
 
-DB_NAME="${1:-shangzhu}"
+DB_NAME="${1:-shangzhu_en}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BACKUP_DIR="${PROJECT_ROOT}/backups"

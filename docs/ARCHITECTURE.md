@@ -244,7 +244,7 @@ storage/local_store.py
    ├─ BaseStore（接口契约）
    ├─ MemoryStore（PG 不可用时降级 / 测试）
    └─ PostgresStore（psycopg3 直连本机 PG，单连接 autocommit）
-        └─ PostgreSQL 16：库 shangzhu，表 tasks / messages
+        └─ PostgreSQL 16：库 shangzhu_en，表 tasks / messages
 ```
 
 **持久化接缝**：`_persist_turn(store, tid, user_msg, content)` 在 /chat 各成功分支调用——写 user+assistant 消息 + params 业务字段快照。只存非 `_` 前缀字段（复用 `to_llm_view` 过滤思路），不把 `_pending_ops` 等运行时临时键落盘。内部通过 `to_llm_view(tid)` 获取锁内拷贝，避免持有 SessionState 引用迭代（F4 修复）。
@@ -262,9 +262,9 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 
 ### 8.3 配置与降级
 
-- 连接串：`PGDATABASE_URL`（默认 `postgresql://newmacbook@localhost:5432/shangzhu`）。
-- 建库建表：`scripts/init_db.py`（幂等，可重复执行）。
-- 降级：PG 连不上 → `get_store()` 回落 `MemoryStore`（服务不崩，数据仅存进程内）。`/health` 的 `store_backend` 字段指示当前后端。
+- 连接串：`PGDATABASE_URL`（默认 `postgresql://newmacbook@localhost:5432/shangzhu_en`，与中文仓 `shangzhu` 物理分库）。
+- 建库建表：`scripts/init_db.py`（幂等，可重复执行）；库不存在时 PostgresStore 首连也会自动建库。
+- 降级：PG 连不上 → `get_store()` 回落 `LocalFileStore`（JSON 文件，重启不丢）→ 再降 `MemoryStore`（服务不崩）。`/health?detail=1` 的 `store_backend` / `store_target` 字段指示当前后端与数据落点。
 
 ### 8.4 软删
 

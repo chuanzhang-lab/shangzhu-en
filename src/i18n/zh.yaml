@@ -1333,6 +1333,8 @@ ls:
     restart_from_empty: 从空 store 重启
     corrupt_backup_fail: 本地 store 文件损坏且备份失败
     pg_reconnect: PG 连接失效，重连重试
+    db_created: 目标库不存在，已自动创建
+    db_ensure_skip: 建库自检跳过，继续尝试直连
 
 # ─── llm_advisor（交互主持人/决策解说员 prompts + 简报 + 错误）──────────────
 llm:

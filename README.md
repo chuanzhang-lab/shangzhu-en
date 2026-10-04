@@ -270,9 +270,9 @@ API key is read in four priority levels:
 3. macOS Keychain (service=`shangzhu-llm`, account=`api_key`)
 4. Empty string (not configured)
 
-**Persistence** defaults to `postgresql://<system user>@localhost:5432/shangzhu`, overridable via `PGDATABASE_URL` or `db_url` in `config/storage.json`. Fallback chain: **PostgreSQL → local JSON file → memory**; the first two survive restarts. If PG is unavailable the service keeps running — only sessions are lost on restart.
+**Persistence** defaults to `postgresql://<system user>@localhost:5432/shangzhu_en` (the English edition's own database, separate from the Chinese edition's `shangzhu`), overridable via `PGDATABASE_URL` or `db_url` in `config/storage.json`. The database is auto-created on first connect. Fallback chain: **PostgreSQL → local JSON file → memory**; the first two survive restarts. If PG is unavailable the service keeps running — only sessions are lost on restart.
 
-Both config files containing secrets/local info are `600`-permission and untracked. Database backup: `./scripts/backup_db.sh shangzhu` (keeps the last 7).
+Both config files containing secrets/local info are `600`-permission and untracked. Database backup: `./scripts/backup_db.sh shangzhu_en` (keeps the last 7).
 
 ---
 

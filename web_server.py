@@ -863,6 +863,8 @@ class TaskRename(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(t("ws.log.startup"))
+    # 提前触发降级链：启动横幅即显示 store 落点（库名/文件路径），降级不必等首个请求
+    get_store()
     yield
     # R3/R4 修复：服务关闭时释放资源（文件描述符 + 数据库连接）
     store = get_store()
@@ -1125,6 +1127,8 @@ async def health(request: Request):
         body.update({
             "endpoint": get_base_url(),
             "store_backend": type(get_store()).__name__,
+            # 数据落点（库名/文件路径），排查「数据写到哪去了」不用登数据库
+            "store_target": getattr(get_store(), "target", None),
             "sessions": stats,
         })
     return body

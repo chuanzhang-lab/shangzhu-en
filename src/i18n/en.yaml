@@ -1339,6 +1339,8 @@ ls:
     restart_from_empty: restarting from an empty store
     corrupt_backup_fail: local store file corrupted and backup failed
     pg_reconnect: PG connection lost; reconnecting
+    db_created: target database does not exist, auto-created
+    db_ensure_skip: database auto-create check skipped; trying direct connect
 
 # ─── llm_advisor (interactive-host / decision-narrator prompts + brief + errors) ──
 llm:
