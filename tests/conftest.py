@@ -1,27 +1,26 @@
 """pytest 全局闸：locale 钉 + 存储隔离（E-01，移植自 shangzhu M-01 并本地化）。
 
-═══ 第一闸：locale 钉（既有语义，原样保留）══════════════════════════════
+═══ 第一闸：locale 钉（E-03 反转：zh → en）══════════════════════════════
 
-背景：产品默认语言已改为 en（`i18n.DEFAULT_LOCALE`），但本套件绝大多数用例
-喂**中文输入**、断言**中文输出** —— 它们测的是中文规则/中文文案能力
-（`rules/zh.yaml`、`i18n/zh.yaml` 仍在维护，M-06/E-03 暂不删）。若不钉住，
-这些用例在默认 en 下会大面积失败，掩盖真实回归。
+背景：产品部署语言是 en（`i18n.DEFAULT_LOCALE`），测试默认语言必须与之一致
+——E-03 之前钉 zh 是历史包袱（套件从中文仓移植，大量用例喂中文输入、断言
+中文输出），测的是 en 部署下**不可达**的链路，633 全绿是假象。
 
 机制（优先级从高到低，见 `i18n.get_locale`）：
     会话级 ContextVar（set_locale） > 部署级 env（SHANGZHU_LOCALE） > 默认（en）
 
-- 本文件在**部署级**把 SHANGZHU_LOCALE 钉成 zh → 覆盖全部中文用例；
-- 英文能力用例（如 `test_en_extraction_gaps.py`）用 `set_locale("en")` 在
-  **会话级**覆盖，优先级高于本文件，不受影响；
+- 本文件在**部署级**把 SHANGZHU_LOCALE 钉成 en → 主路径全测 en 链路；
+- 需要 zh 的用例（如中文规则回归）用 `set_locale("zh")` 在**会话级**覆盖，
+  优先级高于本文件，不受影响；
 - `test_i18n_guard` 里测「未设 env 时默认 en」的用例用
   `monkeypatch.delenv("SHANGZHU_LOCALE")` 临时摘掉本钉子，直接探到默认值。
 
-为什么用 env 而非 autouse fixture 设 zh：两个 autouse fixture 的执行顺序不直观、
-会随 pytest 版本漂移；env 是 `get_locale()` 回退链里的确定一环，英文用例的
-ContextVar 覆盖天然压过它，无需约定顺序。
+为什么用 env 而非 autouse fixture 设 locale：两个 autouse fixture 的执行顺序不直观、
+会随 pytest 版本漂移；env 是 `get_locale()` 回退链里的确定一环，会话级覆盖
+天然压过它，无需约定顺序。
 
-E-03（locale 反转）完成后，此钉子改为 en；届时中文能力用例已按
-「en 链路可达性」重分类处置（见 docs/improvement-plan-4layer-en-20261004.md）。
+E-03 处置（2026-10-04，见 docs/test-reclassification-en-20261004.md）：
+zh-only 140 条退役、en-reachable 66 条换英文输入/断言、language-neutral 439 条保留。
 
 ═══ 第二闸：存储隔离（E-01 新增）══════════════════════════════════════
 
@@ -49,9 +48,9 @@ import tempfile
 
 import pytest
 
-# ── 第一闸：locale 钉（force，非 setdefault）：中文用例必须稳定在 zh。──────
+# ── 第一闸：locale 钉（force，非 setdefault）：测试默认语言=部署语言（en）。──
 # 仅作用于测试进程，不影响生产运行（生产 en 由 start.sh 导出）。
-os.environ["SHANGZHU_LOCALE"] = "zh"
+os.environ["SHANGZHU_LOCALE"] = "en"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for p in (ROOT, os.path.join(ROOT, "src")):
