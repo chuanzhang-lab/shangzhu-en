@@ -295,6 +295,18 @@ Deeper design docs: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/CALCU
 
 ---
 
+## Troubleshooting
+
+When something looks wrong, check three places in this order:
+
+1. **`logs/web_server.log`** — the structured app log. Every degradation leaves a trace here (fallbacks log `warning`, hot-path probes log `debug`), so "it silently returned empty" is a bug to report, not normal behavior. Rotation: 10 MB × 5.
+2. **Browser console** — client-side failures print incident markers in the form `[失败于[stage:code]]` and report themselves to `POST /client-log`, which lands as `WEBCLIENT` lines in `logs/web_server.log`. Match the `stage:code` pair against `src/web_static/app.js`.
+3. **`GET /health?detail=1`** — runtime self-attestation: store backend actually in use, database name, `commit` (compare with a fresh checkout to detect a stale running build), LLM configuration state, session count.
+
+Rule of thumb: backend symptom → (1); UI symptom → (2) then (1); "is this even the build I think it is?" → (3).
+
+---
+
 ## Security Model
 
 **Shangzhu is a single-user, local-first tool. It is not designed to be exposed to the public internet.**
