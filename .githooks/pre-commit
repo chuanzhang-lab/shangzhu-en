@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# 本地提交门禁（E-09）：compile + lint + test 三件套，任一失败即拦截提交。
+# 与 .github/workflows/ci.yml 同口径——本地拦下的，远端 CI 就不会红。
+#
+# 安装（版本化钩子，重装后跑一次即可）：
+#     make hooks        # 即 git config core.hooksPath .githooks
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+echo "[pre-commit] make compile"
+make compile
+
+echo "[pre-commit] make lint"
+if [ ! -d node_modules ]; then
+  echo "[pre-commit] 缺 node_modules（ESLint 工具链未装），请先 npm ci" >&2
+  exit 1
+fi
+make lint
+
+echo "[pre-commit] make test"
+make test
+
+echo "[pre-commit] 三件套全绿，放行。"

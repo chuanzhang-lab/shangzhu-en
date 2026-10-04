@@ -1,5 +1,5 @@
 # 创业者工作台 (A) — 常用工程命令
-.PHONY: help sync test smoke start health compile lint
+.PHONY: help sync test smoke start health compile lint hooks
 
 PY ?= .venv/bin/python3
 # 端口统一口径：与 start.sh / web_server.py 默认值一致（8081）
@@ -11,6 +11,7 @@ help:
 	@echo "make smoke    - 导入 + health 结构冒烟（不启服务）"
 	@echo "make compile  - 字节码编译检查"
 	@echo "make lint     - ESLint 前端门禁（no-shadow/no-undef 错误级）"
+	@echo "make hooks    - 安装本地 pre-commit 门禁（版本化 .githooks/）"
 	@echo "make start    - 启动本地服务 (PORT=$(PORT))"
 	@echo "make health   - curl /health（需服务已启动）"
 
@@ -33,6 +34,13 @@ compile:
 # no-shadow/no-undef 错误级（事故形态 → 面规则），其余 warn 不阻塞。
 lint:
 	npx eslint src/web_static
+
+# E-09 本地提交门禁：与 .github/workflows/ci.yml 同口径三件套。
+# 钩子本体版本化在 .githooks/，这里只做一次性激活（重克隆后跑一次即可）。
+hooks:
+	chmod +x .githooks/pre-commit
+	git config core.hooksPath .githooks
+	@echo "pre-commit 已激活（core.hooksPath → .githooks）"
 
 # start.sh 读取 PORT 环境变量（不接受 -p 参数，见 start.sh）。
 # SHANGZHU_LOCALE 显式传 en：部署默认语言必须是英文，不靠 start.sh 内部默认

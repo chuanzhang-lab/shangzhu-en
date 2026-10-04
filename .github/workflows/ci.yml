@@ -1,0 +1,43 @@
+name: CI
+
+# 四层防线的第 3 层门禁：make compile + make lint + make test 三件套强制过。
+# 测试自带隔离（tests/conftest.py），Runner 无 PostgreSQL 时自动降级
+# LocalFileStore 跑全量，无需外部服务。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install lint toolchain
+        run: npm ci || npm install --no-fund --no-audit
+
+      - name: make compile
+        run: make compile
+
+      - name: make lint
+        run: make lint
+
+      - name: make test
+        run: make test
