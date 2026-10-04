@@ -69,20 +69,31 @@ def test_list_tasks_excludes_archived():
 
 
 def test_postgres_roundtrip():
-    """端到端：真实落盘到本机 PG（PG 不在则静默跳过，离线可跑）。"""
+    """端到端：落盘 PG（conftest 已把 PGDATABASE_URL 指向 shangzhu_en_test 测试库）。
+
+    E-01 修复：旧版用 `except Exception: print("(PG 不可用，跳过)")` 静默跳过——
+    print 在 pytest 报告里不可见，隔离失效/依赖被剪时既不失败也不报警，
+    曾靠它往真实主库累积 367 条「端到端」垃圾（2026-10-04 实测）。
+    现改为：ping 真实探测，PG 不可达 → **显式 pytest.skip**（报告可见、有计数）；
+    PG 可达（本机测试库）→ CRUD 断言必须真跑真过，失败即回归。
+    """
+    import pytest
+
+    from storage.local_store import PostgresStore
+
+    s = PostgresStore()  # 懒连接：构造只存 URL，不建连接
     try:
-        from storage.local_store import PostgresStore
-        s = PostgresStore()
-    except Exception:  # noqa: BLE001
-        print("  (PG 不可用，跳过端到端)")
-        return
+        s.ping()
+    except Exception as e:  # noqa: BLE001 —— 探测失败：显式跳过（可见），非静默
+        s.close()
+        pytest.skip(f"PG 不可达（conftest 已降级 LocalFileStore），端到端跳过: {e}")
     try:
-        tid = s.create_task("端到端")["id"]
-        s.add_message(tid, "user", "月租金15000")
-        s.add_message(tid, "assistant", "分析如下")
+        tid = s.create_task("e2e-roundtrip")["id"]
+        s.add_message(tid, "user", "monthly rent 15000")
+        s.add_message(tid, "assistant", "analysis")
         s.update_params(tid, {"monthly_rent": 15000})
         msgs = s.get_messages(tid)
-        assert msgs[0]["content"] == "月租金15000"
+        assert msgs[0]["content"] == "monthly rent 15000"
         assert s.get_task(tid)["params"]["monthly_rent"] == 15000
         s.delete_task(tid)
         assert tid not in {t["id"] for t in s.list_tasks()}

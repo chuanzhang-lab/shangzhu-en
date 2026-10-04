@@ -1,4 +1,14 @@
-"""测试 CORS 白名单配置 + POST 防护中间件。"""
+"""测试 CORS 白名单配置 + POST 防护中间件。
+
+E-01 修复（2026-10-04）：旧版 `_make_client()` 在 TestClient 构造期临时 mock
+`ws.get_store`、finally 立刻还原——但 TestClient **构造不触发 lifespan**，
+mock 从未生效；请求期（client.post）走真 store → 每跑一轮落一条真实
+「xhr-task」任务进主库（实测累积 12 条）。顶部还 `os.environ.pop
+("PGDATABASE_URL")` 削弱 conftest 隔离。
+
+现依赖 conftest 隔离闸：请求期 store 指向 shangzhu_en_test 测试库
+（或降级 LocalFileStore 临时目录），既走真实请求路径又不碰业务库。
+"""
 import os
 import sys
 
@@ -9,23 +19,19 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from fastapi.testclient import TestClient
 
-# 禁止 env 中残留 PGDATABASE_URL（避免 TestClient 触发 PG 连接）
-os.environ.pop("PGDATABASE_URL", None)
+# 只摘 LLM 密钥（避免测试触真实上游）；PGDATABASE_URL 不动——conftest 隔离闸负责它。
 os.environ.pop("LONGCAT_API_KEY", None)
 os.environ.pop("DEEPSEEK_API_KEY", None)
 
 
 def _make_client():
-    """创建 TestClient，跳过 lifespan 触发的 PG 探测。"""
-    import importlib
-    # 阻止 lifespan 中的 get_store() 被触发——直接 mock 掉
+    """创建 TestClient（不进 with 块 → 不触发 lifespan 的 store 探测）。
+
+    请求路径走 conftest 隔离的 store（测试库 / 临时目录 JSON），零业务库写入。
+    """
     import web_server as ws
-    orig = ws.get_store
-    ws.get_store = lambda: type("S", (), {"close": lambda: None})()
-    try:
-        return TestClient(ws.app)
-    finally:
-        ws.get_store = orig
+
+    return TestClient(ws.app)
 
 
 def test_cors_blocks_evil_origin():
