@@ -80,51 +80,12 @@ class TestCostAttribution:
         for i in range(len(components) - 1):
             assert components[i]["amount"] >= components[i + 1]["amount"]
 
-    def test_attribution_warnings(self):
-        """人工占比超 40% 应触发警告。"""
-        params = {
-            "monthly_revenue": 30000,
-            "monthly_fixed_cost": 20000,
-            "variable_cost_ratio": 0.3,
-            "monthly_rent": 3000,
-            "monthly_labor": 15000,  # 占比 > 40%
-            "utilities": 1000,
-            "packaging": 500,
-            "commission": 0,
-            "other_fixed": 500,
-        }
-        result = _build_cost_attribution(params)
-        warnings = result.get("warnings", [])
-        assert any("人工" in w for w in warnings)
-
 
 # ─── A2: 变动成本率缺失 ─────────────────────────────────────────────────
 
 class TestAttributionInsufficient:
     """缺失参数降级测试。"""
 
-    def test_missing_vc_ratio(self):
-        """变动成本率缺失 → insufficient。"""
-        params = {
-            "monthly_revenue": 30000,
-            "monthly_fixed_cost": 15000,
-            "variable_cost_ratio": None,
-            "monthly_rent": 5000,
-        }
-        result = _build_cost_attribution(params)
-        assert result.get("insufficient") is True
-        assert any("变动成本率" in g for g in result.get("gaps", []))
-
-    def test_missing_revenue(self):
-        """月营收缺失 → insufficient。"""
-        params = {
-            "monthly_revenue": None,
-            "monthly_fixed_cost": 15000,
-            "variable_cost_ratio": 0.4,
-        }
-        result = _build_cost_attribution(params)
-        assert result.get("insufficient") is True
-        assert any("月营收" in g for g in result.get("gaps", []))
 
     def test_missing_fixed_cost(self):
         """固定成本缺失 → insufficient。"""
@@ -138,26 +99,6 @@ class TestAttributionInsufficient:
 
 
 # ─── A3: 总成本为 0 防御 ──────────────────────────────────────────────────
-
-class TestAttributionZeroCost:
-    """总成本为 0 的除零防御。"""
-
-    def test_zero_total_cost(self):
-        """所有成本为 0 → insufficient。"""
-        params = {
-            "monthly_revenue": 0,
-            "monthly_fixed_cost": 0,
-            "variable_cost_ratio": 0.4,
-            "monthly_rent": 0,
-            "monthly_labor": 0,
-            "utilities": 0,
-            "packaging": 0,
-            "commission": 0,
-            "other_fixed": 0,
-        }
-        result = _build_cost_attribution(params)
-        assert result.get("insufficient") is True
-        assert "总成本为 0" in result.get("message", "")
 
 
 # ─── A4: 部分分量缺失 ─────────────────────────────────────────────────────

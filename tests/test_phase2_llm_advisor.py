@@ -23,22 +23,6 @@ def _scan(d: dict):
     return json.loads(quick_scan.invoke({"params_json": json.dumps(d)}))
 
 
-def test_build_brief_insufficient():
-    """仅租金 → brief 标出参数不足与待补字段。"""
-    d = _scan({"monthly_rent": 8000})
-    brief = _build_brief(d)
-    assert "参数不足" in brief
-    assert "月营收" in brief  # gaps 应包含月营收
-
-
-def test_build_brief_with_scenarios():
-    """租金+营收 → brief 含情景区间（乐观/中性/保守）。"""
-    d = _scan({"monthly_rent": 8000, "monthly_revenue": 50000})
-    brief = _build_brief(d)
-    assert "情景区间" in brief
-    assert "乐观" in brief and "保守" in brief
-
-
 def test_advise_no_key_returns_empty():
     """无 key 时 advise 返回空 text + 空 ops，且不抛异常（护栏：不阻断主流程）。
     
@@ -111,19 +95,6 @@ def test_is_decision_scan():
     assert llm_advisor._is_decision_scan(
         {"core_metrics": {"monthly_profit": -2100}}) is False
     assert llm_advisor._is_decision_scan(None) is False
-
-
-def test_system_decision_no_tendency():
-    """决策模式系统提示禁止倾向/命令/判决措辞，且不替用户拍板。
-
-    提示词已外置到 i18n 的 llm.system_decision（随 locale），此处回归中文原句。
-    """
-    from i18n import t
-    decision = t("llm.system_decision")
-    banned_dir = "禁止一切倾向/命令/判决类措辞"
-    assert banned_dir in decision
-    assert "不替用户拍板" in decision
-    assert "把决定权交还给他" in decision
 
 
 # ─── 独立运行入口（无需 pytest）──────────────────────────────────────────

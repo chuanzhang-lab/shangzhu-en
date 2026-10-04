@@ -56,16 +56,6 @@ def test_fm2_partial_when_missing():
     assert m["monthly_variable_cost"]["source"] == "missing"
 
 
-def test_fm3_missing_root_cause():
-    """FM3：missing 追溯到根因（缺哪个用户输入）。"""
-    p = dict(_FULL); p.pop("employee_count"); p.pop("avg_salary")
-    d, _ = derive(p)
-    dv = derived_values(p, {})
-    labor = next(x for x in dv if x["field"] == "monthly_labor")
-    assert labor["status"] == "missing"
-    assert "员工人数" in labor["missing"] and "人均薪资" in labor["missing"], labor
-
-
 def test_fm4_consistency_rules():
     """FM4：一致性规则——打架即报、一致不报、缺输入不报。"""
     conflict = {**_FULL, "monthly_revenue": 20000, "daily_traffic": 100, "price_per_unit": 12}
@@ -75,17 +65,6 @@ def test_fm4_consistency_rules():
     assert consistency_issues(ok) == []
     missing = {**_FULL, "monthly_revenue": 20000}
     assert consistency_issues(missing) == []
-
-
-def test_fm5_derived_values_shape():
-    """FM5：derived_values 展示——ok 带公式、missing 带根因。"""
-    dv = derived_values(_FULL, {})
-    ok = [x for x in dv if x["status"] == "ok"]
-    assert len(ok) == len([k for k in DERIVED_SPECS if not DERIVED_SPECS[k].get("_hidden")])
-    rev = next(x for x in dv if x["field"] == "monthly_revenue")
-    assert rev["formula"] == "日均客流 60 × 客单价 10 × 30天", rev
-    profit = next(x for x in dv if x["field"] == "monthly_profit")
-    assert "18000" in profit["formula"] and "7800" in profit["formula"], profit
 
 
 def test_fm6_formula_single_source():

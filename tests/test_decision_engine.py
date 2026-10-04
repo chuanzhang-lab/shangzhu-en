@@ -47,14 +47,6 @@ def test_type_normalize():
     assert normalize_type("不存在的") == "turnaround"
 
 
-def test_type_router():
-    assert decide_type_of("该不该开这家店") == "go_no_go"
-    assert decide_type_of("要不要继续") == "continue_stop"
-    assert decide_type_of("先验证什么") == "validate_first"
-    assert decide_type_of("资金还能撑多久") == "runway"
-    assert decide_type_of("怎么扭亏") == "turnaround"
-
-
 def test_g4_turnaround_options_mutual_exclusive():
     """G4/D7：怎么扭亏 → 2-4 互斥可执行选项，每个含引擎回算结果。"""
     d = _scan(_FULL)
@@ -71,18 +63,6 @@ def test_g4_turnaround_options_mutual_exclusive():
     assert res["recommended_first_validation"]["what"]
 
 
-def test_g5_validate_first_labor():
-    """G5：先验证什么 → 一件事 + 最小实验设计（人工缺失时）。"""
-    p = dict(_FULL)
-    p.pop("avg_salary"); p.pop("employee_count")
-    d = _scan(p)
-    res = decide("validate_first", d, d.get("basis"), p, None)
-    fv = res["recommended_first_validation"]
-    assert fv.get("what") and ("人工" in fv["what"] or "avg_salary" in fv["what"]), fv
-    assert fv.get("min_experiment"), "最小实验设计不应为空"
-    assert fv.get("watch_metric"), "应指出看什么指标"
-
-
 def test_g6_missing_vc_insufficient():
     """G6：缺变动成本率 → 「还不能定」+ 该补什么。"""
     p = {"industry": "餐饮", "total_investment": 200000, "price_per_unit": 10,
@@ -94,16 +74,6 @@ def test_g6_missing_vc_insufficient():
     assert "变动成本率" in res.get("gaps", [])
     md = render_decision(res)
     assert "还不能定" in md
-
-
-def test_go_no_go_objective_conclusion():
-    """D5/D6：开不开 → 纯客观结论（距离/跑道），无倾向词。"""
-    d = _scan(_FULL)
-    res = decide("go_no_go", d, d.get("basis"), _FULL, None)
-    md = render_decision(res)
-    assert "客观结论" in md
-    for bad in policy()["output"]["forbidden_tone_words"]:
-        assert bad not in md, f"决策输出不得含倾向词 {bad}"
 
 
 def test_forbidden_tone_scan():

@@ -55,19 +55,6 @@ def _cm(text):
 
 # ── E1：占比语义的对象词可省略 ────────────────────────────────────────────
 
-def test_cov_e1_cost_share_object_word_optional():
-    """「食材成本占40%」——对象词（营业额/营收）省略是最自然的说法，不得漏抽。"""
-    for text, exp in {
-        "食材成本占40%": 0.4,
-        "成本占45%": 0.45,
-        "原料成本占营业额50%": 0.5,
-        "变动成本占营收60%": 0.6,
-        "材料成本占收入35%": 0.35,
-    }.items():
-        p = _p(text)
-        got = p.get("variable_cost_ratio")
-        assert got is not None and abs(got - exp) < TOL, f"{text!r} -> {p}"
-
 
 def test_cov_e1_negative_fixed_cost_share():
     """负向：「固定成本/总成本占 X%」是**固定成本占比**，不是变动成本率。"""
@@ -137,27 +124,6 @@ def test_cov_e3_no_regression_on_daily_traffic():
 
 # ── E4：金额缩写「A万B / A千B」────────────────────────────────────────────
 
-def test_cov_e4_wan_qian_shorthand():
-    assert _p("月租金1万5").get("monthly_rent") == 15000.0, _p("月租金1万5")
-    assert _p("月租1千5").get("monthly_rent") == 1500.0, _p("月租1千5")
-    assert _p("总投资20万8").get("total_investment") == 208000.0, _p("总投资20万8")
-    assert _p("月营收3万2").get("monthly_revenue") == 32000.0, _p("月营收3万2")
-
-
-def test_cov_e4_shorthand_in_compound_sentence():
-    """无分隔符连写时仍各归其位。"""
-    p = _p("月租1万5客单价20日均卖200碗")
-    assert p.get("monthly_rent") == 15000.0, p
-    assert p.get("price_per_unit") == 20.0, p
-    assert p.get("daily_traffic") == 200.0, p
-
-
-def test_cov_e4_does_not_eat_following_count():
-    """缩写尾数字不得吞掉后面的「N人」。"""
-    p = _p("月租2万员工5人")
-    assert p.get("monthly_rent") == 20000.0, p
-    assert p.get("employee_count") == 5.0, p
-
 
 # ── E5：单位变动成本同义词（必须带元/块，绝不吞百分比）─────────────────────
 
@@ -168,13 +134,6 @@ def test_cov_e5_unit_cost_synonyms():
     }.items():
         p = _p(text)
         assert p.get("unit_variable_cost") == float(exp), f"{text!r} -> {p}"
-
-
-def test_cov_e5_negative_cost_share_not_unit_cost():
-    """负向：「食材成本占营业额45%」是**占比**，不是「每份 45 元」。"""
-    p = _p("食材成本占营业额45%，客单价25元")
-    assert p.get("variable_cost_ratio") == 0.45, p
-    assert "unit_variable_cost" not in p, p
 
 
 # ── C：gross_margin 单位契约（统一 0~1）双向断言 ──────────────────────────
@@ -202,61 +161,10 @@ def test_cov_contract_roundtrip_identity():
 
 # ── E2E：端到端数字正确性 ────────────────────────────────────────────────
 
-def test_cov_e2e_gross_margin_case_unchanged():
-    """基线不得变：月营收5万 - 租金8000 - 变动(5万×0.4=2万) = 2.2万；
-    展示层 gross_margin_percent 仍是百分数 60。"""
-    cm = _cm("月营收50000元，月租金8000元，毛利率60%")
-    assert cm["monthly_profit"] == 22000.0, cm
-    assert cm["gross_margin_percent"] == 60.0, cm
-
-
-def test_cov_e2e_shorthand_and_fraction():
-    """「月营收5万，月租金1万5，食材成本占4成」→ 租金1.5万、变动率0.4、利润1.5万。"""
-    cm = _cm("月营收5万，月租金1万5，食材成本占4成")
-    assert cm["monthly_revenue"] == 50000.0, cm
-    assert cm["monthly_profit"] == 15000.0, cm
-
-
-def test_cov_e2e_noodle_shop_daily_wording():
-    """面馆日常说法：每碗18元 + 日均200碗 + 食材成本占4成。
-    营收 200×18×30 = 108000；利润 108000 − 8000 − 43200 = 56800。"""
-    cm = _cm("开面馆，月租金8000，每碗18元，日均卖200碗，食材成本占4成")
-    assert cm["monthly_revenue"] == 108000.0, cm
-    assert cm["monthly_profit"] == 56800.0, cm
-
 
 def _guard_of(text):
     """取抽取结果里的守门报告（无则空结构）。"""
     return extract_params(text).get("_guard") or {}
-
-
-def test_cov_e6_negative_rent_keeps_sign_and_hits_guard():
-    """D1：`月租金-8000` 的负号**必须保留并交给 param_guard**，不得被抽取器静默改成 8000。
-
-    旧行为：短关键词「月租」先命中 → after_text="金-8000" → 开头不是负号 → 符号丢失，
-    静默把 -8000 变成 8000。这等于抽取器抢在 guard 之前替用户「修正」数据，
-    使 guard 本来正确的 critical 校验（低于物理下限 0）永远收不到该值。
-    """
-    g = _guard_of("月租金-8000")
-    crit = [i for i in g.get("issues", []) if i.get("level") == "critical"]
-    assert crit, f"负值未触发守门 critical：{g}"
-    assert crit[0]["field"] == "monthly_rent"
-    assert crit[0]["value"] == -8000.0, crit[0]      # 符号保留（若被吞则变成 8000）
-    assert "monthly_rent" not in _p("月租金-8000")   # 且不允许进入有效参数
-
-
-def test_cov_e6_negative_word_rent_same():
-    """D1：中文「负」前缀同样生效（月租金负8000）。"""
-    g = _guard_of("月租金负8000")
-    crit = [i for i in g.get("issues", []) if i.get("level") == "critical"]
-    assert crit and crit[0]["value"] == -8000.0, g
-
-
-def test_cov_e6_negative_profit_is_allowed():
-    """利润可以为负（亏损），不应被 guard 判 critical —— 保留 -5000。"""
-    assert _p("月利润-5000").get("monthly_profit") == -5000.0
-    crit = [i for i in _guard_of("月利润-5000").get("issues", []) if i.get("level") == "critical"]
-    assert not crit, f"亏损不该被判 critical：{crit}"
 
 
 def test_cov_e6_range_dash_not_treated_as_sign():
@@ -269,35 +177,11 @@ def test_cov_e6_range_dash_not_treated_as_sign():
     assert v is not None and v > 0, f"区间被误判为负值或漏抽：{v}"
 
 
-def test_cov_e6_positive_numbers_unaffected():
-    """防回归：正数与金额缩写不得因负号改动而失效。"""
-    assert _p("月租金8000")["monthly_rent"] == 8000.0
-    assert _p("月租1万5")["monthly_rent"] == 15000.0
-    assert _p("投资20万")["total_investment"] == 200000.0
-    assert _p("月租2万5人")["monthly_rent"] == 20000.0
-
-
 def _filled(raw):
     """走 _fill_params（含 derive 覆盖），返回用于一致性检查的 params。"""
     from tools.workflow_engine import _fill_params
     p, _src, _mixed = _fill_params(raw)
     return p
-
-
-def test_cov_e7_vcr_gm_conflict_is_surfaced():
-    """D2：vcr 与 gm 同时给出且矛盾时，**必须显式提示**，不得静默丢弃用户的毛利率。
-
-    旧缺陷：_fill_params 把 gm 覆盖成 1−vcr，等到 consistency_issues 运行时矛盾已销毁
-    → 用户说「毛利率 50%」，输出却变成 60%，全程无提示（静默篡改用户输入）。
-    """
-    from field_model import consistency_issues
-    p = _filled({"monthly_rent": 8000, "daily_traffic": 150,
-                 "price_per_unit": 18, "variable_cost_ratio": 0.4,
-                 "gross_margin": 0.5})
-    issues = consistency_issues(p)
-    assert issues, "矛盾未被检出（用户毛利率会被静默丢弃）"
-    assert "矛盾" in issues[0]["message"], issues[0]
-    assert "50%" in issues[0]["message"] and "60%" in issues[0]["message"], issues[0]
 
 
 def test_cov_e7_no_false_positive_when_consistent():
@@ -307,19 +191,6 @@ def test_cov_e7_no_false_positive_when_consistent():
                 {"monthly_rent": 8000, "variable_cost_ratio": 0.4},
                 {"monthly_rent": 8000, "gross_margin": 0.5}):
         assert consistency_issues(_filled(raw)) == [], raw
-
-
-def test_cov_e7_conflict_offers_two_alignments():
-    """矛盾应给出两个口径对齐方向（以 vcr 为准 / 以 gm 为准），由用户确认而非系统独断。"""
-    from field_model import conflict_resolution_ops
-    p = _filled({"monthly_rent": 8000, "daily_traffic": 150,
-                 "price_per_unit": 18, "variable_cost_ratio": 0.4,
-                 "gross_margin": 0.5})
-    ops = conflict_resolution_ops(p)
-    labels = [o["label"] for o in ops]
-    assert len(ops) == 2, labels
-    assert any("毛利率改为 60%" in l for l in labels), labels
-    assert any("变动成本率改为 50%" in l for l in labels), labels
 
 
 # ── E8：客单价的真实说法（D3：最高频措辞整段丢失）─────────────────────────
@@ -417,24 +288,6 @@ def test_cov_e9_unit_cost_still_extracted():
     assert _p("每碗成本6元").get("unit_variable_cost") == 6
 
 
-def test_cov_e9_percent_rate_still_works():
-    """护栏不得误伤正常百分比写法。"""
-    for text, exp in {
-        "变动成本率55%": 0.55,
-        "变动成本占营收60%": 0.6,
-    }.items():
-        p = _p(text)
-        got = p.get("variable_cost_ratio", p.get("variable_cost_rate"))
-        assert abs(got - exp) < 1e-6, f"{text} → {got}（期望 {exp}）"
-
-
-def test_cov_e9_bare_decimal_rate_still_works():
-    """「变动成本率0.6」无百分号也应识别为 0.6（不得因护栏被拒）。"""
-    p = _p("变动成本率0.6")
-    got = p.get("variable_cost_ratio", p.get("variable_cost_rate"))
-    assert abs(got - 0.6) < 1e-6, p
-
-
 def test_cov_e9_gross_margin_money_not_rate():
     """毛利率同理：「毛利6元」不得变成 600% 的毛利率。"""
     assert _p("毛利6元").get("gross_margin") is None
@@ -463,34 +316,12 @@ def test_cov_e9_end_to_end_unit_cost_divided_by_price():
 # 用户只是报了一笔包装费，系统就给他定性成制造业。漏识别只是降级，
 # 臆断是**凭空造参数**，性质更严重。
 
-def test_cov_e10_cn_fastfood_shop_names_are_catering():
-    """中式快餐主流店名必须识别为餐饮（D6）。"""
-    for text in ("我想开一家牛肉面店", "开个牛肉面店", "兰州拉面店", "拉面店",
-                 "米粉店", "米线店", "馄饨店", "饺子馆", "包子铺", "粥店",
-                 "麻辣烫店", "黄焖鸡店", "螺蛳粉店"):
-        got = extract_params(text).get("industry")
-        assert got == "餐饮", f"{text} → industry={got}（期望 餐饮）"
-
-
-def test_cov_e10_catering_regression_still_works():
-    """既有餐饮词不得因改动而失效。"""
-    for text in ("咖啡店", "奶茶店", "火锅店", "面馆", "牛肉面馆", "羊肉汤店"):
-        got = extract_params(text).get("industry")
-        assert got == "餐饮", f"{text} → industry={got}"
-
 
 def test_cov_e10_cost_items_do_not_decide_industry():
     """D7：报一笔成本费不得把用户定性成某个行业。"""
     for text in ("包装费3000元", "每月包装2000元", "加工费5000元"):
         got = extract_params(text).get("industry")
         assert got is None, f"{text} 被臆断为 industry={got}"
-
-
-def test_cov_e10_real_manufacturing_still_detected():
-    """护栏：真正的制造业说法仍要识别（不得因收紧关键词而漏）。"""
-    for text in ("我想开个五金加工厂", "做OEM代工的工厂", "开一家印刷厂"):
-        got = extract_params(text).get("industry")
-        assert got == "制造", f"{text} → industry={got}（期望 制造）"
 
 
 # ── E11：客流单位用用户口径（D8「碗」被显示成「杯」）──────────────────────
@@ -516,22 +347,6 @@ def test_cov_e11_unit_not_recorded_without_traffic():
     assert extract_params("一碗牛肉面卖18元").get("_traffic_unit") is None
 
 
-def test_cov_e11_dashboard_uses_user_unit():
-    """端到端：有用户量词时仪表盘用它，而非行业默认的「杯」。"""
-    from router.formatter import format_response
-    from tools.workflow_engine import quick_scan
-    base = {"industry": "餐饮", "monthly_rent": 8000, "daily_traffic": 100,
-            "price_per_unit": 18, "unit_variable_cost": 6}
-    for unit, exp in (("碗", "22 碗/天"), (None, "22 杯/天")):
-        payload = dict(base)
-        if unit:
-            payload["_traffic_unit"] = unit
-        d = json.loads(quick_scan.invoke(
-            {"params_json": json.dumps(payload, ensure_ascii=False)}))
-        md = format_response("quick_scan", d)
-        assert exp in md, f"unit={unit} 未渲染出「{exp}」：{[l for l in md.splitlines() if '盈亏平衡' in l]}"
-
-
 # ── E12：客流漏抽与误抽（D9）───────────────────────────────────────────────
 #
 # 「日均80桌」「一天卖80杯」都是高频说法，旧表抽不到：
@@ -542,18 +357,6 @@ def test_cov_e11_dashboard_uses_user_unit():
 #
 # 反向护栏：「每天营业额3000元」的 3000 是**钱**，不得被通用兜底抽成客流
 # （撑出 3000×客单价×30 的假营收）。复用 D4 的 reject_units。
-
-def test_cov_e12_missing_traffic_wordings():
-    """「日均80桌」「一天卖80杯」必须抽到客流（D9）。"""
-    for text, exp in {
-        "日均80桌": 80,
-        "一天卖80杯": 80,
-        "每天100单": 100,
-        "每天100人次": 100,
-        "一天做60份": 60,
-    }.items():
-        got = extract_params(text).get("daily_traffic")
-        assert got == exp, f"{text} → daily_traffic={got}（期望 {exp}）"
 
 
 def test_cov_e12_money_is_not_traffic():

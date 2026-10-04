@@ -146,15 +146,3 @@ class TestTestLlmSettings:
         assert data["ok"] is False
         assert data["status_code"] == 401
 
-    def test_test_endpoint_timeout(self, client, monkeypatch):
-        import requests as req
-        def mock_timeout(*a, **k):
-            raise req.exceptions.Timeout("timeout")
-        monkeypatch.setattr(req, "post", mock_timeout)
-        r = client.post("/settings/llm/test", json={
-            "model": "LongCat-2.0", "base_url": "https://api.longcat.chat/openai",
-            "api_key": "ak_TEST_KEY_NOT_REAL_0000000000000",
-        }, headers=XHR)
-        data = r.json()
-        assert data["ok"] is False
-        assert "超时" in data.get("error", "")

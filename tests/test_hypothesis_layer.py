@@ -29,18 +29,6 @@ def _scan(params_dict: dict) -> dict:
         {"params_json": json.dumps(params_dict, ensure_ascii=False)}))
 
 
-def test_h1_missing_salary_no_fake_labor():
-    """G1：用户给人数不给薪资 → 不再出现 行业默认 7000 撑起的假人工。"""
-    d = _scan({"industry": "餐饮", "total_investment": 200000, "price_per_unit": 10,
-               "daily_traffic": 60, "monthly_rent": 1800, "employee_count": 2})
-    assert d.get("error") is None
-    assert d["param_sources"]["avg_salary"].startswith("[缺失]"), d["param_sources"]["avg_salary"]
-    assert d["params"].get("monthly_labor") is None, "不得用默认薪资撑起人工"
-    md = format_response("quick_scan", d)
-    assert "19,600" not in md
-    assert "19600" not in md
-
-
 def test_h2_missing_vc_not_conclusion():
     """G6：缺变动成本率 → 利润「还不能定」，非假硬数。"""
     d = _scan({"monthly_rent": 8000, "monthly_revenue": 50000})
@@ -51,19 +39,6 @@ def test_h2_missing_vc_not_conclusion():
     assert kinds.get("variable_cost_ratio") == "缺失"
     md = format_response("quick_scan", d)
     assert "还不能定" in md or "变动成本率" in md
-
-
-def test_h3_all_user_facts():
-    """G2：全给齐 → 全部用户事实，basis=user，无行业默认。"""
-    d = _scan({"industry": "餐饮", "total_investment": 200000, "price_per_unit": 10,
-               "daily_traffic": 60, "monthly_rent": 1800,
-               "employee_count": 2, "avg_salary": 3000, "variable_cost_ratio": 0.55})
-    assert d["param_sources"]["avg_salary"].startswith("[用户]")
-    assert d["param_sources"]["variable_cost_ratio"].startswith("[用户]")
-    assert d["basis"]["avg_salary"] == "user"
-    assert d["basis"]["variable_cost_ratio"] == "user"
-    assert d["core_metrics"]["monthly_profit"] is not None
-    assert d["params"]["monthly_labor"] == 6000.0  # 2×3000（无默认社保负担）
 
 
 def test_h4_benchmark_not_in_formula():
@@ -100,20 +75,6 @@ def test_h6_hypothesis_application_records_basis():
     assert acc.get("avg_salary") == {"value": 7000, "industry": "餐饮"}, acc
     # 引擎视角：该字段此时来源仍是用户录入（apply_op 走 apply_turn 后是用户给的）
     # 记录仅用于决策层区分「假设采纳」，不污染 params 来源
-
-
-def test_h7_industry_candidate_not_auto_filled():
-    """D2/D4：行业模板值只在 hypotheses 区，不再自动填进计算图。"""
-    tpl = _get_industry_templates().get("餐饮", {})
-    assert "hypotheses" in tpl, "餐饮模板应有 hypotheses 区"
-    assert "benchmark" in tpl, "餐饮模板应有 benchmark 区"
-    assert "avg_salary" in tpl["hypotheses"], "餐饮候选含平均薪资"
-    # 输入给行业但不给薪资 → 引擎不用 7000 填充（H1 已证）
-    d = _scan({"industry": "餐饮", "monthly_revenue": 20000})
-    assert d["param_sources"]["avg_salary"].startswith("[缺失]"), d["param_sources"]["avg_salary"]
-    # 假设候选字段清单存在于配置
-    hf = _get_hypothesis_fields()
-    assert "avg_salary" in hf and "variable_cost_ratio" in hf and "employee_count" in hf
 
 
 # ─── 独立运行入口（无需 pytest）──────────────────────────────────────────

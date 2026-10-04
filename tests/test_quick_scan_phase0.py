@@ -17,18 +17,6 @@ def _scan(json_str):
     return json.loads(quick_scan.invoke({"params_json": json_str}))
 
 
-def test_only_rent_is_blocked_by_gate():
-    """仅给租金 8000 → 被门禁拦下，返回骨架，不再误报 月亏2万/危险。"""
-    d = _scan('{"monthly_rent": 8000}')
-    assert d.get("insufficient") is True
-    assert any("月营收" in g for g in d["gaps"])
-    assert d["param_sources"]["available_cash"].startswith("[缺失]")
-    assert d["param_sources"]["employee_count"].startswith("[缺失]")
-    md = format_response("quick_scan", d)
-    assert "危险" not in md
-    assert "月亏" not in md
-
-
 def test_rent_plus_revenue_missing_vc_is_blocked():
     """租金+营收 但未给变动成本率 → 利润/保本「还不能定」：月利润为 None + 缺口号，不产假硬数。"""
     d = _scan('{"monthly_rent": 8000, "monthly_revenue": 50000}')
@@ -41,19 +29,6 @@ def test_rent_plus_revenue_missing_vc_is_blocked():
     md = format_response("quick_scan", d)
     assert "月亏" not in md
     assert "还不能定" in md or "变动成本率" in md  # 明确提示补 vc，而非假硬数
-
-
-def test_rent_plus_revenue_shows_profit_not_false_alarm():
-    """租金+营收+变动成本率 → 出利润，人工按0标缺失，跑道未知（不误报）。"""
-    d = _scan('{"monthly_rent": 8000, "monthly_revenue": 50000, "variable_cost_ratio": 0.4}')
-    assert d.get("insufficient") is not True
-    assert d["core_metrics"]["monthly_profit"] == 22000
-    assert d["params"]["monthly_fixed_cost"] == 8000          # 人工按 0，不再虚构 12000
-    assert d["params"]["available_cash"] is None               # 总投资缺失→不污染跑道
-    assert d["status"]["cash"] == "⚪ 未知（需总投资）"
-    assert d["param_sources"]["employee_count"].startswith("[缺失]")
-    fields = [a["field"] for a in d["assumptions"]]
-    assert "employee_count" in fields and "total_investment" in fields
 
 
 def test_full_case_no_regression():
@@ -74,22 +49,6 @@ def _cmp(base_json, alt_json):
     return json.loads(compare_scenarios.invoke({"base_json": base_json, "alt_json": alt_json}))
 
 
-def test_compare_missing_vc_degrades_not_crashes():
-    """缺变动成本率时 compare 应降级返回缺口提示，而不是 None-None 崩溃。
-
-    复现路径：用户给 月租/客流/客单 但没给变动成本率 → insufficient 只拦月营收
-    （vc 缺失是软缺口，insufficient=False），但 monthly_profit=None →
-    旧代码 diff 减法直接 TypeError；修复后应返回 insufficient=True + 明确提示。
-    """
-    base = '{"monthly_rent":15000,"daily_traffic":50,"price_per_unit":25,"employee_count":3,"avg_salary":5000}'
-    alt = '{"monthly_rent":8000,"daily_traffic":50,"price_per_unit":25,"employee_count":3,"avg_salary":5000}'
-    d = _cmp(base, alt)
-    assert d.get("insufficient") is True
-    assert "变动成本率" in d.get("message", "")
-    assert any("方案A" in g and "月利润" in g for g in d.get("gaps", []))
-    assert "error" not in d  # 不裸崩
-
-
 def test_compare_full_params_succeeds():
     """补全变动成本率后 compare 正常出对比表（回归护栏）。"""
     base = '{"monthly_rent":15000,"daily_traffic":50,"price_per_unit":25,"employee_count":3,"avg_salary":5000,"variable_cost_ratio":0.4}'
@@ -105,21 +64,6 @@ def test_compare_full_params_succeeds():
 
 def _trend(pj):
     return json.loads(trend_projection.invoke({"params_json": pj}))
-
-
-def test_trend_missing_vc_degrades_not_crashes():
-    """缺变动成本率时 trend 应返回统一降级提示，而不是 error JSON。
-
-    旧行为：vc 缺失是软缺口（insufficient=False），直接进入 _project_trend_12m，
-    `revenue * vc_ratio` 因 vc=None 抛 TypeError → 被 try/except 兜成 {"error":...}。
-    修复后：走 _profit_readiness 统一降级，返回 insufficient=True + 明确「缺变动成本率」。
-    """
-    pj = '{"monthly_revenue":20000,"daily_traffic":50,"price_per_unit":25}'
-    d = _trend(pj)
-    assert d.get("insufficient") is True
-    assert d.get("tool") == "trend"
-    assert "变动成本率" in d.get("message", "")
-    assert "error" not in d
 
 
 def test_trend_full_params_succeeds():

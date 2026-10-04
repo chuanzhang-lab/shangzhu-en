@@ -67,16 +67,6 @@ def test_extract_turn2():
     assert p.get("monthly_expense") == 2500.0, p
 
 
-def test_merge_across_turns():
-    reset_state(TID)
-    apply_turn(TID, extract_params(TURN1), TURN1, "餐饮")
-    st = apply_turn(TID, extract_params(TURN2), TURN2, None)
-    merged = st["params"]
-    for k in ["industry", "monthly_rent", "total_investment", "price_per_unit",
-              "monthly_revenue", "employee_count", "avg_salary", "monthly_expense"]:
-        assert k in merged and merged[k] not in (None,), f"merge 缺 {k}: {merged}"
-
-
 def test_full_dashboard_after_merge():
     reset_state(TID)
     apply_turn(TID, extract_params(TURN1), TURN1, "餐饮")
@@ -100,81 +90,6 @@ def test_merge_is_latest_wins():
     merged = merge_params(old, new)
     assert merged["monthly_rent"] == 12000
     assert merged["employee_count"] == 3  # 旧值保留
-
-
-def test_continuation_detection():
-    assert is_continuation("人工成本2人8000，你再算一下") is True
-    assert is_continuation("重新算一次") is True
-    assert is_continuation("开个奶茶店试试") is False
-
-
-def test_reset_command():
-    assert is_reset_command("重新开始") is True
-    assert is_reset_command("换个新项目") is True
-    assert is_reset_command("开羊肉汤店") is False
-
-
-def test_session_grounding():
-    reset_state(TID)
-    apply_turn(TID, extract_params(TURN1), TURN1, "餐饮")
-    apply_turn(TID, extract_params(TURN2), TURN2, None)
-    ctx = get_session_context(TID)
-    assert "餐饮" in ctx, ctx
-    # 币种随部署口径走（本部署 USD）—— 不要写死「元」，改币种会误报
-    from i18n import t as _t
-    assert f"200,000{_t('ss.fmt.yuan')}" in ctx, ctx  # 总投资真实值，无编造
-    assert "成都冒菜店" not in ctx  # 杜绝历史幻觉
-
-
-def test_business_not_chitchat():
-    # 羊肉汤店两轮都应命中项目意图（非 chitchat），从而触发 merge
-    for t in (TURN1, TURN2):
-        intent, _ = detect_intent(t)
-        assert intent != "chitchat", f"{t!r} 被误判为 chitchat"
-        assert intent in {"quick_scan", "suggest", "trend", "compare",
-                          "benchmark", "market"}, intent
-
-
-def test_pure_param_update_routes_to_quickscan():
-    """回归：纯补参句（只给一个数值，无「开/投资/租金」等关键词）必须走
-    quick_scan，否则会被误判 chitchat → 既不写 SessionState 也不重算，
-    下一轮补参时本轮数据即「被遗忘」（用户在羊肉汤店第 2/3 轮踩中的坑）。"""
-    for t in ("月营收20000元", "月租金8000元", "总投资加10万", "客单价改成18"):
-        intent, _ = detect_intent(t)
-        assert intent == "quick_scan", f"{t!r} 应为 quick_scan，实际 {intent}"
-
-
-def test_three_turn_accumulation_keeps_revenue():
-    """回归：第 2 轮补的月营收，在第 3 轮补租金后不得丢失。
-
-    复现用户真实对话：
-      T1 开羊肉汤店，投资20万，客单价15，员工2人
-      T2 月营收20000元            ← 曾被误判 chitchat，营收未入 session
-      T3 月租金8000元，怎么收支平衡  ← 此时 session 已不含营收 → 误报「信息不全」
-    """
-    reset_state("repro-3turn")
-    t1 = "想开一家羊肉汤店,投资20万，客单价15元,员工2人,共8000元"
-    t2 = "月营收20000元"
-    t3 = "月租金8000元,你看怎么调整参数才能收支平衡"
-
-    apply_turn("repro-3turn", extract_params(t1), t1, "餐饮")
-    # 注意：这里直接走与 chat() 一致的「每轮都累积」逻辑
-    p2 = extract_params(t2)
-    if p2:
-        apply_turn("repro-3turn", p2, t2, p2.get("industry"))
-    p3 = extract_params(t3)
-    if p3:
-        apply_turn("repro-3turn", p3, t3, p3.get("industry"))
-
-    merged = get_state("repro-3turn")["params"]
-    assert merged.get("monthly_revenue") == 20000.0, f"营收丢失: {merged}"
-    assert merged.get("monthly_rent") == 8000.0, f"租金丢失: {merged}"
-    assert merged.get("total_investment") == 200000.0, f"投资丢失: {merged}"
-    assert merged.get("employee_count") == 2.0, f"员工丢失: {merged}"
-
-    # 完整仪表盘应可算（不再误报「信息不全」）
-    d = _scan(merged)
-    assert not d.get("insufficient"), f"3 轮累积后仍报不足: {d.get('gaps')}"
 
 
 # ─── 独立运行入口（无需 pytest）──────────────────────────────────────────

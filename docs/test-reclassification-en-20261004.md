@@ -984,3 +984,12 @@
 | `test_single_var_sensitivity_daily_traffic_breakeven` | language-neutral | 绿 | probe绿+curated | 计划点名保留/护栏 |
 | `test_sensitivity_intent_returns_analysis_not_fallback` | en-reachable | 红 | probe红+curated | 护栏/契约红→批次 B 换英文断言，不退役 |
 | `test_attribution_intent_returns_decomposition_not_missing_gap` | en-reachable | 红 | probe红+curated | 护栏/契约红→批次 B 换英文断言，不退役 |
+
+---
+
+## 批次 A 执行记录（2026-10-04，用户复核确认后执行）
+
+- 动作：按本表 `zh-only` 140 条逐条删除测试节点（AST 行域手术，类删空则删类）；
+- 结果：23 个混合文件共 -140 tests，**无整文件清空**（每文件至少保留 2 条）；
+- 验证：`make test` 518 绿（本表余量 505 + E-11/E-08 护栏 13）；收集集反查 zh-only 名单零残留；
+- `src/i18n/zh.yaml` 零改动（字符冻结验收项）。

@@ -47,20 +47,6 @@ def test_phase4_skeleton_ready():
 
 # ── P4-0.1 抽取器：固定成本组件字段 ───────────────────────────────────────
 
-def test_extract_fixed_components():
-    """T9 片段：水电800/包装260/提成1000 应分别进对应字段。"""
-    p = _extract("水电800包装260提成1000")
-    assert p.get("utilities") == 800.0, p
-    assert p.get("packaging") == 260.0, p
-    assert p.get("commission") == 1000.0, p
-
-
-def test_extract_other_fixed_alias():
-    """T5 片段「其他1000」应进 other_fixed（简写「其他」）。"""
-    p = _extract("租金12000,人工两人各4000,其他1000")
-    assert p.get("other_fixed") == 1000.0, p
-    assert p.get("monthly_rent") == 12000.0, p
-
 
 def test_extract_no_over_trigger():
     """「其他」不该在无关修辞里误抓数字。"""
@@ -70,43 +56,6 @@ def test_extract_no_over_trigger():
 
 # ── P4-0.2 / P4-0.3 引擎：固定成本 C1 聚合 ─────────────────────────────────
 
-def test_c1_fixed_cost_sum():
-    """核心断言：rent12000+labor8000(2人×4000，无默认社保负担)+util800+pack260+comm1000 = 22060。
-
-    无默认：劳动负担率取消模板默认(0.40)，未给即 0% → 人工=裸薪，来源纯[用户]。
-    合计不含负担 → 可标[用户]（无任何默认成分）。
-    """
-    params = {
-        "monthly_rent": 12000, "employee_count": 2, "avg_salary": 4000,
-        "utilities": 800, "packaging": 260, "commission": 1000,
-        "monthly_revenue": 20000, "total_investment": 200000,
-    }
-    d = _scan(params)
-    fixed = d["params"]["monthly_fixed_cost"]
-    assert fixed == 22060, fixed
-    src = d["param_sources"]["monthly_fixed_cost"]
-    assert "组件求和" in src, src
-    assert "租金[用户]" in src, src
-    assert "人工[用户]" in src, src
-    assert src.startswith("[用户]"), src
-    # 人工分解可见（无默认负担：裸薪=含负担）
-    assert d["params"].get("monthly_labor_cash") == 8000, d["params"]
-    assert d["params"].get("monthly_labor") == 8000, d["params"]
-    assert d["params"].get("labor_burden_rate") == 0.0, d["params"]
-
-
-def test_c1_labor_pair_not_inflate_headcount():
-    """「人工3500*2」经抽取→引擎：2人×3500，固定成本=租金+含社保人工，绝非3500人。"""
-    p = _extract("月租金1500，日售50杯，单价15，变动成本率60%，人工3500*2")
-    assert p.get("employee_count") == 2.0 and p.get("avg_salary") == 3500.0, p
-    d = _scan({**p, "industry": "餐饮"})
-    assert d["params"]["employee_count"] == 2.0, d["params"]
-    # 无默认负担：裸薪 7000（2×3500），+租金1500 = 8500
-    assert d["params"]["monthly_fixed_cost"] == 8500, d["params"]
-    src = d["param_sources"]["monthly_fixed_cost"]
-    assert "组件求和" in src and "人工" in src, src
-    assert d["params"]["monthly_fixed_cost"] < 100_000, "不得出现百万级失真固定成本"
-
 
 def test_c1_partial_no_total():
     """组件不全且无显式总数：只算已知组件(租金)，不索要总数、不虚构人工。"""
@@ -115,14 +64,6 @@ def test_c1_partial_no_total():
     # 只给了租金 → fixed=12000（人工未给，不计入也不虚构）
     assert d["params"]["monthly_fixed_cost"] == 12000, d["params"]["monthly_fixed_cost"]
     assert "组件求和" in d["param_sources"]["monthly_fixed_cost"]
-
-
-def test_c1_all_missing():
-    """组件全缺且无总数：诚实标 [缺失]，绝不猜 0 / 不猜「租金+人工」。"""
-    params = {"monthly_revenue": 20000, "total_investment": 200000}  # 完全没给任何固定成本
-    d = _scan(params)
-    src = d["param_sources"]["monthly_fixed_cost"]
-    assert src.startswith("[缺失]"), src
 
 
 # ── P4-1 单位变动成本 ─────────────────────────────────────────────────────
@@ -142,25 +83,9 @@ def test_p41_derives_ratio():
     assert "推导" in src["variable_cost_ratio"]
 
 
-def test_p41_explicit_ratio_wins():
-    """显式变动率优先于单位成本推导。"""
-    p, src, _ = _fill_params({"unit_variable_cost": 12, "price_per_unit": 15,
-                              "variable_cost_rate": 75, "monthly_revenue": 20000,
-                              "total_investment": 200000})
-    assert abs(p["variable_cost_ratio"] - 0.75) < 1e-6, p["variable_cost_ratio"]
-    assert src["variable_cost_ratio"].startswith("[用户]"), src["variable_cost_ratio"]
-
-
 # ── P4-2 营收派生（C2：显式优先，不被派生覆盖）──
 # 注：核实当前 _fill_params 营收块已满足 C2（显式优先、缺失才派生），
 # 故 P4-2 仅固化行为，无需改代码。
-
-def test_p42_explicit_revenue_priority():
-    """显式2万 + 派生输入(price15×traffic40=18000) → 仍用2万[用户]，不被派生覆盖。"""
-    p, src, _ = _fill_params({"monthly_revenue": 20000, "price_per_unit": 15,
-                              "daily_traffic": 40, "total_investment": 200000})
-    assert p["monthly_revenue"] == 20000, p["monthly_revenue"]
-    assert src["monthly_revenue"].startswith("[用户]"), src["monthly_revenue"]
 
 
 def test_p42_derive_only_when_missing():
@@ -218,31 +143,7 @@ def test_p44_no_miscatch_rhetoric():
     assert "monthly_expense" not in p, p
 
 
-def test_p44_still_catches_arabic_no_unit():
-    """无单位阿拉伯数字（「固定成本2500」）仍应抽取——strict 只禁中文量词兜底。"""
-    p = _extract("固定成本2500")
-    assert p.get("monthly_expense") == 2500.0, p
-
-
-def test_p44_still_catches_with_unit():
-    """带单位数字（「月固定成本2500元」）正常抽取。"""
-    p = _extract("月固定成本2500元")
-    assert p.get("monthly_expense") == 2500.0, p
-
-
 # ── P4-3 路由收口（业务问句归引擎，不落 chitchat/get_agent）──
-
-def test_p43_whatif_routed_to_engine():
-    """what-if 选择问句「减租好还是提价好」归引擎意图（compare），不落 chitchat。"""
-    intent, _ = detect_intent("减租好还是提价好")
-    assert intent in ("compare", "breakeven"), intent
-    assert intent != "chitchat"
-
-
-def test_p43_breakeven_routed_to_engine():
-    """保本问句「月租改6000,需卖多少流量保本」归 breakeven（引擎计算）。"""
-    intent, _ = detect_intent("月租改6000,需卖多少流量保本")
-    assert intent == "breakeven", intent
 
 
 def test_p43_business_path_no_get_agent():
@@ -298,18 +199,6 @@ def test_p47_advise_no_eval_exec():
     assert "eval(" not in src, "advise 不得含 eval(（C3 红线）"
 
 
-def test_p47_anomaly_report_detects_conflict():
-    """S4-7.4：参数矛盾（来源含"矛盾"）时 _emit_anomaly_report 返回结构化报告。"""
-    scan = {
-        "param_sources": {"monthly_fixed_cost": "[用户]组件求和22060，与显式总数2500矛盾→待澄清"},
-        "params": {"monthly_fixed_cost": 22060},
-    }
-    report = _emit_anomaly_report(scan)
-    assert report is not None, "应检出矛盾异常"
-    assert report["type"] == "AnomalyReport"
-    assert any(a["field"] == "monthly_fixed_cost" for a in report["anomalies"])
-
-
 def test_p47_anomaly_report_catches_extreme_fixed():
     """S4-7.4：极端固定成本（疑似抽取误抓 1.0）被检出。"""
     scan = {"params": {"monthly_fixed_cost": 1.0}, "param_sources": {}}
@@ -361,26 +250,6 @@ def _oracle_replay(keys, tid="p4-6-oracle"):
     return merged, _scan(merged)
 
 
-def test_p46_t1t2_open_no_rent():
-    """T1+T2：开汤店/投资20万/客单价15/人工2人(各4000)=8000(无默认社保负担)/月营收2万。
-    租金未给 → 引擎诚实只算人工8000，绝不虚构租金；营收=2万[用户]；
-    avg_salary=4000[用户]（修旧 7000 误算）；不向用户索要总数。"""
-    merged, d = _oracle_replay(["T1"])
-    assert d["project_type"] == "餐饮", d.get("project_type")
-    # 无默认负担：人工 2×4000=8000，租金缺失 → 固定成本=8000（仅人工），来源标组件求和
-    assert d["params"]["monthly_fixed_cost"] == 8000, d["params"]["monthly_fixed_cost"]
-    src_fixed = d["param_sources"]["monthly_fixed_cost"]
-    assert "组件求和" in src_fixed and "人工" in src_fixed, src_fixed
-    # 营收显式2万，优先于派生
-    assert d["core_metrics"]["monthly_revenue"] == 20000, d["core_metrics"]["monthly_revenue"]
-    assert d["param_sources"]["monthly_revenue"].startswith("[用户]")
-    # 薪资是用户给的4000，不是模板7000
-    assert d["params"]["avg_salary"] == 4000, d["params"]["avg_salary"]
-    assert d["param_sources"]["avg_salary"].startswith("[用户]")
-    # 租金未给 → 无默认：诚实[缺失]，不虚构租金
-    assert d["param_sources"]["monthly_rent"].startswith("[缺失]"), d["param_sources"]["monthly_rent"]
-
-
 def test_p46_t3_breakeven_routed_and_computed():
     """T3：月租金8000 + 收支平衡问句 → 固定=8000+8000=16000[用户]自动求和；
     breakeven 问句路由引擎(意图=breakeven)，引擎算保本客流；不追问总数。"""
@@ -407,18 +276,6 @@ def test_p46_t4_contradiction_not_silent():
     assert d["param_sources"]["monthly_revenue"].startswith("[用户]")
 
 
-def test_p46_t5_avg_salary_user_not_default():
-    """T5：租金12000/人工2人各4000/其他1000 → avg_salary=4000[用户](修7000误算)；
-    租金12000覆盖；other_fixed=1000；fixed=12000+8000+1000=21000(人工无默认负担)。"""
-    merged, d = _oracle_replay(["T1", "T3", "T5"])
-    assert d["params"]["avg_salary"] == 4000, d["params"]["avg_salary"]
-    assert d["param_sources"]["avg_salary"].startswith("[用户]")
-    assert d["params"]["monthly_rent"] == 12000, d["params"]["monthly_rent"]
-    # other_fixed 不在 dashboard.params 透出，改查来源标注（已计入 C1 求和）
-    assert d["param_sources"]["other_fixed"].startswith("[用户]"), d["param_sources"].get("other_fixed")
-    assert d["params"]["monthly_fixed_cost"] == 21000, d["params"]["monthly_fixed_cost"]
-
-
 def test_p46_t9_fixed_sum_and_derived_ratio():
     """T9：每份12+水电800+包装260+提成1000 → fixed=12000+8000+800+260+1000=22060[用户](人工无默认负担)；
     unit12+price15 → ratio=0.80[推导](C1核心断言)。"""
@@ -428,24 +285,6 @@ def test_p46_t9_fixed_sum_and_derived_ratio():
     # 出口为数值契约（0~1）；百分比展示由前端格式化，不要在这里断言展示串
     assert abs(d["params"]["variable_cost_ratio"] - 0.8) < 1e-9, d["params"]["variable_cost_ratio"]
     assert "推导" in d["param_sources"]["variable_cost_ratio"]
-
-
-def test_p46_t10_whatif_routed_to_compare():
-    """T10：减租vs提价 问句 → 路由引擎 compare（不落 chitchat/自由 agent 自算）；
-    营收仍2万(C2 不被 what-if 改写)。"""
-    intent, _ = detect_intent(_TURNS["T10"])
-    assert intent == "compare", intent
-    merged, d = _oracle_replay(["T1", "T_rent12", "T9", "T10"])
-    assert d["core_metrics"]["monthly_revenue"] == 20000
-    assert d["param_sources"]["monthly_revenue"].startswith("[用户]")
-
-
-def test_p46_t11_explicit_ratio_wins_preserved_fixed():
-    """T11：变动率75%[用户] 优先于推导0.80；fixed=22060 保留（C1 不丢组件）。"""
-    merged, d = _oracle_replay(["T1", "T_rent12", "T9", "T11"])
-    assert abs(d["params"]["variable_cost_ratio"] - 0.75) < 1e-9, d["params"]["variable_cost_ratio"]
-    assert d["param_sources"]["variable_cost_ratio"].startswith("[用户]")
-    assert d["params"]["monthly_fixed_cost"] == 22060, d["params"]["monthly_fixed_cost"]
 
 
 def test_p46_t12_breakeven_minimal_14000():

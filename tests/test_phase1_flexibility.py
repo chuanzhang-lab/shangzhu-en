@@ -39,57 +39,11 @@ def test_rent_only_still_blocked():
     assert "危险" not in json.dumps(d)
 
 
-def test_rent_plus_revenue_shows_scenarios_and_narrative():
-    """租金+营收+变动成本率：出仪表盘；利润唯一驱动 vc 已给 → 区间或无差（不假扰动），
-    但人工/总投资缺口仍使 has_uncertainty=True。"""
-    d = _scan({"monthly_rent": 8000, "monthly_revenue": 50000, "variable_cost_ratio": 0.4})
-    assert d.get("insufficient") is not True
-    assert d["core_metrics"]["monthly_profit"] == 22000
-    sc = d["scenarios"]
-    assert sc["has_uncertainty"] is True
-    assert any("人工成本" in x for x in sc["drivers"])
-    assert any("总投资" in x for x in sc["drivers"])
-    # 无默认：利润驱动 vc 为用户给 → 不假扰动区间（best==worst 合理，不等于崩溃）
-    assert sc["monthly_profit"]["base"] == 22000
-    assert sc["runway"]["base"] is None  # 现金缺失→跑道未知
-    assert "人工成本" in d["narrative"]
-
-
-def test_industry_template_with_vc_uncertainty():
-    """行业（餐饮）+ 用户给变动成本率 + 人工缺失 → 情景区间仍产生不确定性。"""
-    d = _scan({"industry": "餐饮", "total_investment": 300000, "monthly_rent": 10000,
-               "daily_traffic": 100, "price_per_unit": 25,
-               "variable_cost_ratio": 0.4})
-    assert d.get("insufficient") is not True, d.get("gaps")
-    sc = d["scenarios"]
-    assert sc["has_uncertainty"] is True
-    assert any("人工成本" in x for x in sc["drivers"])
-    assert d["narrative"]
-
-
 def test_trend_no_silent_misreport():
     """④：仅租金时 trend 走骨架，不再输出 12 个月全 -8000 的静默误报。"""
     t = _trend({"monthly_rent": 8000})
     assert t.get("insufficient") is True
     assert "months" not in t
-
-
-def test_compare_requires_revenue():
-    """④：对比基准缺月营收时返回骨架，说明哪一侧不足。"""
-    c = _compare({"monthly_rent": 8000},
-                 {"monthly_rent": 8000, "monthly_revenue": 50000})
-    assert c.get("insufficient") is True
-    assert any("方案A" in g for g in c["gaps"])
-
-
-def test_full_user_input_high_confidence():
-    """全部用户显式提供→无不确定性，叙事声明高置信。"""
-    d = _scan({"industry": "餐饮", "total_investment": 300000, "monthly_rent": 10000,
-               "daily_traffic": 100, "price_per_unit": 25,
-               "employee_count": 3, "avg_salary": 7000,
-               "variable_cost_rate": 0.4, "monthly_revenue": 75000})
-    assert d["scenarios"]["has_uncertainty"] is False
-    assert "置信度高" in d["narrative"]
 
 
 def test_narrative_focuses_material_lever():

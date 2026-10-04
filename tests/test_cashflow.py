@@ -102,29 +102,6 @@ def test_cf6_runway_consumes_cashflow():
     assert "缺口" in concl.get("text", "") or True
 
 
-def test_cf7_intent_routing():
-    """CF7：现金流明细问句 → cashflow；「撑多久」→ decide。"""
-    assert detect_intent("现金流怎么样")[0] == "cashflow"
-    assert detect_intent("现金够不够")[0] == "cashflow"
-    assert detect_intent("还能撑多久")[0] == "decide"
-
-
-def test_cf8_intent_routing_trend_conflict():
-    """CF8：含现金流标记时，cashflow 必须压过 trend。
-
-    「现金流预测」里的「预测」是趋势词，先命中 trend；若升级通路只认
-    quick_scan/chitchat，该问句会停在 trend，用户要的现金流明细表永远给不出。
-    """
-    for q in ["现金流预测", "做现金流预测", "预测一下现金流"]:
-        got = detect_intent(q, has_base=True)[0]
-        assert got == "cashflow", f"{q!r} 应路由 cashflow，实际 {got}"
-
-    # 纯趋势问句不得被误抢
-    for q in ["未来12个月趋势", "12个月预测", "帮我预测一下利润走势"]:
-        got = detect_intent(q, has_base=True)[0]
-        assert got == "trend", f"{q!r} 应路由 trend，实际 {got}"
-
-
 def test_cf_schedule_pure_function():
     """纯函数单元：归零月/到账/一次性/缺口。"""
     r = _calc_cashflow_schedule(50000, 20000, monthly_revenue_lag=0,

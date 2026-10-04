@@ -19,14 +19,6 @@ from session_state import merge_params
 from tools.workflow_engine import quick_scan
 
 
-def test_extract_vc_without_rate_word_gives_ratio():
-    """『变动成本改为60%』不带『率』字，也应产出归一化 ratio=0.6。"""
-    d = extract_params("把变动成本改为60%，你再算下它的盈亏")
-    assert d.get("variable_cost_ratio") == 0.6
-    # 精确 ratio 已抽出时，通用 rate 去噪丢弃，避免双字段污染引擎
-    assert d.get("variable_cost_rate") is None
-
-
 # ── 出口契约护栏：params 必须是数值，展示串不许回流 ──────────────────────
 # 事故原型：出口把 vcr 渲染成 f"{v*100:.0f}%" 塞回 params，与数值字段混在同一 dict。
 # 后果三连：① 消费方做算术抛 TypeError（sensitivity / cost_attribution 都崩过）
@@ -71,24 +63,10 @@ def test_scan_params_vcr_is_ratio_scale():
     assert 0 <= vcr <= 1, f"出口 vcr={vcr} 不在 0~1 区间（疑似按百分比输出）"
 
 
-def test_extract_vc_variants_all_normalized():
-    """多种措辞都归一化到 0~1：成本率40%、可变成本率30%、食材成本占45%。"""
-    assert extract_params("成本率40%").get("variable_cost_ratio") == 0.4
-    assert extract_params("可变成本率30%").get("variable_cost_ratio") == 0.3
-    assert extract_params("食材成本占营业额45%").get("variable_cost_ratio") == 0.45
-
-
 def test_not_misgrab_unit_cost():
     """『每份成本45元』是单位变动成本，不应误抓成 ratio。"""
     d = extract_params("每份成本45元")
     assert d.get("variable_cost_ratio") is None
-
-
-def test_extract_vc_noise_denoised():
-    """『日售50杯变动成本率55%』：rate 误抓客流 50，应被去噪只留精确 ratio=0.55。"""
-    d = extract_params("日售50杯变动成本率55%")
-    assert d.get("variable_cost_ratio") == 0.55
-    assert d.get("variable_cost_rate") is None
 
 
 def test_merge_syncs_ratio_from_rate():
@@ -114,20 +92,6 @@ def test_merge_does_not_let_stale_rate_clobber_new_ratio():
     assert merged["variable_cost_ratio"] == 0.6
     # 加固：本轮明确给了 ratio，残留旧 rate 应被清掉，不再传染持久化
     assert merged.get("variable_cost_rate") is None
-
-
-def test_full_pipeline_vc_updated_to_60():
-    """T1(40%) 合并 T2(改为60%) → quick_scan 用 60% 算（缺陷 1 主证据）。"""
-    t1 = extract_params("我开咖啡店，月租金15000，日均客流50，客单价25，员工3人，人均工资5000，变动成本率40%")
-    t2 = extract_params("把变动成本改为60%，你再算下它的盈亏")
-    merged = merge_params(t1, t2)
-    assert merged.get("variable_cost_ratio") == 0.6
-    qr = json.loads(quick_scan.invoke({"params_json": json.dumps(merged, ensure_ascii=False)}))
-    # 引擎按 60% 计算：rev=37500, fixed=30000, profit=37500-30000-37500*0.6=-15000
-    profit = (qr.get("core_metrics") or {}).get("monthly_profit")
-    assert profit is not None
-    assert round(profit, 0) == -15000.0, f"期望按 60% 算得 -15000，实际 {profit}"
-    assert profit != -7500  # 关键：不再是 40% 时的旧结果
 
 
 if __name__ == "__main__":

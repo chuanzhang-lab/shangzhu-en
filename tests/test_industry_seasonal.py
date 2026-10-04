@@ -113,32 +113,6 @@ class TestTrendWithSeasonal:
         assert revenues[11] == max(revenues)
         assert revenues[10] == sorted(revenues)[-2]  # 11月第二
 
-    def test_seasonal_source_annotation(self):
-        """有行业模板时，seasonal_source 标注行业名。"""
-        params = {
-            "monthly_revenue": 30000,
-            "monthly_fixed_cost": 15000,
-            "variable_cost_ratio": 0.4,
-            "available_cash": 100000,
-            "total_investment": 100000,
-            "industry_name": "餐饮",
-        }
-        result = _project_trend_12m(params)
-        assert "餐饮" in result.get("seasonal_source", "")
-
-    def test_generic_seasonal_source(self):
-        """无行业时，seasonal_source 标注通用。"""
-        params = {
-            "monthly_revenue": 30000,
-            "monthly_fixed_cost": 15000,
-            "variable_cost_ratio": 0.4,
-            "available_cash": 100000,
-            "total_investment": 100000,
-            "industry_name": "",
-        }
-        result = _project_trend_12m(params)
-        assert "通用" in result.get("seasonal_source", "")
-
 
 # ─── 运行 ──────────────────────────────────────────────────────────────────
 

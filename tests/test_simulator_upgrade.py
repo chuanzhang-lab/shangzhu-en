@@ -250,40 +250,6 @@ class TestMultiPeriodComparison:
         assert "alt_breakeven_month" in tc
         assert "verdict_annual" in tc
 
-    def test_trend_comparison_verdict(self):
-        """高营收方案应有更高的年利润。"""
-        base = json.dumps({
-            "monthly_revenue": 30000,
-            "monthly_fixed_cost": 10000,
-            "variable_cost_ratio": 0.4,
-            "monthly_rent": 5000,
-            "employee_count": 2,
-            "avg_salary": 5000,
-            "available_cash": 100000,
-            "total_investment": 100000,
-            "price_per_unit": 25,
-            "daily_traffic": 60,
-            "industry_name": "餐饮",
-        })
-        alt = json.dumps({
-            "monthly_revenue": 60000,
-            "monthly_fixed_cost": 20000,
-            "variable_cost_ratio": 0.4,
-            "monthly_rent": 10000,
-            "employee_count": 4,
-            "avg_salary": 5000,
-            "available_cash": 200000,
-            "total_investment": 200000,
-            "price_per_unit": 25,
-            "daily_traffic": 120,
-            "industry_name": "餐饮",
-        })
-        result = json.loads(compare_scenarios.invoke({"base_json": base, "alt_json": alt}))
-        tc = result["trend_comparison"]
-        assert tc["alt_annual_profit"] > tc["base_annual_profit"]
-        assert tc["annual_profit_diff"] > 0
-        assert "方案B" in tc["verdict_annual"]
-
 
 # ─── 集成测试：quick_scan 含趋势数据 ──────────────────────────────────────
 
