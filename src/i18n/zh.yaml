@@ -583,6 +583,24 @@ de:
     min_exp: "- 最小实验：{exp}"
     watch: "- 看什么指标：{metric}"
     validate_line: "- 先验证：{what}"
+# ─── 决策策略文案（config/decision_policy.yaml 的 label_key 消费）──────────
+policy:
+  lever:
+    price_up_elasticity: 提价（考验需求弹性）
+    traffic_acquisition: 提升客流（验证获客）
+    labor_cost_optimize: 优化人力成本
+    team_slim: 精简团队
+    vcr_down: 降低变动成本率
+    rent_renegotiate: 重新谈租金/迁址
+    other_fixed_cut: 削减其他固定支出
+    rent_down_runway: 压低固定成本（延长跑道）
+    labor_slim_runway: 精简人力（延长跑道）
+    price_up_cashflow: 提价（改善现金流）
+  assumption:
+    traffic: 客流（最直接影响营收）
+    price: 客单价（需求弹性）
+    vcr: 变动成本率
+    labor: 人工成本
 ss:
   label:
     industry: 行业

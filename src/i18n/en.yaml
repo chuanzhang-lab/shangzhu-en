@@ -592,6 +592,26 @@ de:
     min_exp: "- Minimal experiment: {exp}"
     watch: "- What to watch: {metric}"
     validate_line: "- Validate first: {what}"
+# ─── 决策策略文案（config/decision_policy.yaml 的 label_key 消费）──────────
+# 这些是**展示文案**：配置只给 key，值在这里。配置里一旦写中文 label，
+# 英文部署就会原样渲染（真实事故），由 test_config_dir_is_locale_free 兜住。
+policy:
+  lever:
+    price_up_elasticity: Raise prices (tests demand elasticity)
+    traffic_acquisition: Grow traffic (validate acquisition)
+    labor_cost_optimize: Optimize labor cost
+    team_slim: Slim the team
+    vcr_down: Lower variable cost ratio
+    rent_renegotiate: Renegotiate rent / relocate
+    other_fixed_cut: Cut other fixed spending
+    rent_down_runway: Cut fixed costs (extend runway)
+    labor_slim_runway: Trim headcount (extend runway)
+    price_up_cashflow: Raise prices (improve cash flow)
+  assumption:
+    traffic: Traffic (most direct lever on revenue)
+    price: Unit price (demand elasticity)
+    vcr: Variable cost ratio
+    labor: Labor cost
 ss:
   label:
     industry: Industry

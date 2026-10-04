@@ -15,16 +15,20 @@
 import sys
 import os
 import json
+import re
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import i18n
 from tools.workflow_engine import quick_scan
 from tools import param_advisor
 from decision_engine import (
     decide, render_decision, build_evidence, policy,
-    normalize_type, forbidden_tone_scan,
+    normalize_type, forbidden_tone_scan, forbidden_tone_words,
 )
 from router.intent import decide_type_of
+
+_CJK = re.compile(r"[一-鿿]")
 
 
 def _scan(params: dict) -> dict:
@@ -76,11 +80,43 @@ def test_g6_missing_vc_insufficient():
     assert "Not yet determinable" in md
 
 
+# 倾向词按 locale 分桶：中文样例只在 zh 下该命中，英文样例只在 en 下该命中。
+# 历史事故：词表曾是一张纯中文平表，en 部署下 LLM 说英文 → 恒不命中 →
+# D5 硬守卫在英文版静默失效。这里两个 locale 都验，才守得住「两边都真生效」。
+_TONE_BAD = {
+    "zh": ["建议你先把月租谈下来", "你应该立刻提价"],
+    "en": ["You should renegotiate the rent first", "You must raise prices right now"],
+}
+_TONE_OK = {
+    "zh": "在现有数据下月利润 -2100 元",
+    "en": "Under the current data, monthly profit is -2100",
+}
+
+
 def test_forbidden_tone_scan():
-    """D5 硬守卫：LLM 输出命中倾向词被检出。"""
-    assert forbid_has("建议你先把月租谈下来")
-    assert forbid_has("你应该立刻提价")
-    assert not forbid_has("在现有数据下月利润 -2100 元")
+    """D5 硬守卫：LLM 输出命中倾向词被检出（每个 locale 的词表都要真生效）。"""
+    for loc in i18n.SUPPORTED_LOCALES:
+        i18n.set_locale(loc)
+        assert forbidden_tone_words(), f"{loc} 词表为空 —— 守卫形同虚设"
+        for bad in _TONE_BAD[loc]:
+            assert forbid_has(bad), f"{loc} 未检出倾向词：{bad}"
+        assert not forbid_has(_TONE_OK[loc]), f"{loc} 中立表述被误判：{_TONE_OK[loc]}"
+    i18n.reset_locale()
+
+
+def test_forbidden_tone_is_locale_aware():
+    """反向自证：zh 的中文倾向词在 en 词表下不应被拿来当判据（反之亦然）。
+
+    塞回改前的实现（一张平表不分 locale）会在 en 下把中文词当判据 ——
+    英文输出永远命中不了，这条断言就是那个静默失效的负向探针。
+    """
+    i18n.set_locale("en")
+    en_words = forbidden_tone_words()
+    assert en_words and all(not _CJK.search(w) for w in en_words), en_words
+    i18n.set_locale("zh")
+    zh_words = forbidden_tone_words()
+    assert zh_words and all(_CJK.search(w) for w in zh_words), zh_words
+    i18n.reset_locale()
 
 
 def test_d9_ranking_uses_policy():
@@ -105,7 +141,7 @@ def test_render_no_tendency_words():
     d = _scan(_FULL)
     res = decide("turnaround", d, d.get("basis"), _FULL, _suggest(_FULL))
     md = render_decision(res)
-    for bad in policy()["output"]["forbidden_tone_words"]:
+    for bad in forbidden_tone_words():
         assert bad not in md, f"渲染结果含倾向词 {bad}"
 
 

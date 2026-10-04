@@ -16,8 +16,33 @@ from typing import Optional
 
 import yaml
 
-from i18n import t
+from i18n import t, get_locale
 from source_tags import INFINITE_MARK, MISSING, code_of
+
+# 字段 → 选项展示名（i18n 键）。配置里的 lever_candidates 可以自带 label_key
+# 覆盖它（同一字段在不同决策类型下措辞不同，如「提价（考验需求弹性）」与
+# 「提价（改善现金流）」）。
+_FIELD_LABEL_KEYS = {
+    "price_per_unit": "de.opt.price",
+    "monthly_fixed_cost": "de.opt.fixed_cost",
+    "avg_salary": "de.opt.avg_salary",
+    "employee_count": "de.opt.employee_count",
+    "variable_cost_ratio": "de.opt.variable_cost",
+    "daily_traffic": "de.opt.traffic",
+    "monthly_rent": "de.opt.rent",
+    "other_fixed": "de.opt.other_fixed",
+}
+
+
+def _field_label(field: str, label_key: str = "") -> str:
+    """选项/杠杆的展示名，一律出自 i18n。
+
+    历史事故：config/decision_policy.yaml 曾直接写中文 `label`，本模块把
+    `cand["label"]` 原样塞进 op["label"] 渲染给用户 —— 英文部署每次「怎么扭亏」
+    都漏中文，而 en.yaml 干净、静态守卫（只扫源码和 en.yaml）查不到。
+    现在配置只给 key，展示文案的唯一出处是 src/i18n/{zh,en}.yaml。
+    """
+    return t(label_key or _FIELD_LABEL_KEYS.get(field) or f"field.label.{field}")
 
 _POLICY_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -166,16 +191,6 @@ def _options_from_suggest(suggest_data: dict, current_params: dict, base_conf: d
     from op_executor import validate_op
     suggestions = suggest_data.get("suggestions") or []
     best_by_field: dict = {}
-    label_map = {
-        "price_per_unit": "de.opt.price",
-        "monthly_fixed_cost": "de.opt.fixed_cost",
-        "avg_salary": "de.opt.avg_salary",
-        "employee_count": "de.opt.employee_count",
-        "variable_cost_ratio": "de.opt.variable_cost",
-        "daily_traffic": "de.opt.traffic",
-        "monthly_rent": "de.opt.rent",
-        "other_fixed": "de.opt.other_fixed",
-    }
     for s in suggestions:
         field = s.get("target_param")
         if not field or field == "monthly_fixed_cost":
@@ -183,10 +198,10 @@ def _options_from_suggest(suggest_data: dict, current_params: dict, base_conf: d
         op = {
             "propose": "set", "field": field, "value": s.get("suggested"),
             "changes": {field: s.get("suggested")},
-            # 回退到 field.label.* 而非裸字段名：label_map 未覆盖的 target_param
-            #（如 multiple）会让 t(field) 报 missing key，把 "[i18n:missing:xxx]"
-            # 直接显示给用户。
-            "label": t(label_map.get(field) or f"field.label.{field}"),
+            # 回退到 field.label.* 而非裸字段名：_FIELD_LABEL_KEYS 未覆盖的
+            # target_param（如 multiple）会让 t(field) 报 missing key，把
+            # "[i18n:missing:xxx]" 直接显示给用户。
+            "label": _field_label(field),
             "_delta": s.get("expected_profit_delta", 0),
         }
         from op_executor import validate_op
@@ -241,7 +256,8 @@ def _leverk_make_options(decision_type: str, scan: dict, basis: dict, params: di
         cur = params.get(fld)
         if not isinstance(cur, (int, float)) or cur <= 0:
             continue
-        op = {"propose": "set", "field": fld, "label": cand.get("label", fld)}
+        op = {"propose": "set", "field": fld,
+              "label": _field_label(fld, cand.get("label_key", ""))}
         # 方向由盈亏方向决定：亏损则按「提升收入/压缩成本」推一个可行步长
         if fld == "price_per_unit":
             op["value"] = round(cur * 1.2, 2)
@@ -525,7 +541,24 @@ def render_decision(decision_result: dict) -> str:
     return "\n".join(lines)
 
 
+def forbidden_tone_words() -> list:
+    """当前 locale 的禁止倾向词表。
+
+    按 locale 取：en 部署下 LLM 说英文，中文词表永远命中不了 → 守卫恒空 →
+    整条 D5 硬约束在英文版静默失效。词表在 decision_policy.yaml 按 zh/en 分桶。
+    """
+    words = style().get("forbidden_tone_words") or {}
+    if isinstance(words, dict):
+        words = words.get(get_locale()) or []
+    return list(words)
+
+
 def forbidden_tone_scan(text: str) -> list:
-    """扫描 LLM 输出中的禁止倾向词（D5 硬守卫，供 web_server 检测并打回）。"""
-    bad = [w for w in style().get("forbidden_tone_words", []) if w in text]
+    """扫描 LLM 输出中的禁止倾向词（D5 硬守卫，供 web_server 检测并打回）。
+
+    大小写不敏感：英文里 "You should ..."（句首大写）与 "you should" 是同一个
+    倾向词，逐字比对会漏掉句首那一半。
+    """
+    hay = (text or "").lower()
+    bad = [w for w in forbidden_tone_words() if w.lower() in hay]
     return bad

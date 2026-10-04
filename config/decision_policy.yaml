@@ -6,34 +6,37 @@ decision_types:
   # 怎么扭亏：从亏损出发，找互斥可执行的杠杆选项
   turnaround:
     option_cap: 4
-    # 每个可能选项：改哪个字段 + 标签
+    # 每个可能选项：改哪个字段 + 标签。
+    # label_key 是 i18n 键（→ src/i18n/{zh,en}.yaml 的 policy.lever.*），
+    # **此处不得写展示文案**：引擎把 cand 的标签原样塞进 op["label"] 渲染给用户，
+    # 写中文 = 英文部署每次「怎么扭亏」都漏中文（真实事故，2026-10-05）。
     lever_candidates:
       - field: price_per_unit
-        label: "提价（考验需求弹性）"
+        label_key: "policy.lever.price_up_elasticity"
       - field: daily_traffic
-        label: "提升客流（验证获客）"
+        label_key: "policy.lever.traffic_acquisition"
       - field: avg_salary
-        label: "优化人力成本"
+        label_key: "policy.lever.labor_cost_optimize"
       - field: employee_count
-        label: "精简团队"
+        label_key: "policy.lever.team_slim"
       - field: variable_cost_ratio
-        label: "降低变动成本率"
+        label_key: "policy.lever.vcr_down"
       - field: monthly_rent
-        label: "重新谈租金/迁址"
+        label_key: "policy.lever.rent_renegotiate"
       - field: other_fixed
-        label: "削减其他固定支出"
+        label_key: "policy.lever.other_fixed_cut"
   # 先验证什么：找「不确定性最大 × 影响最大」的假设
   validate_first:
     option_cap: 3
     candidate_assumptions:
       - field: daily_traffic
-        label: "客流（最直接影响营收）"
+        label_key: "policy.assumption.traffic"
       - field: price_per_unit
-        label: "客单价（需求弹性）"
+        label_key: "policy.assumption.price"
       - field: variable_cost_ratio
-        label: "变动成本率"
+        label_key: "policy.assumption.vcr"
       - field: avg_salary
-        label: "人工成本"
+        label_key: "policy.assumption.labor"
   # 开不开 / 继续还是关：基于盈亏平衡与跑道
   go_no_go:
     option_cap: 3
@@ -46,11 +49,11 @@ decision_types:
     option_cap: 3
     lever_candidates:
       - field: monthly_rent
-        label: "压低固定成本（延长跑道）"
+        label_key: "policy.lever.rent_down_runway"
       - field: employee_count
-        label: "精简人力（延长跑道）"
+        label_key: "policy.lever.labor_slim_runway"
       - field: price_per_unit
-        label: "提价（改善现金流）"
+        label_key: "policy.lever.price_up_cashflow"
   # 多方案选择
   choose:
     option_cap: 4
@@ -102,10 +105,21 @@ veto:
 
 # 决策输出规范（D5/D6）：LLM 禁止倾向词，规则层只产出客观结构
 output:
+  # 按 locale 分桶。历史上这里是一张**纯中文**平表：en 部署下 LLM 输出英文，
+  # 中文词永远命中不了 → forbidden_tone_scan 恒返回空 → D5 硬守卫在英文版
+  # 等于不存在（静默失效，2026-10-05 发现）。中文只允许出现在 zh 桶里。
   forbidden_tone_words:
-    - "建议你"
-    - "你应该"
-    - "必须"
-    - "千万不要"
-    - "最好"
-    - "推荐你"
+    zh:
+      - "建议你"
+      - "你应该"
+      - "必须"
+      - "千万不要"
+      - "最好"
+      - "推荐你"
+    en:
+      - "you should"
+      - "you must"
+      - "I recommend"
+      - "we recommend"
+      - "you'd better"
+      - "make sure you"

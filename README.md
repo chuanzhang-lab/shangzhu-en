@@ -6,7 +6,7 @@ A local-first financial modeling workbench for micro-entrepreneurs opening a noo
 
 **Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
-**Version / 版本：`0.4.1`**
+**Version / 版本：`0.4.2`**
 
 ---
 
@@ -29,6 +29,30 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 ---
 
 ## What's New / 更新内容
+
+### `0.4.2` — English edition: no more Chinese in decision options; the tone guard actually works
+
+#### English
+
+Two defects that only existed in the English deployment, both found by scanning config files rather than source code:
+
+- **Decision options were labelled in Chinese.** `config/decision_policy.yaml` stored display text directly (`提价（考验需求弹性）`), and the engine copied `cand["label"]` straight into `op["label"]` — so every "how do I turn this around" answer showed Chinese labels, full-width brackets included. The file now stores i18n keys only (`label_key → policy.lever.*`); the strings live in `src/i18n/{zh,en}.yaml`.
+- **The D5 tone guard was dead.** `forbidden_tone_scan` matched a flat list of *Chinese* phrases. An English LLM never writes Chinese, so it never matched, and the "no prescriptive language" rule silently did nothing. The word list is now per-locale (`zh:` / `en:` buckets) and matching is case-insensitive.
+
+Both are now guarded: `test_config_dir_has_no_renderable_chinese` scans **every** YAML under `config/` (default-scan-all with a named exception list, not a registry), and `test_english_decision_options_have_no_chinese` renders a real decision end-to-end in English.
+
+Also: the two editions' production databases are now formally separated — `shangzhu_en` starts **empty**, nothing is migrated from the Chinese edition's `shangzhu`, and `test_en_code_never_targets_zh_prod_db` fails if any code path points back at it.
+
+#### 中文
+
+两个只在英文部署下存在的缺陷，都是扫配置文件而不是扫源码才发现的：
+
+- **决策选项是中文标签。** `config/decision_policy.yaml` 里直接存展示文案（`提价（考验需求弹性）`），引擎把 `cand["label"]` 原样塞进 `op["label"]` —— 每次「怎么扭亏」的答案都是中文标签，还带着全角括号。现在配置只存 i18n 键（`label_key → policy.lever.*`），文案进 `src/i18n/{zh,en}.yaml`。
+- **D5 语气守卫是死的。** `forbidden_tone_scan` 匹配的是一张**中文**词表，英文 LLM 不会写中文，永远命中不了 —— 「不许说倾向性措辞」这条硬约束静默失效。词表改成按 locale 分桶（`zh:` / `en:`），匹配改为大小写不敏感。
+
+两处都上了护栏：`test_config_dir_has_no_renderable_chinese` 默认扫描 `config/` 下**所有** YAML（例外点名到路径，不是登记制），`test_english_decision_options_have_no_chinese` 端到端真渲染一次英文决策。
+
+另外：两仓生产库正式分家 —— `shangzhu_en` **空库起步**，不迁移中文仓 `shangzhu` 的任何数据，`test_en_code_never_targets_zh_prod_db` 会在任何代码指回该库时报错。
 
 ### `0.4.1` — Frontend asset caching: dynamic version + no-cache
 
@@ -271,6 +295,8 @@ API key is read in four priority levels:
 4. Empty string (not configured)
 
 **Persistence** defaults to `postgresql://<system user>@localhost:5432/shangzhu_en` (the English edition's own database, separate from the Chinese edition's `shangzhu`), overridable via `PGDATABASE_URL` or `db_url` in `config/storage.json`. The database is auto-created on first connect. Fallback chain: **PostgreSQL → local JSON file → memory**; the first two survive restarts. If PG is unavailable the service keeps running — only sessions are lost on restart.
+
+**The English edition starts from zero.** `shangzhu_en` is created empty; no data is migrated from the Chinese edition's `shangzhu` (the rows there were mixed in while both editions shared one database, and they carry no marker saying which product they belong to). Guarded by `test_en_code_never_targets_zh_prod_db` — the two editions must never be wired back together.
 
 Both config files containing secrets/local info are `600`-permission and untracked. Database backup: `./scripts/backup_db.sh shangzhu_en` (keeps the last 7).
 

@@ -199,6 +199,66 @@ def test_industry_config_is_locale_free():
         )
 
 
+# ── config/ 全目录：默认全扫 + 窄例外（不搞登记制）───────────────────────
+# 方向很重要：白名单（登记了才扫）漏登记就没人管 —— 上面那条只扫
+# `industry_templates.yaml` 的 benchmark 子树，正是登记制，于是
+# decision_policy.yaml 整片没人看。这条改成**默认扫全部**，例外必须是
+# 点名到路径的窄口子，并且要写出「为什么这个值不是展示文案」。
+_CONFIG_CJK_EXCEPTIONS = (
+    # 行业别名是**数据键**不是展示文案：值指向 industry_templates 的行业名
+    #（与 i18n 的 bench.*.餐饮 同键），引擎靠它查模板，用户永远看不到。
+    ("config/industry_templates.yaml", "industry_aliases"),
+    # 禁止倾向词按 locale 分桶：中文**只允许**出现在 zh 桶里，en 桶必须英文
+    #（否则 en 部署下中文词表永不命中 → D5 硬守卫静默失效）。
+    ("config/decision_policy.yaml", "output.forbidden_tone_words.zh"),
+)
+
+
+def _walk_strings(node, path=""):
+    """递归产出 (点分路径, 字符串值)。"""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _walk_strings(v, f"{path}.{k}" if path else str(k))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _walk_strings(v, f"{path}[{i}]")
+    elif isinstance(node, str):
+        yield path, node
+
+
+def test_config_dir_has_no_renderable_chinese():
+    """config/ 下**所有** YAML 的值里不得有中文（默认全扫 + 窄例外）。
+
+    实测教训：旧守卫只登记了 industry_templates 的 benchmark 子树，
+    于是 decision_policy.yaml 的 14 条 `label` 一直无人看管 ——
+    引擎把 `cand["label"]` 原样塞进 `op["label"]` 渲染，英文版每次
+    「怎么扭亏」都漏中文（如「提价（考验需求弹性）」），全角括号一并带出。
+    """
+    import yaml
+
+    offenders = []
+    cfg_dir = os.path.join(ROOT, "config")
+    for name in sorted(os.listdir(cfg_dir)):
+        if not name.endswith((".yaml", ".yml")):
+            continue
+        rel = f"config/{name}"
+        with open(os.path.join(cfg_dir, name), "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        for path, val in _walk_strings(data):
+            if not _CJK.search(val):
+                continue
+            if any(rel == f and path.startswith(p) for f, p in _CONFIG_CJK_EXCEPTIONS):
+                continue
+            offenders.append(f"  {rel}: {path} -> {val!r}")
+
+    assert not offenders, (
+        "config/ 里出现中文字面量 —— 展示文案必须进 src/i18n/{zh,en}.yaml，"
+        "配置只放与语言无关的值（key / 数值 / 规则）。\n"
+        "确属数据键或按 locale 分桶的规则词表的，加进 _CONFIG_CJK_EXCEPTIONS "
+        "并在那里写明理由：\n" + "\n".join(offenders)
+    )
+
+
 def test_bench_i18n_covers_every_industry_in_config():
     """i18n 是行业基准文案的**唯一出处**：配置里每个行业都得有四项。
 
@@ -624,6 +684,52 @@ def test_english_markdown_report_has_no_chinese_and_no_missing_key():
                 "已识别行业（餐饮）却渲染成「暂无基准」—— 基准查找用的"
                 "行业键被换成了展示名（project_type），应改用 industry_key"
             )
+
+
+def test_english_decision_options_have_no_chinese():
+    """英文部署：决策选项（lever label）端到端渲染不得含中文。
+
+    为什么要单独加这条：前面两条端到端守卫只走 `quick_scan`。而杠杆选项的
+    标签出自 config/decision_policy.yaml，由 decision_engine 直接塞进
+    op["label"] —— 这条分支从未被端到端断言过，于是配置里躺了 14 条中文
+    label（「提价（考验需求弹性）」等，带全角括号）照样全绿。
+    """
+    import json
+
+    from decision_engine import decide, render_decision
+
+    # 亏损场景才走得出 lever 选项：营收 40×12×30=14400，固定成本 8000+12000=20000
+    loss_params = {
+        "monthly_rent": 8000, "employee_count": 3, "avg_salary": 4000,
+        "daily_traffic": 40, "price_per_unit": 12,
+        "variable_cost_ratio": 0.5, "total_investment": 200000,
+    }
+    d = _scan_en(loss_params)
+    i18n.set_locale("en")
+    try:
+        res = decide("turnaround", d, d.get("basis"), loss_params, None)
+        md = render_decision(res)
+    finally:
+        i18n.reset_locale()
+
+    # 先自证这条路径真的产生了选项：否则断言是空的（守卫自己骗自己）。
+    opts = res.get("options") or []
+    assert opts, "亏损场景没产出任何选项 —— 本条守卫形同虚设，需换场景"
+
+    blob = json.dumps(res, ensure_ascii=False)
+    hits = _cjk_hits(blob)
+    assert not hits, (
+        f"英文决策结果含中文：{hits}\n"
+        + "\n".join(f"  option: {o.get('label')!r}" for o in opts
+                    if _CJK.search(str(o.get("label"))))
+    )
+    md_hits = _cjk_hits(md)
+    assert not md_hits, f"英文决策 markdown 含中文：{md_hits}"
+    assert "[i18n:missing:" not in md, (
+        "决策 markdown 出现缺失键标记 —— 多半是配置里的 label_key 在 "
+        "src/i18n/en.yaml 没有对应值：\n"
+        + "\n".join(l for l in md.splitlines() if "[i18n:missing:" in l)
+    )
 
 
 def test_chinese_rendered_output_is_unchanged():
