@@ -47,6 +47,7 @@ if ! "$VENV_PY" -c "from web_server import app; assert app is not None" 2>/tmp/s
 fi
 
 echo "[shangzhu] 启动中... (端口 $PORT, 日志: $LOG)"
+echo "[shangzhu] 升级后请让浏览器硬刷新（Ctrl/Cmd+Shift+R）：长开的旧标签页会显示过期横幅"
 exec "$VENV_PY" -c "
 import uvicorn
 from web_server import app

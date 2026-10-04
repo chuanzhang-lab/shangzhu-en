@@ -167,6 +167,29 @@ def _read_app_version() -> str:
 
 APP_VERSION = _read_app_version()
 
+
+_GIT_COMMIT: Optional[str] = None  # 进程内缓存：commit 不随请求变化，算一次即可
+
+
+def _git_commit() -> str:
+    """当前代码 commit（E-07 观测位）：git rev-parse --short HEAD，进程内缓存一次。
+
+    失败（git 不在 / 非 git 部署 / 子进程超时）降级 `unknown` —— 同
+    _read_app_version「缺失不冒充」原则，宁可显式回 unknown，不编假 hash。
+    """
+    global _GIT_COMMIT
+    if _GIT_COMMIT is None:
+        import subprocess
+        try:
+            out = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=SCRIPT_DIR, stderr=subprocess.DEVNULL, timeout=2,
+            )
+            _GIT_COMMIT = out.decode("utf-8", "replace").strip() or "unknown"
+        except Exception:
+            _GIT_COMMIT = "unknown"
+    return _GIT_COMMIT
+
 def _setup_logging() -> logging.Logger:
     """配置控制台 + 文件双通道日志。"""
     log = logging.getLogger("web")
@@ -1117,6 +1140,9 @@ async def health(request: Request):
         "status": "ok",
         "model": get_model_name(),
         "version": APP_VERSION,
+        # 观测位（E-07）：服务跑的是哪个 commit。部署机排查「线上是哪次提交」
+        # 不用登机器看 git log；进程内缓存，失败降级 "unknown"。
+        "commit": _git_commit(),
         # 观测位：用户页面跑的是哪一版 app.js，不用开浏览器也能查到。
         # 这个值本来就在 HTML 的 ?v= 里公开，不属于需要藏的内部信息。
         "static_ver": _static_ver("app.js"),

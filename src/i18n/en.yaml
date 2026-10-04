@@ -643,6 +643,9 @@ ui:
     packaging: Packaging
     commission: Commission
     other_fixed: Other fixed
+  banner:
+    stale: Page version is out of date.
+    stale_hint: "Please hard-refresh (Ctrl/Cmd+Shift+R) to load the latest version."
   toast:
     no_param_change: No parameter changes detected
     current_params: 'Current params: '

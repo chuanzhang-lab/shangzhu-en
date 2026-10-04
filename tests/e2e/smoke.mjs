@@ -102,7 +102,19 @@ try {
   if (clientLogPosts.length) fail(`前端错误上报被触发（说明有静默失败）: ${clientLogPosts.length} 次`);
   if (failedRequests.length) fail(`请求失败: ${JSON.stringify(failedRequests)}`);
 
-  if (process.exitCode !== 1) log(`PASS: tasks=${taskCount}, console clean, no pageerror, no i18n missing, no client-log`);
+  // 6) E-07 版本握手：伪造「页面是旧版本」→ 与 /health 真版本不匹配 → 横幅必须出现。
+  //    不改磁盘文件（改 app.js 会弄脏工作区），强制改页面自版本即可等价复现不匹配分支。
+  await page.evaluate(() => { window.__APP_JS_VER__ = "stale-e2e-probe"; });
+  await page.evaluate(() => window.checkVersionHandshake());
+  try {
+    await page.waitForSelector("#stale-banner", { timeout: 3000 });
+    log("stale banner shown on version mismatch");
+  } catch {
+    fail("版本握手失效：伪造旧版本后过期横幅未出现");
+  }
+  await assertNoMissingKeys(page, "版本握手横幅");
+
+  if (process.exitCode !== 1) log(`PASS: tasks=${taskCount}, console clean, no pageerror, no i18n missing, no client-log, handshake ok`);
 } catch (e) {
   fail(String(e && e.stack ? e.stack : e));
 } finally {

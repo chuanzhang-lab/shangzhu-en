@@ -634,6 +634,9 @@ ui:
     packaging: 包装
     commission: 提成
     other_fixed: 其他固定
+  banner:
+    stale: 页面版本已过旧。
+    stale_hint: 请硬刷新（Ctrl/Cmd+Shift+R）加载最新版本。
   toast:
     no_param_change: 未检测到参数改动
     current_params: 当前参数：

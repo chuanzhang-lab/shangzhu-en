@@ -1114,4 +1114,42 @@ async function send() {
   finally { clearTimeout(timeoutId); if (activeCtrl === ctrl) activeCtrl = null; busy = false; sendBtn.disabled = false; input.disabled = false; input.focus(); }
 }
 
+// ── E-07 版本握手：长开标签页无从自证「我跑的是哪版 app.js」──
+// 2026-10-01 事故形态：磁盘代码已修好，用户页面却还在跑旧前端复现已修复 bug。
+// 页面加载时把自身 ?v= 存进 __APP_JS_VER__，加载后 + 每次 catch 与 /health 的
+// static_ver 比对，不一致 → 顶部横幅提示硬刷新（catch 侧接线见 E-05 统一模板）。
+window.__APP_JS_VER__ = (function () {
+  let src = (document.currentScript && document.currentScript.src) || '';
+  if (!src) {
+    const el = document.querySelector('script[src*="app.js"]');
+    src = el ? el.src : '';
+  }
+  const m = src.match(/[?&]v=([^&]+)/);
+  return m ? m[1] : '';
+})();
+
+function showStaleBanner() {
+  if (document.getElementById('stale-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'stale-banner';
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:1000;background:#b45309;color:#fff;text-align:center;padding:8px 16px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+  el.textContent = t('ui.banner.stale') + ' ' + t('ui.banner.stale_hint');
+  document.body.appendChild(el);
+}
+
+function checkVersionHandshake() {
+  // 自身版本取不到（__APP_JS_VER__ 空）不冒充过期——缺失不冒充，静默跳过。
+  // 握手请求失败只 console.warn 留痕（降级必有痕），不打扰用户。
+  fetch('/health')
+    .then(r => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+    .then(d => {
+      if (d.static_ver && window.__APP_JS_VER__ && d.static_ver !== window.__APP_JS_VER__) {
+        showStaleBanner();
+      }
+    })
+    .catch(e => { console.warn('[checkVersionHandshake] 版本握手失败:', e.message); });
+}
+window.checkVersionHandshake = checkVersionHandshake; // e2e / E-05 catch 模板调用点
+
 loadTasks();
+checkVersionHandshake();
