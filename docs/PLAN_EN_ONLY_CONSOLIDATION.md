@@ -36,7 +36,7 @@ LLM 只作 **Engine Steward（只读协作者）**，仅在闲聊与「AI 解读
 
 | 项 | 事实 |
 |---|---|
-| 技术栈 | Python 3.12 / FastAPI + uvicorn / langchain 1.0.3 + langgraph 1.0.2 / psycopg 3（PostgreSQL）/ PyYAML / openpyxl |
+| 技术栈 | Python 3.12 / FastAPI + uvicorn / langchain 1.0.3 + langgraph 1.0.2 / **SQLite（标准库）**/ PyYAML / openpyxl（2026-10-06：psycopg + PostgreSQL 已移除）|
 | 依赖管理 | `uv` + `pyproject.toml` + `uv.lock`（210KB，完整锁定）；**无 requirements.txt** |
 | 代码规模 | 22,349 行 Python；45 个测试文件、502 个测试函数 |
 | 模块划分 | `router`(2341 行/5 文件) · `tools`(4437 行/11 文件) · `storage`(570 行/2 文件) · `advisor`(228 行/2 文件) · `i18n`(166 行/1 文件) |
@@ -62,7 +62,8 @@ LLM 只作 **Engine Steward（只读协作者）**，仅在闲聊与「AI 解读
 |---|---|---|
 | Python 运行时 | 3.12.12（项目 `.venv`） | ✅ 满足 `requires-python >= 3.12` |
 | uv | 0.10.2 | ✅ |
-| PostgreSQL | 16.14（Homebrew） | ✅ 活跃，`PostgresStore` 已连接 |
+| 数据库 | 无（SQLite 单文件，标准库） | ✅ 不再依赖任何外部数据库服务 |
+| PostgreSQL | 16.14（Homebrew） | ➖ 已弃用（0.5.0 起本仓不再连接；仅中文仓 shangzhu 仍用）|
 | 依赖可安装 | `uv.lock` 完整，核心依赖可导入 | ✅ |
 | web_server 导入 | OK | ✅ |
 | LLM key | 已配置 | ✅ |
@@ -149,7 +150,7 @@ LLM 只作 **Engine Steward（只读协作者）**，仅在闲聊与「AI 解读
 | 对象 | 路径 | 理由 |
 |---|---|---|
 | 中文版仓库 | `/Users/newmacbook/Desktop/shangyezhushou/shangzhu/` | **独立项目**（独立 git remote `chuanzhang-lab/shangzhu`），不属本次改造 |
-| 第三方库源码 | `.venv/` 内 langchain / fastapi / psycopg 等 | 只在 `pyproject.toml` 声明，不改其源码 |
+| 第三方库源码 | `.venv/` 内 langchain / fastapi 等 | 只在 `pyproject.toml` 声明，不改其源码 |
 | 用户级配置 | `~/.hermes/`、`~/.vscode/`、系统配置 | 与项目无关 |
 | 本地工具元数据 | `.workbuddy/`、`.pytest_cache/`、`logs/`、`output/`、`reports/` | 运行产物，已 gitignore |
 | 未跟踪历史文档 | `docs/fix-plan-2026-09-30.md` | 用户已明确**不推送远程**，本次不纳入改造 |

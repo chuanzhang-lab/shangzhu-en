@@ -242,9 +242,9 @@ session_state.py   运行时唯一真相源（跨轮 params merge，纯内存，
    ▼
 storage/local_store.py
    ├─ BaseStore（接口契约）
-   ├─ MemoryStore（PG 不可用时降级 / 测试）
-   └─ PostgresStore（psycopg3 直连本机 PG，单连接 autocommit）
-        └─ PostgreSQL 16：库 shangzhu_en，表 tasks / messages
+   ├─ MemoryStore（SQLite 建不起来时兜底 / 测试；会丢数据，降级打 ERROR）
+   └─ SqliteStore（唯一持久化档，2026-10-06 取代 PostgresStore）
+        └─ data/shangzhu_en.db（WAL 模式；表 tasks / messages，首连幂等建表）
 ```
 
 **持久化接缝**：`_persist_turn(store, tid, user_msg, content)` 在 /chat 各成功分支调用——写 user+assistant 消息 + params 业务字段快照。只存非 `_` 前缀字段（复用 `to_llm_view` 过滤思路），不把 `_pending_ops` 等运行时临时键落盘。内部通过 `to_llm_view(tid)` 获取锁内拷贝，避免持有 SessionState 引用迭代（F4 修复）。
@@ -262,9 +262,12 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 
 ### 8.3 配置与降级
 
-- 连接串：`PGDATABASE_URL`（默认 `postgresql://newmacbook@localhost:5432/shangzhu_en`，与中文仓 `shangzhu` 物理分库）。
-- 建库建表：`scripts/init_db.py`（幂等，可重复执行）；库不存在时 PostgresStore 首连也会自动建库。
-- 降级：PG 连不上 → `get_store()` 回落 `LocalFileStore`（JSON 文件，重启不丢）→ 再降 `MemoryStore`（服务不崩）。`/health?detail=1` 的 `store_backend` / `store_target` 字段指示当前后端与数据落点。
+- 数据文件：`SHANGZHU_DB_PATH` env → `config/storage.json` 的 `db_path` → 默认 `data/shangzhu_en.db`。
+- 建表：`SqliteStore` 首连执行 `SQLITE_SCHEMA_SQL`（CREATE IF NOT EXISTS，幂等）。**没有建库步骤**——文件按需创建，`scripts/init_db.py` 已删。
+- 并发前提：SQLite 写锁是**库级**的，本 store 假设**单进程**写。当前 `start.sh` 是单进程 uvicorn 且 store 写全在事件循环线程串行（实测），前提成立；改 `--workers` 或加后台写进程前必须重估。
+- 两处易踩的实现细节：① 外键 `PRAGMA foreign_keys` **默认 OFF**，每次建连都要显式 ON，只在 DDL 写 `ON DELETE CASCADE` 不生效；② 时间戳由 Python 侧生成 UTC ISO 串，不用 SQL `datetime('now')`（返回无时区标记的 UTC 串，混用会让 `ORDER BY updated_at` 排错）。
+- 降级：SQLite 建不起来 → `MemoryStore`（服务不崩，但**打 ERROR 不是 WARNING**——这一档重启即丢）。`/health?detail=1` 的 `store_backend` / `store_target` 指示当前后端与落点（target 只回文件名，不暴露绝对路径）。
+- 备份：`scripts/backup_db.sh` 走 SQLite backup API（WAL 下裸 `cp` 主文件会漏 `-wal` 里的事务）；`scripts/export_tasks_json.py` 导出与后端无关的 JSON。
 
 ### 8.4 软删
 
@@ -272,7 +275,7 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 
 ### 8.5 验证
 
-- 存储层单测：`tests/test_local_store.py`（MemoryStore 契约 + PostgresStore 端到端，PG 不在则跳过）。
+- 存储层单测：`tests/test_local_store.py`（MemoryStore 契约 + SqliteStore 端到端，零外部依赖，不跳过）与 `tests/test_sqlite_store.py`（落盘语义：跨实例存活、params 类型、时间戳可解析、外键级联、备份完整性）。
 - API 契约：`tests/test_task_api.py`（TestClient + 内存 store 隔离，不污染真实 PG）。
 - 全量回归：`make test`（= pytest 全量收集 `tests/` 全部 33 个文件，当前 **355 passed / 0 failed**）。
 - 端到端已验证：双任务独立上下文；跨轮 merge；重启服务后历史保留。

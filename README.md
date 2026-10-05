@@ -6,7 +6,7 @@ A local-first financial modeling workbench for micro-entrepreneurs opening a noo
 
 **Chinese edition (separate repo): [chuanzhang-lab/shangzhu](https://github.com/chuanzhang-lab/shangzhu)**
 
-**Version / 版本：`0.4.2`**
+**Version / 版本：`0.5.0`**
 
 ---
 
@@ -30,6 +30,30 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 ## What's New / 更新内容
 
+### `0.5.0` — Storage moves to SQLite: no database server to install
+
+#### English
+
+The workbench now stores tasks in a single SQLite file instead of PostgreSQL. Nothing to install, nothing to start — the database is just a file.
+
+- **Why.** The old setup needed a PostgreSQL server running, but `setup.sh` never installed or started one. On a clean machine the "preferred" backend was therefore unreachable and the app silently fell back to a JSON file. Worse, the documented backup command (`pg_dump`) isn't installed here either, so backups were quietly broken. For a single-process, single-user app, a client/server database was paying for capacity that isn't used.
+- **What changed.** One persistent backend (SQLite) plus the in-memory fallback, instead of three tiers. `psycopg` is gone from the dependencies. `get_store()` logs an **ERROR** when it has to fall back, because that tier loses data — previously a fallback was only a warning, which made data loss look routine.
+- **Backups actually work now.** `./scripts/backup_db.sh` uses SQLite's backup API (not `cp` — the store runs in WAL mode, so the main file alone can be an incomplete snapshot). `./scripts/export_tasks_json.py` writes a backend-neutral JSON if you ever need to move data somewhere else.
+- **No data was migrated.** The English edition's database was empty; the rows in the Chinese edition's `shangzhu` database stay there (they were written while both editions shared one database, with nothing marking which product they belong to).
+
+Two implementation details worth knowing if you touch this code: SQLite's foreign keys are **off by default**, so `PRAGMA foreign_keys = ON` is set on every connection (declaring `ON DELETE CASCADE` in the DDL alone does nothing); and timestamps are generated in Python rather than by SQL `datetime('now')`, which returns a UTC string with no timezone marker and would sort wrong if mixed.
+
+#### 中文
+
+工作台的存储从 PostgreSQL 换成了单个 SQLite 文件。不用装、不用启——数据库就是一个文件。
+
+- **为什么换。** 旧方案需要一个在跑的 PostgreSQL 服务，但 `setup.sh` 既不装也不启它。于是在干净机器上「首选后端」根本连不上，应用静默降级到 JSON 文件；更糟的是文档里的备份命令用的是 `pg_dump`，本机根本没装，备份流程一直是坏的。对单进程单用户的应用来说，C/S 数据库是在为用不到的容量付钱。
+- **改了什么。** 持久化档从三档（PG → JSON → 内存）收敛成两档（SQLite → 内存）；`psycopg` 从依赖里删掉。`get_store()` 降级时打 **ERROR** 而不是 WARNING——那一档意味着重启即丢，给 WARNING 会把丢数据粉饰成「正常但慢一点」。
+- **备份现在真能用。** `./scripts/backup_db.sh` 走 SQLite 的 backup API（不是 `cp`：store 开在 WAL 模式，只拷主文件可能漏掉还留在 `-wal` 里的事务）。需要把数据搬走时用 `./scripts/export_tasks_json.py` 导出与后端无关的 JSON。
+- **没有迁移任何数据。** 英文版的库本来就是空的；中文仓 `shangzhu` 库里的行留在原处（那是两仓共库时期写的，没有标记能说明它们属于哪个产品）。
+
+两个实现细节，动这块代码时要知道：SQLite 的**外键默认是关的**，所以每次建连都要 `PRAGMA foreign_keys = ON`（只在 DDL 里写 `ON DELETE CASCADE` 是不生效的）；时间戳由 Python 侧生成而不用 SQL 的 `datetime('now')`——后者返回没有时区标记的 UTC 串，混用会让按更新时间排序排错。
+
 ### `0.4.2` — English edition: no more Chinese in decision options; the tone guard actually works
 
 #### English
@@ -41,7 +65,7 @@ Two defects that only existed in the English deployment, both found by scanning 
 
 Both are now guarded: `test_config_dir_has_no_renderable_chinese` scans **every** YAML under `config/` (default-scan-all with a named exception list, not a registry), and `test_english_decision_options_have_no_chinese` renders a real decision end-to-end in English.
 
-Also: the two editions' production databases are now formally separated — `shangzhu_en` starts **empty**, nothing is migrated from the Chinese edition's `shangzhu`, and `test_en_code_never_targets_zh_prod_db` fails if any code path points back at it.
+Also: the two editions' production databases are now formally separated — `shangzhu_en` starts **empty**, nothing is migrated from the Chinese edition's `shangzhu`, and `test_en_code_never_targets_zh_prod_db` fails if any code path points back at it. *(Superseded in 0.5.0: the English edition moved off PostgreSQL entirely, onto SQLite.)*
 
 #### 中文
 
@@ -52,7 +76,7 @@ Also: the two editions' production databases are now formally separated — `sha
 
 两处都上了护栏：`test_config_dir_has_no_renderable_chinese` 默认扫描 `config/` 下**所有** YAML（例外点名到路径，不是登记制），`test_english_decision_options_have_no_chinese` 端到端真渲染一次英文决策。
 
-另外：两仓生产库正式分家 —— `shangzhu_en` **空库起步**，不迁移中文仓 `shangzhu` 的任何数据，`test_en_code_never_targets_zh_prod_db` 会在任何代码指回该库时报错。
+另外：两仓生产库正式分家 —— `shangzhu_en` **空库起步**，不迁移中文仓 `shangzhu` 的任何数据，`test_en_code_never_targets_zh_prod_db` 会在任何代码指回该库时报错。（已在 0.5.0 被取代：英文版彻底离开 PostgreSQL，改用 SQLite。）
 
 ### `0.4.1` — Frontend asset caching: dynamic version + no-cache
 
@@ -294,11 +318,13 @@ API key is read in four priority levels:
 3. macOS Keychain (service=`shangzhu-llm`, account=`api_key`)
 4. Empty string (not configured)
 
-**Persistence** defaults to `postgresql://<system user>@localhost:5432/shangzhu_en` (the English edition's own database, separate from the Chinese edition's `shangzhu`), overridable via `PGDATABASE_URL` or `db_url` in `config/storage.json`. The database is auto-created on first connect. Fallback chain: **PostgreSQL → local JSON file → memory**; the first two survive restarts. If PG is unavailable the service keeps running — only sessions are lost on restart.
+**Persistence is a single SQLite file** — no database server to install or start. Default path `data/shangzhu_en.db`, overridable via `SHANGZHU_DB_PATH` or `db_path` in `config/storage.json`. Tables are created on first connect if missing. Fallback chain: **SQLite → memory**; if SQLite cannot be initialised the service keeps running but logs an **ERROR** (not a warning) because that tier means data is lost on restart.
 
-**The English edition starts from zero.** `shangzhu_en` is created empty; no data is migrated from the Chinese edition's `shangzhu` (the rows there were mixed in while both editions shared one database, and they carry no marker saying which product they belong to). Guarded by `test_en_code_never_targets_zh_prod_db` — the two editions must never be wired back together.
+**The English edition starts from zero.** No data is migrated from the Chinese edition's `shangzhu` database (the rows there were written while both editions shared one database, and they carry no marker saying which product they belong to). The two editions no longer share any storage concept at all — this one is SQLite, the Chinese edition is PostgreSQL.
 
-Both config files containing secrets/local info are `600`-permission and untracked. Database backup: `./scripts/backup_db.sh shangzhu_en` (keeps the last 7).
+Both config files containing secrets/local info are `600`-permission and untracked.
+
+**Backup:** `./scripts/backup_db.sh` (keeps the last 7). It goes through SQLite's backup API rather than `cp`, because the store runs in WAL mode and copying only the main file can miss transactions still sitting in the `-wal` file. Export to a backend-neutral JSON with `./scripts/export_tasks_json.py -o tasks.json`.
 
 ---
 
