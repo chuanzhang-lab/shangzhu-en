@@ -25,6 +25,7 @@
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -358,6 +359,70 @@ def _db_url() -> str:
     return _DEFAULT_DB_URL
 
 
+# ── SQLite：唯一持久化后端（2026-10-06 取代 PostgreSQL）──────────────────
+# 选型依据见 docs/db-sqlite-review-20261005.md：单机 + 单进程（uvicorn 无
+# worker）+ 单用户，用不上 C/S 数据库；SQLite 是 stdlib，干净机器 clone 后
+# 无需任何外部服务即可拿到真持久化（旧 PG 路径在没装 PG 的机器上会静默
+# 降级到 JSON 文件）。
+SQLITE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'New task',
+    params TEXT NOT NULL DEFAULT '{}',
+    industry TEXT,
+    turn INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    turn INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_task ON messages(task_id);
+"""
+
+
+def _sqlite_path() -> str:
+    """SQLite 数据文件路径。两级覆盖：env → config/storage.json → 内置默认。
+
+    以 __file__ 定位仓库根，不依赖 cwd——web_server 启动时会 chdir 到 src/。
+    """
+    env_path = os.getenv("SHANGZHU_DB_PATH")
+    if env_path and env_path.strip():
+        return env_path.strip()
+
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "config", "storage.json",
+    )
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        file_path = (cfg.get("db_path") or "").strip()
+        if file_path:
+            return file_path
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(root, "data", "shangzhu_en.db")
+
+
+def _utc_now_iso() -> str:
+    """UTC 时间戳（ISO-8601，带 +00:00）。
+
+    一律由 **Python 侧**生成，不用 SQL 的 datetime('now')：SQLite 那个函数
+    返回的是「无时区标记的 UTC 字符串」，与 Python 生成的格式不一致时，
+    `ORDER BY updated_at DESC` 会退化成按字符串比，混用即排序错乱。
+    """
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
 def _row_to_task(row) -> dict:
     """把 tasks 表的行转成与 MemoryStore 对齐的 dict。"""
     return {
@@ -580,6 +645,223 @@ class PostgresStore(BaseStore):
 
     def close(self) -> None:
         self._drop_conn()
+
+
+class SqliteStore(BaseStore):
+    """SQLite 单文件实现：**唯一持久化后端**（2026-10-06 起取代 PostgresStore）。
+
+    与旧 PG 实现的三处关键差异，都是踩过的坑：
+
+    1. **外键必须显式开**。SQLite 的 `PRAGMA foreign_keys` **默认是 OFF**
+       （实测 3.50.4 返回 0），DDL 里写了 `ON DELETE CASCADE` 也**不会生效**。
+       所以每次建连接都要显式 `PRAGMA foreign_keys = ON`——靠 DDL 声明是幻觉。
+       （注：当前 `delete_task` 是软删，级联还不会被动到；这条是给未来的
+       物理删除路径兜底，成本为零。）
+    2. **时间由 Python 侧生成**，不靠 SQL 的 `datetime('now')`：后者返回无时区
+       标记的 UTC 串，与 Python 侧格式混用会让 `ORDER BY updated_at` 排错。
+    3. **params 要显式 parse**。PG 的 JSONB 列读出来直接是 dict，SQLite 是 TEXT，
+       必须 `json.loads`——否则上层拿到字符串，`params["rent"]` 直接 KeyError。
+
+    **并发前提（写进代码别靠记性）**：本 store 假设**单进程**写。SQLite 的写锁
+    是库级的，开 `--workers N` 或多个进程同时写会 `database is locked`。
+    当前 `start.sh` 是单进程 uvicorn 且 store 写全在事件循环线程串行（实测），
+    前提成立；改动部署形态时必须重新评估。
+    """
+
+    def __init__(self, path: Optional[str] = None) -> None:
+        import sqlite3  # 延迟导入：与 psycopg 同理，顶层导入会让依赖声明失真
+
+        self._sqlite3 = sqlite3
+        self.path = path or _sqlite_path()
+        self._conn = None
+        self._lock = threading.Lock()  # 串行化所有写（沿用 PG 版 F9 的做法）
+
+    @property
+    def target(self) -> str:
+        """落点标识：**只回文件名**，不回绝对路径。
+
+        PG 版刻意只回库名不回连接串（防密码泄露）；SQLite 同理——/health 是
+        公开端点，把磁盘布局（绝对路径）暴露出去没必要。
+        """
+        return os.path.basename(self.path) or "?"
+
+    def _connect(self):
+        directory = os.path.dirname(self.path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        # 不吞异常、也不额外加 except 现场（E-08 审计表是库存契约，新增一处
+        # 就要改一次表）：建连/建表失败直接抛出，由 get_store() 的降级链接住。
+        conn = self._sqlite3.connect(self.path, check_same_thread=False)
+        # 外键默认 OFF（实测 PRAGMA 返回 0），不开则 ON DELETE CASCADE 静默不生效
+        conn.execute("PRAGMA foreign_keys = ON")
+        # WAL：读不阻塞写。代价是会多出 -wal/-shm 文件 —— 备份必须走
+        # Connection.backup()，裸 cp 主文件会得到不完整快照。
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.executescript(SQLITE_SCHEMA_SQL)
+        return conn
+
+    def _conn_or_create(self):
+        if self._conn is None:
+            self._conn = self._connect()
+        return self._conn
+
+    def _execute(self, fn):
+        """在锁内执行一段以 conn 为参数的 SQL（懒连接 + 幂等建表）。"""
+        with self._lock:
+            conn = self._conn_or_create()
+            return fn(conn)
+
+    def ping(self) -> None:
+        """连通性/可写性自检（含幂等建表）。构造后调用一次。"""
+        self._execute(lambda conn: conn.execute("SELECT 1").fetchone())
+
+    def create_task(self, name: str) -> dict:
+        tid = str(uuid.uuid4())
+        now = _utc_now_iso()
+
+        def _run(conn):
+            conn.execute(
+                "INSERT INTO tasks (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (tid, name, now, now),
+            )
+            conn.commit()
+
+        self._execute(_run)
+        return {
+            "id": tid,
+            "name": name,
+            "params": {},
+            "industry": None,
+            "turn": 0,
+            "created_at": now,
+            "updated_at": now,
+            "deleted_at": None,
+        }
+
+    def list_tasks(self) -> List[dict]:
+        def _run(conn):
+            cur = conn.execute(
+                "SELECT id, name, params, industry, turn, created_at, updated_at, deleted_at "
+                "FROM tasks WHERE deleted_at IS NULL ORDER BY updated_at DESC"
+            )
+            return cur.fetchall()
+
+        return [_row_to_task_sqlite(r) for r in self._execute(_run)]
+
+    def get_task(self, task_id: str) -> Optional[dict]:
+        def _run(conn):
+            cur = conn.execute(
+                "SELECT id, name, params, industry, turn, created_at, updated_at, deleted_at "
+                "FROM tasks WHERE id = ?",
+                (task_id,),
+            )
+            return cur.fetchone()
+
+        row = self._execute(_run)
+        return _row_to_task_sqlite(row) if row else None
+
+    def rename_task(self, task_id: str, name: str) -> None:
+        def _run(conn):
+            conn.execute(
+                "UPDATE tasks SET name = ?, updated_at = ? WHERE id = ?",
+                (name, _utc_now_iso(), task_id),
+            )
+            conn.commit()
+
+        self._execute(_run)
+
+    def update_params(self, task_id: str, params: dict) -> None:
+        def _run(conn):
+            conn.execute(
+                "UPDATE tasks SET params = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(params or {}), _utc_now_iso(), task_id),
+            )
+            conn.commit()
+
+        self._execute(_run)
+
+    def add_message(self, task_id: str, role: str, content: str, turn: int = 0) -> None:
+        def _run(conn):
+            conn.execute(
+                "INSERT INTO messages (task_id, role, content, turn, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (task_id, role, content, turn, _utc_now_iso()),
+            )
+            # 与 MemoryStore 对齐：单任务消息上限 500，超限删最旧，防无限增长
+            conn.execute(
+                "DELETE FROM messages WHERE task_id = ? AND id NOT IN ("
+                "SELECT id FROM messages WHERE task_id = ? ORDER BY id DESC LIMIT ?)",
+                (task_id, task_id, _MAX_MESSAGES_PER_TASK),
+            )
+            conn.commit()
+
+        self._execute(_run)
+
+    def get_messages(self, task_id: str) -> List[dict]:
+        def _run(conn):
+            cur = conn.execute(
+                "SELECT role, content, turn FROM messages WHERE task_id = ? ORDER BY id",
+                (task_id,),
+            )
+            return cur.fetchall()
+
+        return [{"role": r[0], "content": r[1], "turn": r[2]}
+                for r in self._execute(_run)]
+
+    def delete_task(self, task_id: str) -> None:
+        """软删：只置 deleted_at（与旧 PG 实现同语义，不物理删行）。"""
+        def _run(conn):
+            now = _utc_now_iso()
+            conn.execute(
+                "UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, task_id),
+            )
+            conn.commit()
+
+        self._execute(_run)
+
+    def backup_to(self, dest_path: str) -> None:
+        """在线备份：走 sqlite3 的 backup API。
+
+        开 WAL 后有 -wal/-shm 伴随文件，**只 cp 主文件会得到不完整快照**，
+        必须走这个 API（它会正确处理 WAL 状态）。
+        """
+        with self._lock:
+            src = self._conn_or_create()
+            dest = self._sqlite3.connect(dest_path)
+            try:
+                src.backup(dest)
+            finally:
+                dest.close()
+
+    def close(self) -> None:
+        # 先把引用摘掉再关：即使 close 抛错也不会留下半死的连接被复用。
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            conn.close()
+
+
+def _row_to_task_sqlite(row) -> dict:
+    """SQLite 版行 → dict。与 PG 版唯一的实质差异：params 要显式 parse。"""
+    params = row[2]
+    if isinstance(params, str):
+        try:
+            params = json.loads(params) if params else {}
+        except json.JSONDecodeError:
+            # 走 i18n：源码里不许出现硬编码中文字面量（守卫
+            # test_no_hardcoded_cjk_in_any_module 会抓）
+            logger.error(t("ls.log.params_corrupt") + f": {row[0]}")
+            params = {}
+    return {
+        "id": str(row[0]),
+        "name": row[1],
+        "params": params or {},
+        "industry": row[3],
+        "turn": row[4] if row[4] is not None else 0,
+        "created_at": row[5],
+        "updated_at": row[6],
+        "deleted_at": row[7],
+    }
 
 
 # ── store 工厂 ────────────────────────────────────────────────────────────

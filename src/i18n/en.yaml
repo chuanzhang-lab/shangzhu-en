@@ -1364,6 +1364,7 @@ ls:
     pg_reconnect: PG connection lost; reconnecting
     db_created: target database does not exist, auto-created
     db_ensure_skip: database auto-create check skipped; trying direct connect
+    params_corrupt: task params column is not valid JSON, treated as empty
 
 # ─── llm_advisor (interactive-host / decision-narrator prompts + brief + errors) ──
 llm:

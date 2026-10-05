@@ -1356,6 +1356,7 @@ ls:
     pg_reconnect: PG 连接失效，重连重试
     db_created: 目标库不存在，已自动创建
     db_ensure_skip: 建库自检跳过，继续尝试直连
+    params_corrupt: 任务 params 列不是合法 JSON，按空处理
 
 # ─── llm_advisor（交互主持人/决策解说员 prompts + 简报 + 错误）──────────────
 llm:
