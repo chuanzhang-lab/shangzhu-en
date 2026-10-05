@@ -29,18 +29,15 @@ zh-only 140 条退役、en-reachable 66 条换英文输入/断言、language-neu
 的 mock 只在 TestClient 构造期生效，请求期走真 store 落 12 条 xhr-task。
 2026-10-04 实测主库 tasks 648 条（存活 8），仍在持续增长。
 
-隔离策略（两级，自动选择）：
-1. **测试库优先**：PG 可达时自动建/连 `shangzhu_en_test` 测试库
-   （PGDATABASE_URL 指向它）。库名与中文仓 `shangzhu_test` 物理隔离——
-   两仓并行跑测试绝不互踩同一批表；
-2. **PG 不可用**：PGDATABASE_URL 指向必败地址（端口 1 秒级 ECONNREFUSED），
-   get_store() 降级到 LocalFileStore，且 LOCAL_STORE_PATH 强制指向临时目录——
-   离线/无 PG 环境（含 CI）照样全量可跑、零外部依赖。
+隔离策略（2026-10-06 起大幅简化）：持久化换成 SQLite 单文件后，**测试库就是
+一个临时目录下的 .db 文件**——不再需要「建库 / 连管理库 / 判 PG 是否可达」
+那一整套，也不存在跨仓互踩（中文仓用的是自己的 shangzhu_test 库）。
+本文件只需把 `SHANGZHU_DB_PATH` 钉到会话级临时目录即可。
 
 三闸兜底（每个用例前后自动执行）：
 - 环境变量被个别用例 pop/篡改后（如 test_config_priority）自动恢复；
 - 每个用例前 reset_store_for_tests()，杜绝单例缓存住错误后端；
-- test_isolation_guard.py 断言测试期 store 永不指向真实库。
+- test_isolation_guard.py 断言测试期 store 永不指向真实数据文件。
 """
 import os
 import sys
@@ -57,42 +54,16 @@ for p in (ROOT, os.path.join(ROOT, "src")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-# ── 第二闸：测试库连接串 ────────────────────────────────────────────────────
-# PG 可达则连测试库，不可达则给必败地址（快速失败 → get_store 自动降级 JSON）
-_TEST_DB_NAME = "shangzhu_en_test"  # 勿与中文仓 shangzhu_test 共用：并行会互踩
-_FALLBACK_DB_URL = "postgresql://nobody@127.0.0.1:1/shangzhu_en_test"  # 必败且快败
-
-# 测试专用临时目录（LocalFileStore / 文件类测试的统一落点）
+# ── 第二闸：测试库落点（临时目录里的 SQLite 文件）──────────────────────────
 TEST_TMP_DIR = tempfile.mkdtemp(prefix="shangzhu-en-tests-")
-os.environ["LOCAL_STORE_PATH"] = TEST_TMP_DIR
-
-
-def _try_prepare_test_db() -> str:
-    """尝试确保测试库存在，返回测试库连接串；PG 不可用返回必败地址。"""
-    try:
-        import psycopg
-
-        base_url = f"postgresql://{os.environ.get('USER', 'postgres')}@localhost:5432/postgres"
-        with psycopg.connect(base_url, connect_timeout=2) as conn:
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (_TEST_DB_NAME,))
-                if cur.fetchone() is None:
-                    cur.execute(f'CREATE DATABASE "{_TEST_DB_NAME}"')
-        return f"postgresql://{os.environ.get('USER', 'postgres')}@localhost:5432/{_TEST_DB_NAME}"
-    except Exception:  # noqa: BLE001 —— PG 不存在/无权限：走降级，测试照跑
-        return _FALLBACK_DB_URL
-
-
-PGDATABASE_URL_UNDER_TEST = _try_prepare_test_db()
-os.environ["PGDATABASE_URL"] = PGDATABASE_URL_UNDER_TEST
+TEST_DB_PATH = os.path.join(TEST_TMP_DIR, "shangzhu_en_test.db")
+os.environ["SHANGZHU_DB_PATH"] = TEST_DB_PATH
 
 
 @pytest.fixture(autouse=True)
 def _isolate_store_env():
     """每个用例前后：恢复隔离环境变量 + 清 store 单例（防用例间互相污染）。"""
-    os.environ["PGDATABASE_URL"] = PGDATABASE_URL_UNDER_TEST
-    os.environ["LOCAL_STORE_PATH"] = TEST_TMP_DIR
+    os.environ["SHANGZHU_DB_PATH"] = TEST_DB_PATH
     try:
         from storage.local_store import reset_store_for_tests
 

@@ -1,3 +1,4 @@
 {
-  "db_url": "postgresql://newmacbook@localhost:5432/shangzhu_en"
+  "_comment": "Copy to config/storage.json (untracked, 600) to override the default SQLite path. Env var SHANGZHU_DB_PATH takes precedence over this file.",
+  "db_path": "data/shangzhu_en.db"
 }

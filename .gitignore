@@ -62,6 +62,16 @@ logs/
 reports/
 output/
 
+# ── SQLite 数据文件（含用户任务数据 + WAL 伴随文件，绝不入库）────
+# 2026-10-06：持久化由 PG 换成 SQLite 单文件，落点 data/。
+# -wal / -shm 是 WAL 模式的伴随文件（开 WAL 才会出现），
+# 备份必须走 sqlite3 的 backup API，裸 cp 主文件会得到不完整快照。
+data/
+backups/
+*.db
+*.db-wal
+*.db-shm
+
 # ── 含密钥 / 用户专属配置（同目录 *.example 模板例外，正常入库）──
 config/agent_llm_config.json
 config/storage.json

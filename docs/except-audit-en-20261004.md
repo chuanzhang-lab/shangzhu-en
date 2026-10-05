@@ -30,14 +30,14 @@
 | src/op_executor.py | 1 | 1 | 1 | 3 |
 | src/router/intent.py | 0 | 0 | 2 | 2 |
 | src/router/rules/__init__.py | 1 | 0 | 0 | 1 |
-| src/storage/local_store.py | 4 | 1 | 1 | 6 |
+| src/storage/local_store.py | 1 | 0 | 0 | 1 |
 | src/tools/financial_calculator.py | 0 | 9 | 0 | 9 |
 | src/tools/param_advisor.py | 0 | 1 | 0 | 1 |
 | src/tools/project_manager.py | 0 | 2 | 0 | 2 |
 | src/tools/report_generator.py | 0 | 3 | 0 | 3 |
 | src/tools/workflow_engine.py | 0 | 4 | 0 | 4 |
 | config/settings.py | 4 | 1 | 0 | 5 |
-| **合计** | **31** | **26** | **10** | **67** |
+| **合计** | **28** | **25** | **9** | **62** |
 
 处置分布：保持 31 / 已补痕 34 / 已收窄 2。行号为 2026-10-04 处置完成后的位置（收窄两处以 `except ImportError` 现状入表）。
 
@@ -110,16 +110,17 @@
 |---|---|---|---|
 | src/router/rules/__init__.py:136 | A | 规则加载失败 error + 降级（rules: rules load failed） | 保持 |
 
-### src/storage/local_store.py（6：A4 / B1 / C1）
+### src/storage/local_store.py（1：A1）
+
+> 2026-10-06 变更：持久化由 PG 换成 SQLite，删掉 PostgresStore 与
+> LocalFileStore 后本文件只剩 1 处 except Exception（get_store 的降级位）。
+> 原先的「库名探测 / 建库自检 / 连接关闭 / 文件存储损坏」等 5 处随实现一并消失，
+> **不是被静默吞掉，是连失败面本身都没了**——这正是换 SQLite 的收益之一。
+
+| src/storage/local_store.py:472 | A | SQLite 不可用 → error + 降级内存 store（ls.log.sqlite_unavailable；**会丢数据，故打 ERROR 不是 WARNING**） | 保持 |
 
 | 位置 | 档位 | 现象 | 处置 |
 |---|---|---|---|
-| src/storage/local_store.py:202 | A | 任务库损坏：备份 `.corrupt-*` + error + 空库重启（ls.log.corrupt_backup） | 保持 |
-| src/storage/local_store.py:410 | B | db 名探测失败返回 `"?"`，无痕（/health 高频路径） | 已补痕 debug（2026-10-04） |
-| src/storage/local_store.py:444 | A | 建表自检失败 warning 只留痕不拦截（ls.log.db_ensure_skip） | 保持 |
-| src/storage/local_store.py:459 | C | 连接关闭失败原 `pass`（清理路径静默） | 已补痕 debug（2026-10-04） |
-| src/storage/local_store.py:612 | A | PG 不可用 warning + 降级文件存储（ls.log.pg_unavailable） | 保持 |
-| src/storage/local_store.py:624 | A | 文件存储不可用 error + 降级内存（ls.log.file_unavailable） | 保持 |
 
 ### src/tools/financial_calculator.py（9：B9）
 

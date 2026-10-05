@@ -1344,19 +1344,12 @@ pm:
 ls:
   log:
     ready: 存储后端就绪
-    pg_unavailable: PostgreSQL 不可用
-    degrade_file: 降级本地文件 store
-    degraded_file: 已降级本地文件 store
-    restart_note: 重启不丢，但非多端共享
-    file_unavailable: 本地文件 store 也不可用
     degrade_memory: 降级内存 store：数据重启即丢！
     corrupt_backup: 本地 store 文件损坏，已备份到
     restart_from_empty: 从空 store 重启
     corrupt_backup_fail: 本地 store 文件损坏且备份失败
-    pg_reconnect: PG 连接失效，重连重试
-    db_created: 目标库不存在，已自动创建
-    db_ensure_skip: 建库自检跳过，继续尝试直连
     params_corrupt: 任务 params 列不是合法 JSON，按空处理
+    sqlite_unavailable: SQLite store 不可用
 
 # ─── llm_advisor（交互主持人/决策解说员 prompts + 简报 + 错误）──────────────
 llm:

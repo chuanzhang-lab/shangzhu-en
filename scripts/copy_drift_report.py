@@ -206,11 +206,19 @@ ANCHORS = [
                  ("src/session_state.py", r"def get_params_version\("),
                  ("src/session_state.py", r"def merge_params_guarded\(")],
     }),
-    ("store_degrade_chain", "存储降级链形态（Memory/LocalFile/Postgres + get_store）", {
-        "both": [("src/storage/local_store.py", r"class MemoryStore\b"),
-                 ("src/storage/local_store.py", r"class LocalFileStore\b"),
-                 ("src/storage/local_store.py", r"class PostgresStore\b"),
-                 ("src/storage/local_store.py", r"def get_store\(")],
+    # 有意分化（2026-10-06）：EN 把持久化从 PG 换成 SQLite 单文件，
+    # 两仓**故意不再同构**。守卫改为「不变量等价、实现可分化」——
+    # 两仓都必须有：内存档 + 一个持久化档 + get_store 工厂；
+    # 但持久化档是哪一种由各仓自选，不像 infinite_mark_sentinel 那样钉死。
+    # 这是 E-11 三区里的「有意分化区」：只比形态不变量，不比实现。
+    ("store_degrade_chain", "存储形态：内存档 + 持久化档 + get_store（持久化实现两仓可分化）", {
+        "shangzhu": [("src/storage/local_store.py", r"class MemoryStore\b"),
+                     ("src/storage/local_store.py", r"class LocalFileStore\b"),
+                     ("src/storage/local_store.py", r"class PostgresStore\b"),
+                     ("src/storage/local_store.py", r"def get_store\(")],
+        "shangzhu-en": [("src/storage/local_store.py", r"class MemoryStore\b"),
+                        ("src/storage/local_store.py", r"class SqliteStore\b"),
+                        ("src/storage/local_store.py", r"def get_store\(")],
     }),
     ("field_model_api", "字段模型 API 形态（derive/consistency_issues/field_label）", {
         "both": [("src/field_model.py", r"def derive\("),

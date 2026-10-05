@@ -1,37 +1,40 @@
-"""测试数据库连接串三级优先级：env > config > 默认。"""
+"""测试数据文件路径优先级：env > config > 默认（SQLite 版）。
+
+2026-10-06：持久化换成 SQLite 后，优先级对象从「PG 连接串」变成「数据文件
+路径」。注意默认路径用 endswith 判 `data/shangzhu_en.db`——不能只判
+`shangzhu_en.db`，那样会把测试临时目录里的同名文件也算进来。
+"""
 import os
 import sys
-import tempfile
-import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from storage.local_store import _db_url, _DEFAULT_DB_URL, reset_store_for_tests
+from storage.local_store import _sqlite_path  # noqa: E402
 
 
-def test_default_db_url():
-    """无 env、无 config 时回退到默认值。"""
-    os.environ.pop("PGDATABASE_URL", None)
-    # 临时清空 storage.json（确保回退默认）
-    # EN 版与中文仓物理分库（E-01）：默认必须钉 shangzhu_en——
-    # endswith 同时排除中文仓的 shangzhu（子串相似但后缀不同）。
-    assert _DEFAULT_DB_URL.endswith("/shangzhu_en"), _DEFAULT_DB_URL
-    assert "localhost:5432" in _DEFAULT_DB_URL
+def test_default_db_path():
+    """无 env、无 config 时回退到 data/shangzhu_en.db。"""
+    saved = os.environ.pop("SHANGZHU_DB_PATH", None)
+    try:
+        p = _sqlite_path()
+        assert p.endswith(os.path.join("data", "shangzhu_en.db")), p
+    finally:
+        if saved is not None:
+            os.environ["SHANGZHU_DB_PATH"] = saved
 
 
 def test_env_override():
-    """PGDATABASE_URL 环境变量优先。"""
-    os.environ["PGDATABASE_URL"] = "postgresql://envuser@envhost:9999/envdb"
+    """SHANGZHU_DB_PATH 环境变量优先于 config 与默认。"""
+    os.environ["SHANGZHU_DB_PATH"] = "/tmp/from-env/x.db"
     try:
-        result = _db_url()
-        assert result == "postgresql://envuser@envhost:9999/envdb", f"got {result}"
+        assert _sqlite_path() == "/tmp/from-env/x.db"
     finally:
-        os.environ.pop("PGDATABASE_URL", None)
+        os.environ.pop("SHANGZHU_DB_PATH", None)
 
 
 if __name__ == "__main__":
-    test_default_db_url()
-    print("test_default_db_url: PASS")
+    test_default_db_path()
+    print("test_default_db_path: PASS")
     test_env_override()
     print("test_env_override: PASS")
     print("\nAll config priority tests passed.")

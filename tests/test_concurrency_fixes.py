@@ -2,7 +2,7 @@
 
 覆盖：
 - F1: config.settings 并发保存（字段不丢失，update_config 原子读改写）
-- F2/F8: LocalFileStore 并发写（无异常、数据完整）
+- F2/F8: SqliteStore 并发写（无异常、数据完整）
 - F4: session_state 并发计数器自增（计数不丢）
 """
 import sys, os, json, tempfile, threading
@@ -35,12 +35,14 @@ def _main():
     print(f"F4 计数器并发自增: {final}/{expected} OK")
     reset_state(tid)
 
-    # ── F2/F8: LocalFileStore 并发写 ──
-    from storage.local_store import LocalFileStore, reset_store_for_tests
+    # ── F2/F8: SqliteStore 并发写 ──
+    # 2026-10-06：持久化由 PG 换成 SQLite，并发写验证对象随之改为 SqliteStore。
+    # 它靠 self._lock 串行化所有写（沿用 PG 版 F9 的做法），本段就是那条锁的回归。
+    from storage.local_store import SqliteStore, reset_store_for_tests
 
     with tempfile.TemporaryDirectory() as td:
-        path = os.path.join(td, "store.json")
-        store = LocalFileStore(path=path)
+        path = os.path.join(td, "store.db")
+        store = SqliteStore(path=path)
         task = store.create_task("压测")
         tid2 = task["id"]
         errs = []
@@ -56,11 +58,19 @@ def _main():
         assert not errs, f"F2 FAIL: 并发写异常 {errs[:3]}"
         msgs = store.get_messages(tid2)
         assert len(msgs) == 8 * 50, f"F2 FAIL: 消息丢失 {len(msgs)}/{8*50}"
-        # 数据完整落盘
-        with open(path) as f:
-            disk = json.load(f)
-        assert len(disk["msgs"][tid2]) == 400, "F2 FAIL: 落盘不完整"
-        print(f"F2 LocalFileStore 并发写: {len(msgs)}/400 消息无损，落盘完整 OK")
+        store.close()
+        # 数据完整落盘：另开一个连接读，绕开实例缓存
+        import sqlite3
+
+        conn = sqlite3.connect(path)
+        try:
+            on_disk = conn.execute(
+                "SELECT count(*) FROM messages WHERE task_id = ?", (tid2,)
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        assert on_disk == 400, f"F2 FAIL: 落盘不完整 {on_disk}/400"
+        print(f"F2 SqliteStore 并发写: {len(msgs)}/400 消息无损，落盘完整 OK")
 
     # ── F1: config 并发保存（不同字段）──
     from config import settings as cfgmod

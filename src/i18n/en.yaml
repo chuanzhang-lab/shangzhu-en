@@ -1352,19 +1352,12 @@ pm:
 ls:
   log:
     ready: Storage backend ready
-    pg_unavailable: PostgreSQL unavailable
-    degrade_file: falling back to local file store
-    degraded_file: Fell back to local file store
-    restart_note: survives restart, but not shared across devices
-    file_unavailable: local file store also unavailable
     degrade_memory: "fell back to in-memory store: data is lost on restart!"
     corrupt_backup: local store file corrupted; backed up to
     restart_from_empty: restarting from an empty store
     corrupt_backup_fail: local store file corrupted and backup failed
-    pg_reconnect: PG connection lost; reconnecting
-    db_created: target database does not exist, auto-created
-    db_ensure_skip: database auto-create check skipped; trying direct connect
     params_corrupt: task params column is not valid JSON, treated as empty
+    sqlite_unavailable: SQLite store unavailable
 
 # ─── llm_advisor (interactive-host / decision-narrator prompts + brief + errors) ──
 llm:

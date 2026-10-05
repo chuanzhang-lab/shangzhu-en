@@ -68,25 +68,17 @@ def test_list_tasks_excludes_archived():
     assert a not in ids and b in ids
 
 
-def test_postgres_roundtrip():
-    """端到端：落盘 PG（conftest 已把 PGDATABASE_URL 指向 shangzhu_en_test 测试库）。
+def test_sqlite_roundtrip():
+    """端到端：落盘 SQLite（conftest 已把 SHANGZHU_DB_PATH 钉到临时目录）。
 
-    E-01 修复：旧版用 `except Exception: print("(PG 不可用，跳过)")` 静默跳过——
-    print 在 pytest 报告里不可见，隔离失效/依赖被剪时既不失败也不报警，
-    曾靠它往真实主库累积 367 条「端到端」垃圾（2026-10-04 实测）。
-    现改为：ping 真实探测，PG 不可达 → **显式 pytest.skip**（报告可见、有计数）；
-    PG 可达（本机测试库）→ CRUD 断言必须真跑真过，失败即回归。
+    2026-10-06 取代 `test_postgres_roundtrip`。旧版有个结构性缺陷：PG 不可达
+    时走 `pytest.skip`，于是**本机之外的环境（含 CI）这条永远不真跑**——
+    持久化端到端实际是没被覆盖的。SQLite 是标准库、零外部服务，这条现在
+    **任何环境都真跑真过**，不再有 skip 分支。
     """
-    import pytest
+    from storage.local_store import SqliteStore
 
-    from storage.local_store import PostgresStore
-
-    s = PostgresStore()  # 懒连接：构造只存 URL，不建连接
-    try:
-        s.ping()
-    except Exception as e:  # noqa: BLE001 —— 探测失败：显式跳过（可见），非静默
-        s.close()
-        pytest.skip(f"PG 不可达（conftest 已降级 LocalFileStore），端到端跳过: {e}")
+    s = SqliteStore()  # 路径来自 conftest 的隔离环境
     try:
         tid = s.create_task("e2e-roundtrip")["id"]
         s.add_message(tid, "user", "monthly rent 15000")
