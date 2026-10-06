@@ -100,6 +100,35 @@ class BaseStore:
 
 # 单任务消息数上限，防止长期运行内存无限增长
 _MAX_MESSAGES_PER_TASK = 500
+# 单条消息内容上限：超限截断 + 可见标记（静默截断=另一种静默丢数据）
+_MAX_CONTENT_CHARS = 64 * 1024
+# 任务名上限：超限直接 ValueError（抛错比静默截名字诚实；上层 API max_length=100，这里是存储层护栏）
+_MAX_NAME_CHARS = 200
+# 自动备份节奏：每 N 次成功写触发一次（计数在 _execute，一处覆盖所有调用方）
+_AUTO_BACKUP_EVERY = 200
+
+
+def _check_name(name: str) -> None:
+    """任务名长度护栏（create/rename 共用）：>200 抛 ValueError。"""
+    if name is not None and len(name) > _MAX_NAME_CHARS:
+        raise ValueError(f"task name exceeds {_MAX_NAME_CHARS} chars")
+
+
+def _cap_content(content: str) -> str:
+    """超长内容截断到 64KB 并追加可见标记。
+
+    标记走 t()（用户可见文案跟随界面语言）；截断事件记 WARNING（操作者日志，
+    平实英文）——截断必须有痕，不许静默改写用户内容。
+    """
+    if content is None:
+        return ""
+    if len(content) <= _MAX_CONTENT_CHARS:
+        return content
+    logger.warning(
+        "message content truncated: %d chars exceeds cap %d (visible marker appended)",
+        len(content), _MAX_CONTENT_CHARS,
+    )
+    return content[:_MAX_CONTENT_CHARS] + "\n" + t("ls.msg.content_truncated")
 
 
 class MemoryStore(BaseStore):
@@ -110,6 +139,7 @@ class MemoryStore(BaseStore):
         self._msgs: dict = {}
 
     def create_task(self, name: str) -> dict:
+        _check_name(name)
         tid = str(uuid.uuid4())
         now = time.time()
         t = {
@@ -133,6 +163,7 @@ class MemoryStore(BaseStore):
         return dict(t) if t else None
 
     def rename_task(self, task_id: str, name: str) -> None:
+        _check_name(name)
         if task_id in self._tasks:
             self._tasks[task_id]["name"] = name
             self._tasks[task_id]["updated_at"] = time.time()
@@ -143,6 +174,7 @@ class MemoryStore(BaseStore):
             self._tasks[task_id]["updated_at"] = time.time()
 
     def add_message(self, task_id: str, role: str, content: str, turn: int = 0) -> None:
+        content = _cap_content(content)
         if task_id in self._msgs:
             self._msgs[task_id].append(
                 {"role": role, "content": content, "turn": turn}
@@ -379,6 +411,9 @@ class SqliteStore(BaseStore):
         成功 commit、失败 rollback 后原样重抛：半截事务既不许留在库里，也不许
         拖着未提交事务占写锁（否则下一次 commit 会把上次的残骸一起提交）。
         write=True 的成败会计入写计数（自动备份节奏 / store_writes_failed 观测位）。
+
+        自动备份触发在**锁外**（_maybe_auto_backup 会再拿这把非重入锁，
+        锁内触发即死锁），只在写成功后、且不在失败路径上触发。
         """
         with self._lock:
             conn = self._conn_or_create()
@@ -387,12 +422,35 @@ class SqliteStore(BaseStore):
                 conn.commit()
                 if write:
                     self._writes += 1
-                return result
             except Exception:
                 conn.rollback()
                 if write:
                     self._writes_failed += 1
                 raise
+        if write:
+            self._maybe_auto_backup()
+        return result
+
+    def _maybe_auto_backup(self) -> None:
+        """每 200 次成功写自动备份一次（L4 修复：备份从不自动调度）。
+
+        - `SHANGZHU_AUTO_BACKUP=0` 关闭（测试默认关，防数百用例的写操作污染 backups/）；
+        - 失败只记 ERROR **绝不拦写**：备份是保险，不是写路径的闸门。
+        """
+        if os.getenv("SHANGZHU_AUTO_BACKUP", "1") == "0":
+            return
+        if self._writes % _AUTO_BACKUP_EVERY != 0:
+            return
+        try:
+            # 延迟导入：maintenance 对 store 是鸭子类型不回引本模块，无环
+            from storage import maintenance
+            gz = maintenance.create_backup(self)
+            logger.info(
+                "auto backup created: %s (writes=%s)",
+                os.path.basename(gz), self._writes,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.error("auto backup failed (writes=%s): %s", self._writes, e)
 
     def ping(self) -> None:
         """连通性 + 数据可读性自检（含幂等建表）。构造后调用一次。
@@ -410,6 +468,7 @@ class SqliteStore(BaseStore):
         self._execute(_run)
 
     def create_task(self, name: str) -> dict:
+        _check_name(name)
         tid = str(uuid.uuid4())
         now = _utc_now_iso()
 
@@ -453,6 +512,8 @@ class SqliteStore(BaseStore):
         return _row_to_task_sqlite(row) if row else None
 
     def rename_task(self, task_id: str, name: str) -> None:
+        _check_name(name)
+
         def _run(conn):
             conn.execute(
                 "UPDATE tasks SET name = ?, updated_at = ? WHERE id = ?",
@@ -471,6 +532,8 @@ class SqliteStore(BaseStore):
         self._execute(_run, write=True)
 
     def add_message(self, task_id: str, role: str, content: str, turn: int = 0) -> None:
+        content = _cap_content(content)
+
         def _run(conn):
             conn.execute(
                 "INSERT INTO messages (task_id, role, content, turn, created_at) "

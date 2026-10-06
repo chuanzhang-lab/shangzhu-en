@@ -58,6 +58,9 @@ for p in (ROOT, os.path.join(ROOT, "src")):
 TEST_TMP_DIR = tempfile.mkdtemp(prefix="shangzhu-en-tests-")
 TEST_DB_PATH = os.path.join(TEST_TMP_DIR, "shangzhu_en_test.db")
 os.environ["SHANGZHU_DB_PATH"] = TEST_DB_PATH
+# 自动备份测试闸（S5）：测试期写操作数百次，不开闸每 200 次写就会触发
+# 真实备份污染 backups/。需要验证自动备份链路的用例自己 monkeypatch 打开。
+os.environ["SHANGZHU_AUTO_BACKUP"] = "0"
 
 
 @pytest.fixture(autouse=True)

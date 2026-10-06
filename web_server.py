@@ -135,7 +135,7 @@ from op_executor import (
 )
 
 # 本地存储层：任务持久化（Task 4 引入）
-from storage.local_store import get_store
+from storage.local_store import SqliteStore, get_store
 
 # ── 配置单源 ──────────────────────────────────────────────────────────────
 # model/endpoint 统一从 config/agent_llm_config.json 读取（经 llm_advisor），
@@ -889,11 +889,32 @@ class TaskRename(BaseModel):
 
 
 # ─── FastAPI 应用 ──────────────────────────────────────────────────────────
+def _startup_backup() -> None:
+    """启动时自动备份一次（S5/L4 修复：备份从不自动调度）。
+
+    只对已存在的 SQLite 持久化档动手——内存降级档/新库没东西可备
+    （缺失不冒充）。失败只记 ERROR 绝不阻断启动：备份是保险，不是服务的闸门。
+    """
+    if os.getenv("SHANGZHU_AUTO_BACKUP", "1") == "0":
+        return
+    store = get_store()
+    if not isinstance(store, SqliteStore) or not os.path.isfile(store.path):
+        return
+    try:
+        from storage import maintenance  # 延迟导入，与 local_store 同姿势
+        gz = maintenance.create_backup(store)
+        logger.info("startup auto backup created: %s", os.path.basename(gz))
+    except Exception as e:  # noqa: BLE001
+        logger.error("startup auto backup failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(t("ws.log.startup"))
     # 提前触发降级链：启动横幅即显示 store 落点（库名/文件路径），降级不必等首个请求
     get_store()
+    # S5/L4：启动即自动备份一份（失败只记 ERROR，不阻断启动）
+    _startup_backup()
     yield
     # R3/R4 修复：服务关闭时释放资源（文件描述符 + 数据库连接）
     store = get_store()
@@ -1157,11 +1178,17 @@ async def health(request: Request):
         "llm_configured": has_api_key(),
     }
     if include_detail:
+        hc = get_store().health_check()
         body.update({
             "endpoint": get_base_url(),
             "store_backend": type(get_store()).__name__,
             # 数据落点（库名/文件路径），排查「数据写到哪去了」不用登数据库
             "store_target": getattr(get_store(), "target", None),
+            # 存储三观测位（S5/A7）：降级 / 损坏 / 写失败——「坏能知」不用登机器翻日志。
+            # integrity 只在 detail=1 跑 quick_check（公开 /health 不背重活）。
+            "store_degraded": hc.get("degraded"),
+            "store_integrity": hc.get("integrity"),
+            "store_writes_failed": hc.get("writes_failed"),
             "sessions": stats,
         })
     return body
@@ -1589,7 +1616,8 @@ def _persist_turn(store, tid: str, user_msg: str, content: str) -> None:
                if not k.startswith("_")}
         store.update_params(tid, biz)
     except Exception as e:  # noqa
-        logger.warning(t("ws.log.persist_failed", err=e))
+        # L2 修复（2026-10-06）：持久化失败=一轮对话静默丢失，打 ERROR 不是 WARNING
+        logger.error(t("ws.log.persist_failed", err=e))
 
 
 @app.post("/chat")

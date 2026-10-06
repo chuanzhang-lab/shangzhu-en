@@ -1350,6 +1350,8 @@ ls:
     corrupt_backup_fail: 本地 store 文件损坏且备份失败
     params_corrupt: 任务 params 列不是合法 JSON，按空处理
     sqlite_unavailable: SQLite store 不可用
+  msg:
+    content_truncated: "……[内容超过 64KB，已截断]"
 
 # ─── llm_advisor（交互主持人/决策解说员 prompts + 简报 + 错误）──────────────
 llm:

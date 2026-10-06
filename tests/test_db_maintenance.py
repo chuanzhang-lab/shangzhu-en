@@ -1,25 +1,38 @@
-"""运维层契约测试（S4：db-hardening-plan-20261006 C4）。
+"""运维层契约测试（S4/S5：db-hardening-plan-20261006 C4/C5）。
 
-锁四件事：
+锁四件事（S4）：
 - 备份自检是硬门槛：坏快照报错不留「假备份」（A11）；
 - restore/purge 两段式：默认 dry-run，破坏前自动留档（A9/A8）；
 - 轮转留 7 份；
 - db_tool 六命令 + 两个薄壳脚本真的能跑（A13）。
+
+锁三件事（S5）：
+- 截断/命名护栏：content>64KB 截断带可见标记 + WARNING，name>200 抛 ValueError（A6）；
+- 自动备份：每 200 次写触发（计数在 store）+ 启动一次；失败不拦写；测试闸关闭零污染（A10）；
+- 坏能知：/health?detail=1 三观测位；`_persist_turn` 写失败 ERROR 级（A7/A12）。
 """
 import glob
 import gzip
 import json
+import logging
 import os
 import sqlite3
 import subprocess
 import sys
+import uuid
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from i18n import t  # noqa: E402
 from storage import maintenance  # noqa: E402
-from storage.local_store import SqliteStore, SQLITE_SCHEMA_SQL  # noqa: E402
+from storage.local_store import (  # noqa: E402
+    MemoryStore,
+    SqliteStore,
+    SQLITE_SCHEMA_SQL,
+    _MAX_CONTENT_CHARS,
+)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
@@ -206,3 +219,181 @@ def test_thin_shells_run_without_sqlite_cli(tmp_path, baks):
     )
     assert p.returncode == 0, p.stderr
     assert json.load(open(out))["task_count"] == 1
+
+
+# ── S5：截断/命名护栏、自动备份触发、/health 观测位、persist 日志级 ──────
+
+def _mk_any(mk, tmp_path):
+    return mk(tmp_path)
+
+
+@pytest.mark.parametrize("mk", [
+    pytest.param(lambda tp: _mk_store(tp), id="sqlite"),
+    pytest.param(lambda tp: MemoryStore(), id="memory"),
+])
+def test_content_cap_truncates_with_visible_marker(tmp_path, mk, caplog):
+    """A6：content>64KB 截断到 64KB + 可见标记（t()）+ WARNING（静默截断=静默丢数据）。"""
+    s = _mk_any(mk, tmp_path)
+    tid = s.create_task("T")["id"]
+    big = "x" * (_MAX_CONTENT_CHARS + 500)
+    with caplog.at_level(logging.WARNING, logger="web.local_store"):
+        s.add_message(tid, "user", big)
+    got = s.get_messages(tid)[0]["content"]
+    marker = t("ls.msg.content_truncated")
+    assert got.endswith(marker), "截断必须带用户可见标记"
+    assert len(got) == _MAX_CONTENT_CHARS + 1 + len(marker)
+    assert any(r.levelno == logging.WARNING for r in caplog.records), \
+        "截断必须记 WARNING 留痕"
+    # 不超限的内容原样保存，不乱加标记
+    s.add_message(tid, "user", "small")
+    assert s.get_messages(tid)[1]["content"] == "small"
+    s.close()
+
+
+@pytest.mark.parametrize("mk", [
+    pytest.param(lambda tp: _mk_store(tp), id="sqlite"),
+    pytest.param(lambda tp: MemoryStore(), id="memory"),
+])
+def test_name_over_200_rejected(tmp_path, mk):
+    """A6：name>200 抛 ValueError（抛错比静默截名字诚实），失败不留半截状态。"""
+    s = _mk_any(mk, tmp_path)
+    with pytest.raises(ValueError):
+        s.create_task("n" * 201)
+    tid = s.create_task("ok")["id"]
+    with pytest.raises(ValueError):
+        s.rename_task(tid, "n" * 201)
+    assert s.get_task(tid)["name"] == "ok", "rename 失败不许改动原名"
+    s.close()
+
+
+def test_auto_backup_triggers_every_200_writes(tmp_path, baks, monkeypatch):
+    """A10：每 200 次成功写触发一次（计数在 store；读操作不计数不触发）。"""
+    s = _mk_store(tmp_path)
+    monkeypatch.setenv("SHANGZHU_AUTO_BACKUP", "1")
+    calls = []
+    monkeypatch.setattr(
+        maintenance, "create_backup",
+        lambda st: calls.append(st._writes) or "x.db.gz",
+    )
+    for i in range(199):
+        s.create_task(f"t{i}")
+    for _ in range(10):
+        s.list_tasks()  # 读操作绝不触发
+    assert calls == [], f"199 次写不许触发，实得 {calls}"
+    s.create_task("t199")
+    assert calls == [200], f"第 200 次写必须触发，实得 {calls}"
+    for i in range(200, 399):
+        s.create_task(f"t{i}")
+    assert calls == [200], "201-399 次写不许再触发"
+    s.create_task("t399")
+    assert calls == [200, 400], f"第 400 次写必须再触发，实得 {calls}"
+    s.close()
+
+
+def test_auto_backup_disabled_means_zero_touch(tmp_path, baks):
+    """A10：测试闸（conftest 钉 SHANGZHU_AUTO_BACKUP=0）下 250 次写零备份零污染。"""
+    s = _mk_store(tmp_path)
+    for i in range(250):
+        s.create_task(f"t{i}")
+    assert not glob.glob(str(baks / "*.db.gz")), "测试闸失守：写操作触发了备份"
+    s.close()
+
+
+def test_auto_backup_failure_never_blocks_writes(tmp_path, baks, monkeypatch, caplog):
+    """A10：备份失败只记 ERROR 绝不拦写（备份是保险，不是写路径的闸门）。"""
+    s = _mk_store(tmp_path)
+    monkeypatch.setenv("SHANGZHU_AUTO_BACKUP", "1")
+
+    def _boom(st):
+        raise RuntimeError("backup target disk full")
+
+    monkeypatch.setattr(maintenance, "create_backup", _boom)
+    with caplog.at_level(logging.ERROR, logger="web.local_store"):
+        for i in range(200):
+            s.create_task(f"t{i}")
+    assert len(s.list_tasks()) == 200, "备份失败不许吞掉任何一次写"
+    assert s._writes == 200 and s._writes_failed == 0
+    assert any("auto backup failed" in r.getMessage() for r in caplog.records), \
+        "备份失败必须留 ERROR 痕"
+    s.close()
+
+
+def test_startup_backup_respects_env_and_backend(tmp_path, baks, monkeypatch):
+    """A10：启动备份一份；env=0 关闭；内存降级档没东西可备（缺失不冒充）。"""
+    _saved = os.getcwd()
+    import web_server
+    os.chdir(_saved)
+
+    s = _mk_store(tmp_path, "boot.db")
+    s.create_task("T")
+    monkeypatch.setattr(web_server, "get_store", lambda: s)
+
+    monkeypatch.setenv("SHANGZHU_AUTO_BACKUP", "0")
+    web_server._startup_backup()
+    assert not glob.glob(str(baks / "*.db.gz")), "env=0 时不许备份"
+
+    monkeypatch.setenv("SHANGZHU_AUTO_BACKUP", "1")
+    web_server._startup_backup()
+    assert len(glob.glob(str(baks / "*.db.gz"))) == 1, "启动必须产出一份快照"
+
+    monkeypatch.setattr(web_server, "get_store", lambda: MemoryStore())
+    web_server._startup_backup()
+    assert len(glob.glob(str(baks / "*.db.gz"))) == 1, "内存降级档不许产出备份"
+    s.close()
+
+
+def test_health_detail_store_slots_and_write_failure(tmp_path, baks, monkeypatch):
+    """A7/A12：/health?detail=1 三观测位；写失败计入 store_writes_failed 可见。"""
+    from fastapi.testclient import TestClient
+    _saved = os.getcwd()
+    import web_server
+    os.chdir(_saved)
+
+    s = _mk_store(tmp_path, "health.db")
+    s.create_task("T")
+    monkeypatch.setattr(web_server, "get_store", lambda: s)
+    c = TestClient(web_server.app)
+
+    d = c.get("/health?detail=1").json()
+    assert d["store_degraded"] is False
+    assert d["store_integrity"] == "ok"
+    assert d["store_writes_failed"] == 0
+    assert "store_degraded" not in c.get("/health").json(), \
+        "默认探活不带内部观测位"
+
+    # 人为制造一次写失败（重复主键）→ 计数 +1 且 /health?detail=1 可见
+    tid = s.create_task("T2")["id"]
+
+    def _dup(conn):
+        conn.execute(
+            "INSERT INTO tasks (id, name, created_at, updated_at) "
+            "VALUES (?, 'x', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            (tid,),
+        )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        s._execute(_dup, write=True)
+    assert c.get("/health?detail=1").json()["store_writes_failed"] == 1
+    s.close()
+
+
+def test_persist_turn_failure_logs_error_not_warning(tmp_path, baks, caplog):
+    """A12/L2：_persist_turn 写失败必须 ERROR 级（一轮对话丢失不是「慢一点」）。"""
+    _saved = os.getcwd()
+    import web_server
+    os.chdir(_saved)
+
+    class BoomStore:
+        def add_message(self, *a, **k):
+            raise RuntimeError("disk full")
+
+        def update_params(self, *a, **k):
+            pass
+
+    tid = str(uuid.uuid4())
+    with caplog.at_level(logging.ERROR):
+        web_server._persist_turn(BoomStore(), tid, "hi", "reply")
+    hits = [r for r in caplog.records if r.funcName == "_persist_turn"]
+    assert hits, "_persist_turn 写失败必须有日志痕"
+    assert all(r.levelno == logging.ERROR for r in hits), \
+        f"必须 ERROR 级，实得 {[r.levelname for r in hits]}"

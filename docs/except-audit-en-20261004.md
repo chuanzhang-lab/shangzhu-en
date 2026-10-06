@@ -24,26 +24,26 @@
 
 | 文件 | A | B | C | 合计 |
 |---|---|---|---|---|
-| web_server.py | 17 | 2 | 1 | 20 |
+| web_server.py | 18 | 2 | 1 | 21 |
 | src/i18n/__init__.py | 2 | 0 | 0 | 2 |
 | src/llm_advisor.py | 2 | 2 | 5 | 9 |
 | src/op_executor.py | 1 | 1 | 1 | 3 |
 | src/router/intent.py | 0 | 0 | 2 | 2 |
 | src/router/rules/__init__.py | 1 | 0 | 0 | 1 |
-| src/storage/local_store.py | 2 | 0 | 0 | 2 |
+| src/storage/local_store.py | 3 | 0 | 0 | 3 |
 | src/tools/financial_calculator.py | 0 | 9 | 0 | 9 |
 | src/tools/param_advisor.py | 0 | 1 | 0 | 1 |
 | src/tools/project_manager.py | 0 | 2 | 0 | 2 |
 | src/tools/report_generator.py | 0 | 3 | 0 | 3 |
 | src/tools/workflow_engine.py | 0 | 4 | 0 | 4 |
 | config/settings.py | 4 | 1 | 0 | 5 |
-| **合计** | **29** | **25** | **9** | **63** |
+| **合计** | **31** | **25** | **9** | **65** |
 
-处置分布：保持 29 / 已补痕 32 / 已收窄 2。行号为入表当时的位置（收窄两处以 `except ImportError` 现状入表；后续代码改动会漂移行号，护栏按文件计数不按行号）。
+处置分布：保持 31 / 已补痕 32 / 已收窄 2。行号为入表当时的位置（收窄两处以 `except ImportError` 现状入表；后续代码改动会漂移行号，护栏按文件计数不按行号）。
 
 ## 逐条表
 
-### web_server.py（20：A17 / B2 / C1）
+### web_server.py（21：A18 / B2 / C1）
 
 | 位置 | 档位 | 现象 | 处置 |
 |---|---|---|---|
@@ -62,11 +62,12 @@
 | web_server.py:1358 | A | 顾问 LLM 失败 warning + 降级空建议（ws.log.advisor_llm_failed） | 保持 |
 | web_server.py:1427 | A | 按需解读失败 warning + `_skipped` 标记（ws.err.advice_failed） | 保持 |
 | web_server.py:1533 | A | 请求体格式校验 → 400（ws.err.bad_body） | 保持 |
-| web_server.py:1585 | A | 持久化失败 warning 不阻断（ws.log.persist_failed） | 保持 |
+| web_server.py:1585 | A | 持久化失败 error 有痕不阻断（ws.log.persist_failed；2026-10-06 WARNING→ERROR，L2 修复） | 保持 |
 | web_server.py:1735 | A | 工具调用失败 exception 有痕（ws.log.tool_call_failed） | 保持 |
 | web_server.py:1817 | B | grounding 扫描失败降级 `scan={}`，无痕 | 已补痕 warning（2026-10-04） |
 | web_server.py:1832 | A | LLM 解读跳过 warning（ws.log.llm_advise_skip） | 保持 |
 | web_server.py:1858 | A | chat 主链路失败 exception + S1 不泄露（ws.log.chat_failed） | 保持 |
+| web_server.py:907 | A | 启动自动备份失败 error 有痕不阻断启动（startup auto backup failed；2026-10-06 S5 新增） | 保持 |
 
 ### src/i18n/__init__.py（2：A2）
 
@@ -110,18 +111,19 @@
 |---|---|---|---|
 | src/router/rules/__init__.py:136 | A | 规则加载失败 error + 降级（rules: rules load failed） | 保持 |
 
-### src/storage/local_store.py（2：A2）
+### src/storage/local_store.py（3：A3）
 
 > 2026-10-06 变更：持久化由 PG 换成 SQLite，删掉 PostgresStore 与
 > LocalFileStore 后本文件原有 5 处（库名探测 / 建库自检 / 连接关闭 / 文件存储
 > 损坏等）随实现一并消失，**不是被静默吞掉，是连失败面本身都没了**——这正是
-> 换 SQLite 的收益之一。同日 C1 加固新增 `_execute` 事务归口的 rollback 现场。
-
-| src/storage/local_store.py:493 | A | SQLite 不可用 → error + 降级内存 store（ls.log.sqlite_unavailable；**会丢数据，故打 ERROR 不是 WARNING**） | 保持 |
-| src/storage/local_store.py:301 | A | 写中途失败 → rollback 后原样重抛，半截事务不残留；write 失败计入 writes_failed 观测位 | 保持 |
+> 换 SQLite 的收益之一。同日 C1 加固新增 `_execute` 事务归口的 rollback 现场；
+> S5 加固新增自动备份兜底现场。
 
 | 位置 | 档位 | 现象 | 处置 |
 |---|---|---|---|
+| src/storage/local_store.py:493 | A | SQLite 不可用 → error + 降级内存 store（ls.log.sqlite_unavailable；**会丢数据，故打 ERROR 不是 WARNING**） | 保持 |
+| src/storage/local_store.py:301 | A | 写中途失败 → rollback 后原样重抛，半截事务不残留；write 失败计入 writes_failed 观测位 | 保持 |
+| src/storage/local_store.py:452 | A | 自动备份失败 error 有痕不拦写（auto backup failed；备份是保险不是写闸门，2026-10-06 S5 新增） | 保持 |
 
 ### src/tools/financial_calculator.py（9：B9）
 
@@ -182,4 +184,4 @@
 ## 验证
 
 - 补痕/收窄后全量测试 654 绿（原 645 + E-11 漂移护栏 9）。
-- 护栏 `tests/test_except_audit_guard.py`：①本表 67 行逐条有档位、档位合计 A31/B26/C10 与统计一致；②逐文件现存 `except Exception` 数 == 表内行数 − 已收窄行数（库存契约：新增/删除现场必须同步改表，防 bitrot）。
+- 护栏 `tests/test_except_audit_guard.py`：①本表 65 行逐条有档位、档位合计 A31/B25/C9 与统计一致；②逐文件现存 `except Exception` 数 == 表内行数 − 已收窄行数（库存契约：新增/删除现场必须同步改表，防 bitrot）。

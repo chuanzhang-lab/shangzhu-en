@@ -16,6 +16,11 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+# 单独运行（python tests/test_sqlite_store.py，不走 conftest）时也绝不触发
+# 自动备份污染仓库 backups/——本文件有 2000 行级写入用例，每 200 次写会命中
+# store 的自动备份节奏。pytest 下 conftest 已钉 "0"，setdefault 不覆盖它。
+os.environ.setdefault("SHANGZHU_AUTO_BACKUP", "0")
+
 from storage.local_store import MemoryStore, SqliteStore, SQLITE_SCHEMA_SQL  # noqa: E402
 
 

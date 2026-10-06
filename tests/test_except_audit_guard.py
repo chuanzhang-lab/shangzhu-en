@@ -1,7 +1,7 @@
 """E-08 护栏：except Exception 审计表是代码现场的库存契约。
 
 中文仓 M-10 事故教训：吞异常的现场会无声增殖。本护栏锁两件事：
-① 审计表逐条有档位、档位合计与统计一致（A31/B26/C10 = 67）；
+① 审计表逐条有档位、档位合计与统计一致（A31/B25/C9 = 65）；
 ② 逐文件现存 `except Exception` 数 == 表内行数 − 已收窄行数——
    新增或删除现场必须同步改表，否则这里红。
 """
@@ -17,8 +17,9 @@ ROW_RE = re.compile(r"^\|\s*([A-Za-z0-9_./]+\.py):(\d+)\s*\|\s*([ABC])\s*\|")
 # 2026-10-06：持久化由 PG 换成 SQLite，删掉 PostgresStore / LocalFileStore
 # 后审计表从 67 行降到 62 行（A31→28 / B26→25 / C10→9）。这 5 处不是「被
 # 收窄」，是**连失败面本身都没了**——换 SQLite 的实际收益之一。
-# 同日 C1 加固新增 _execute 事务归口的 rollback 现场（A28→29，共 63 行）。
-EXPECTED_TIERS = {"A": 29, "B": 25, "C": 9}
+# 同日 C1 加固新增 _execute 事务归口的 rollback 现场（A28→29，共 63 行）；
+# S5 加固新增 store 自动备份兜底 + web_server 启动备份兜底两处（A29→31，共 65 行）。
+EXPECTED_TIERS = {"A": 31, "B": 25, "C": 9}
 
 
 def _audit_rows():
@@ -59,7 +60,7 @@ def _scoped_files():
 
 def test_audit_table_wellformed():
     rows = _audit_rows()
-    assert len(rows) == 63, f"审计表应有 63 行，实得 {len(rows)}"
+    assert len(rows) == 65, f"审计表应有 65 行，实得 {len(rows)}"
     tiers = Counter(r["tier"] for r in rows)
     assert dict(tiers) == EXPECTED_TIERS, f"档位合计漂移: {dict(tiers)}"
     for r in rows:

@@ -1358,6 +1358,8 @@ ls:
     corrupt_backup_fail: local store file corrupted and backup failed
     params_corrupt: task params column is not valid JSON, treated as empty
     sqlite_unavailable: SQLite store unavailable
+  msg:
+    content_truncated: "...[content truncated at 64KB]"
 
 # ─── llm_advisor (interactive-host / decision-narrator prompts + brief + errors) ──
 llm:
