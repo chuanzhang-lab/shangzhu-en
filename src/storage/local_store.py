@@ -549,19 +549,22 @@ class SqliteStore(BaseStore):
 
         return self._execute(_run, write=True)
 
-    def backup_to(self, dest_path: str) -> None:
-        """在线备份：走 sqlite3 的 backup API。
+    def backup_to(self, dest_path: str) -> int:
+        """在线备份：走 sqlite3 的 backup API。返回快照时的任务行数。
 
         开 WAL 后有 -wal/-shm 伴随文件，**只 cp 主文件会得到不完整快照**，
-        必须走这个 API（它会正确处理 WAL 状态）。
+        必须走这个 API（它会正确处理 WAL 状态）。返回行数供调用方做备份后
+        自检——计数与快照同在锁内取得，校验无竞态。
         """
         with self._lock:
             src = self._conn_or_create()
+            n = src.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
             dest = self._sqlite3.connect(dest_path)
             try:
                 src.backup(dest)
             finally:
                 dest.close()
+            return n
 
     def close(self) -> None:
         # 先把引用摘掉再关：即使 close 抛错也不会留下半死的连接被复用。
