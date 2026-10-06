@@ -70,7 +70,8 @@ messages: id INTEGER PK AUTOINCREMENT | task_id TEXT FK→tasks(id) ON DELETE CA
 - `--force` 覆盖前自动对当前库做**字节级安全快照**（含 `-wal/-shm`，`<db>.pre-restore-<ts>`），
   备份文件本身要过 `quick_check` 才允许覆盖；恢复后清掉残留 `-wal/-shm`
   （WAL 搭在恢复出来的文件上 = 损坏源）。
-- **恢复演练**在临时副本上做（`cp` 到 `/tmp` 再 restore），不碰真实数据；演练留证据。
+- **恢复演练**在临时副本上做（`cp` 到 `/tmp` 再 restore），不碰真实数据；演练留证据
+  （2026-10-06 首轮全链路演练 + 真实库迁移见 `docs/db-recovery-drill-20261006.md`）。
 
 ## 7. 清理与导出
 
