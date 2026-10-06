@@ -30,6 +30,28 @@ The LLM here is not the calculator — it's an **Engine Steward (read-only colla
 
 ## What's New / 更新内容
 
+### `0.6.0` — Storage hardening: the silent data-loss paths are closed
+
+#### English
+
+A hands-on audit of the storage layer (18 scenarios, 8 premise checks) found six ways to lose data *silently*: a health check that couldn't see corruption, failed writes answering `200` with only a warning, backups that were never scheduled, `cp`-style snapshots that drop the write-ahead log, dirty transactions left behind by failed writes, and `/health` showing none of it. All six are closed.
+
+- **Writes are now transactional in one place.** Every write commits on success and rolls back on failure (no half-written transactions), and failures are counted where `/health` can see them. `ping` now runs SQLite's `quick_check` — a plain `SELECT 1` "passes" even on a corrupted file.
+- **Backups happen on their own.** Once at startup and every 200 writes. Each snapshot is self-verified (`quick_check` + task count) before it enters the rotation of the last 7 — a bad snapshot raises instead of masquerading as a backup. Restore is two-phase: dry-run by default, and `--force` takes a byte-level snapshot of the current database before overwriting anything.
+- **Loud where it matters.** A failed message persist is now an **ERROR** (a lost turn is not "a bit slow"); oversized content is truncated with a visible marker instead of silently; `/health?detail=1` reports `store_degraded` / `store_integrity` / `store_writes_failed`.
+- **Schema versioning.** The database carries `PRAGMA user_version`; migrations take a pre-migration snapshot and *refuse* to run if they'd drop non-empty data (the retired dead column was provably all-NULL before removal).
+- **Operations in one tool.** `scripts/db_tool.py` consolidates backup / check / stats / export / restore / purge, and the operator manual is [`docs/DATABASE.md`](docs/DATABASE.md).
+
+#### 中文
+
+对存储层做了一轮实测审查（18 个场景 + 8 项前提验证），找到六条**静默丢数据**路径：健康检查看不出损坏、写失败只给 WARNING 照样回 200、备份从不自动调度、`cp` 式快照漏掉 WAL、失败写留下脏事务、`/health` 对这一切全盲。现在六条全部堵上。
+
+- **写路径事务归口。** 每次写成功 commit、失败 rollback（半截事务不留痕），失败计数进 `/health` 观测位。`ping` 改跑 `quick_check`——`SELECT 1` 在坏文件上照样「通」。
+- **备份自己会跑。** 启动一份 + 每 200 次写一份；每份快照过自检（`quick_check` + 任务数）才进 7 份轮转，坏快照报错而不是冒充备份。恢复两段式：默认 dry-run，`--force` 覆盖前先对当前库做字节级安全快照。
+- **该响的地方响。** 持久化失败升 **ERROR**（丢一轮对话不是「慢一点」）；超长内容截断带可见标记；`/health?detail=1` 报 `store_degraded` / `store_integrity` / `store_writes_failed`。
+- **schema 带版本。** 库上有 `PRAGMA user_version`；迁移先打前置快照，会丢非空数据就**拒迁**（删掉的死列是实证全 NULL 才动手的）。
+- **运维收进一个工具。** `scripts/db_tool.py` 统管 backup / check / stats / export / restore / purge，运维手册 [`docs/DATABASE.md`](docs/DATABASE.md)。
+
 ### `0.5.0` — Storage moves to SQLite: no database server to install
 
 #### English
@@ -318,13 +340,13 @@ API key is read in four priority levels:
 3. macOS Keychain (service=`shangzhu-llm`, account=`api_key`)
 4. Empty string (not configured)
 
-**Persistence is a single SQLite file** — no database server to install or start. Default path `data/shangzhu_en.db`, overridable via `SHANGZHU_DB_PATH` or `db_path` in `config/storage.json`. Tables are created on first connect if missing. Fallback chain: **SQLite → memory**; if SQLite cannot be initialised the service keeps running but logs an **ERROR** (not a warning) because that tier means data is lost on restart.
+**Persistence is a single SQLite file** — no database server to install or start. Default path `data/shangzhu_en.db`, overridable via `SHANGZHU_DB_PATH` or `db_path` in `config/storage.json`. Tables are created on first connect if missing, and the schema is versioned (`PRAGMA user_version`) with pre-migration snapshots. Fallback chain: **SQLite → memory**; if SQLite cannot be initialised the service keeps running but logs an **ERROR** (not a warning) because that tier means data is lost on restart. Health: `/health?detail=1` reports `store_degraded` / `store_integrity` / `store_writes_failed`.
 
 **The English edition starts from zero.** No data is migrated from the Chinese edition's `shangzhu` database (the rows there were written while both editions shared one database, and they carry no marker saying which product they belong to). The two editions no longer share any storage concept at all — this one is SQLite, the Chinese edition is PostgreSQL.
 
 Both config files containing secrets/local info are `600`-permission and untracked.
 
-**Backup:** `./scripts/backup_db.sh` (keeps the last 7). It goes through SQLite's backup API rather than `cp`, because the store runs in WAL mode and copying only the main file can miss transactions still sitting in the `-wal` file. Export to a backend-neutral JSON with `./scripts/export_tasks_json.py -o tasks.json`.
+**Backup:** automatic — once at startup and every 200 writes (`SHANGZHU_AUTO_BACKUP=0` turns it off) — and on demand via `./scripts/backup_db.sh` or `.venv/bin/python3 scripts/db_tool.py backup`. Every snapshot is self-verified (`quick_check` + task count) before entering the rotation of the last 7. The backup goes through SQLite's backup API rather than `cp`, because the store runs in WAL mode and copying only the main file can miss transactions still sitting in the `-wal` file. Restore is two-phase — `db_tool.py restore` is a dry-run unless you pass `--force`, and it snapshots the current database before overwriting anything. Export to a backend-neutral JSON with `./scripts/export_tasks_json.py -o tasks.json`. Full operator manual: [`docs/DATABASE.md`](docs/DATABASE.md).
 
 ---
 

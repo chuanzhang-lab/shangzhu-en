@@ -254,11 +254,16 @@ storage/local_store.py
 ### 8.2 表结构
 
 ```
-tasks:    id UUID PK | name TEXT | params JSONB | industry TEXT | turn INT
-          | created_at/updated_at TIMESTAMPTZ | deleted_at TIMESTAMPTZ（软删）
-messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
-          | role TEXT | content TEXT | turn INT | created_at TIMESTAMPTZ
+tasks:    id TEXT PK | name TEXT | params TEXT(JSON) | turn INT
+          | created_at TEXT | updated_at TEXT | deleted_at TEXT（软删，NULL=存活）
+messages: id INTEGER PK AUTOINCREMENT | task_id TEXT FK→tasks(id) ON DELETE CASCADE
+          | role TEXT | content TEXT | turn INT | created_at TEXT
+索引:     idx_messages_task ON messages(task_id)
+版本:     PRAGMA user_version = 1（迁移骨架见 local_store._migrate）
 ```
+
+> 2026-10-06 起 `industry` 死列已删（v0→v1 迁移：前置快照 + 非 NULL 拒迁护栏）。
+> 运维细节（备份/恢复/清理/演练）见 `docs/DATABASE.md`。
 
 ### 8.3 配置与降级
 
@@ -266,8 +271,9 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 - 建表：`SqliteStore` 首连执行 `SQLITE_SCHEMA_SQL`（CREATE IF NOT EXISTS，幂等）。**没有建库步骤**——文件按需创建，`scripts/init_db.py` 已删。
 - 并发前提：SQLite 写锁是**库级**的，本 store 假设**单进程**写。当前 `start.sh` 是单进程 uvicorn 且 store 写全在事件循环线程串行（实测），前提成立；改 `--workers` 或加后台写进程前必须重估。
 - 两处易踩的实现细节：① 外键 `PRAGMA foreign_keys` **默认 OFF**，每次建连都要显式 ON，只在 DDL 写 `ON DELETE CASCADE` 不生效；② 时间戳由 Python 侧生成 UTC ISO 串，不用 SQL `datetime('now')`（返回无时区标记的 UTC 串，混用会让 `ORDER BY updated_at` 排错）。
-- 降级：SQLite 建不起来 → `MemoryStore`（服务不崩，但**打 ERROR 不是 WARNING**——这一档重启即丢）。`/health?detail=1` 的 `store_backend` / `store_target` 指示当前后端与落点（target 只回文件名，不暴露绝对路径）。
-- 备份：`scripts/backup_db.sh` 走 SQLite backup API（WAL 下裸 `cp` 主文件会漏 `-wal` 里的事务）；`scripts/export_tasks_json.py` 导出与后端无关的 JSON。
+- 写路径：事务在 `SqliteStore._execute` 归口（成功 commit / 失败 rollback 重抛），写方法不各自内联 commit；写护栏 name>200 抛 ValueError、content>64KB 截断带可见标记、单任务消息 500 条上限。
+- 降级：SQLite 建不起来 → `MemoryStore`（服务不崩，但**打 ERROR 不是 WARNING**——这一档重启即丢）。`/health?detail=1` 的 `store_backend` / `store_target` 指示当前后端与落点（target 只回文件名，不暴露绝对路径），另有 `store_degraded` / `store_integrity` / `store_writes_failed` 三观测位（integrity 走 `quick_check` 实测）。
+- 备份：单源实现 `src/storage/maintenance.py`——自动（启动一份 + 每 200 次写一份，`SHANGZHU_AUTO_BACKUP=0` 关）+ 手动（`scripts/db_tool.py backup` / `scripts/backup_db.sh` 薄壳）。快照走 SQLite backup API（WAL 下裸 `cp` 主文件会漏 `-wal` 里的事务），自检（quick_check + 任务数）通过才进 7 份轮转；restore 默认 dry-run，`--force` 前自动留字节级安全快照。`scripts/export_tasks_json.py` 导出与后端无关的 JSON。全链路见 `docs/DATABASE.md`。
 
 ### 8.4 软删
 
@@ -275,9 +281,9 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 
 ### 8.5 验证
 
-- 存储层单测：`tests/test_local_store.py`（MemoryStore 契约 + SqliteStore 端到端，零外部依赖，不跳过）与 `tests/test_sqlite_store.py`（落盘语义：跨实例存活、params 类型、时间戳可解析、外键级联、备份完整性）。
-- API 契约：`tests/test_task_api.py`（TestClient + 内存 store 隔离，不污染真实 PG）。
-- 全量回归：`make test`（= pytest 全量收集 `tests/` 全部 33 个文件，当前 **355 passed / 0 failed**）。
+- 存储层单测：`tests/test_local_store.py`（MemoryStore 契约 + SqliteStore 端到端，零外部依赖，不跳过）、`tests/test_sqlite_store.py`（落盘语义：跨实例存活、params 类型、时间戳可解析、外键级联、备份完整性、迁移与健康契约）与 `tests/test_db_maintenance.py`（运维层：备份自检硬门槛、restore/purge 两段式、db_tool 六命令、自动备份节奏与失败不拦写）。
+- API 契约：`tests/test_task_api.py`（TestClient + 内存 store 隔离，不污染真实库）。
+- 全量回归：`make test`（= pytest 全量收集 `tests/` 全部文件，2026-10-06 加固后 **563 passed / 0 failed**）。
 - 端到端已验证：双任务独立上下文；跨轮 merge；重启服务后历史保留。
 
 ---
@@ -285,7 +291,7 @@ messages: id BIGSERIAL PK | task_id UUID FK→tasks(id) ON DELETE CASCADE
 ## 9. 验证
 
 ```bash
-make test        # 交付门禁：pytest 全量收集 tests/（当前 355 passed / 0 failed）
+make test        # 交付门禁：pytest 全量收集 tests/（2026-10-06 当前 563 passed / 0 failed）
 # 后备（无 pytest 环境）：.venv/bin/python3 tests/run_all.py
 #   → 331 passed + 24 skipped（需 pytest fixture 的用例显式跳过，不计入通过）
 ```
