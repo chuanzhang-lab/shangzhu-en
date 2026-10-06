@@ -30,16 +30,16 @@
 | src/op_executor.py | 1 | 1 | 1 | 3 |
 | src/router/intent.py | 0 | 0 | 2 | 2 |
 | src/router/rules/__init__.py | 1 | 0 | 0 | 1 |
-| src/storage/local_store.py | 1 | 0 | 0 | 1 |
+| src/storage/local_store.py | 2 | 0 | 0 | 2 |
 | src/tools/financial_calculator.py | 0 | 9 | 0 | 9 |
 | src/tools/param_advisor.py | 0 | 1 | 0 | 1 |
 | src/tools/project_manager.py | 0 | 2 | 0 | 2 |
 | src/tools/report_generator.py | 0 | 3 | 0 | 3 |
 | src/tools/workflow_engine.py | 0 | 4 | 0 | 4 |
 | config/settings.py | 4 | 1 | 0 | 5 |
-| **合计** | **28** | **25** | **9** | **62** |
+| **合计** | **29** | **25** | **9** | **63** |
 
-处置分布：保持 31 / 已补痕 34 / 已收窄 2。行号为 2026-10-04 处置完成后的位置（收窄两处以 `except ImportError` 现状入表）。
+处置分布：保持 29 / 已补痕 32 / 已收窄 2。行号为入表当时的位置（收窄两处以 `except ImportError` 现状入表；后续代码改动会漂移行号，护栏按文件计数不按行号）。
 
 ## 逐条表
 
@@ -110,14 +110,15 @@
 |---|---|---|---|
 | src/router/rules/__init__.py:136 | A | 规则加载失败 error + 降级（rules: rules load failed） | 保持 |
 
-### src/storage/local_store.py（1：A1）
+### src/storage/local_store.py（2：A2）
 
 > 2026-10-06 变更：持久化由 PG 换成 SQLite，删掉 PostgresStore 与
-> LocalFileStore 后本文件只剩 1 处 except Exception（get_store 的降级位）。
-> 原先的「库名探测 / 建库自检 / 连接关闭 / 文件存储损坏」等 5 处随实现一并消失，
-> **不是被静默吞掉，是连失败面本身都没了**——这正是换 SQLite 的收益之一。
+> LocalFileStore 后本文件原有 5 处（库名探测 / 建库自检 / 连接关闭 / 文件存储
+> 损坏等）随实现一并消失，**不是被静默吞掉，是连失败面本身都没了**——这正是
+> 换 SQLite 的收益之一。同日 C1 加固新增 `_execute` 事务归口的 rollback 现场。
 
-| src/storage/local_store.py:472 | A | SQLite 不可用 → error + 降级内存 store（ls.log.sqlite_unavailable；**会丢数据，故打 ERROR 不是 WARNING**） | 保持 |
+| src/storage/local_store.py:493 | A | SQLite 不可用 → error + 降级内存 store（ls.log.sqlite_unavailable；**会丢数据，故打 ERROR 不是 WARNING**） | 保持 |
+| src/storage/local_store.py:301 | A | 写中途失败 → rollback 后原样重抛，半截事务不残留；write 失败计入 writes_failed 观测位 | 保持 |
 
 | 位置 | 档位 | 现象 | 处置 |
 |---|---|---|---|

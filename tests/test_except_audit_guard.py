@@ -17,7 +17,8 @@ ROW_RE = re.compile(r"^\|\s*([A-Za-z0-9_./]+\.py):(\d+)\s*\|\s*([ABC])\s*\|")
 # 2026-10-06：持久化由 PG 换成 SQLite，删掉 PostgresStore / LocalFileStore
 # 后审计表从 67 行降到 62 行（A31→28 / B26→25 / C10→9）。这 5 处不是「被
 # 收窄」，是**连失败面本身都没了**——换 SQLite 的实际收益之一。
-EXPECTED_TIERS = {"A": 28, "B": 25, "C": 9}
+# 同日 C1 加固新增 _execute 事务归口的 rollback 现场（A28→29，共 63 行）。
+EXPECTED_TIERS = {"A": 29, "B": 25, "C": 9}
 
 
 def _audit_rows():
@@ -58,7 +59,7 @@ def _scoped_files():
 
 def test_audit_table_wellformed():
     rows = _audit_rows()
-    assert len(rows) == 62, f"审计表应有 62 行，实得 {len(rows)}"
+    assert len(rows) == 63, f"审计表应有 63 行，实得 {len(rows)}"
     tiers = Counter(r["tier"] for r in rows)
     assert dict(tiers) == EXPECTED_TIERS, f"档位合计漂移: {dict(tiers)}"
     for r in rows:

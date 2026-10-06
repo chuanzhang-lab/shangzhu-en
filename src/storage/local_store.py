@@ -157,10 +157,6 @@ class MemoryStore(BaseStore):
         pass
 
 
-# 单任务消息数上限，防止长期运行内存无限增长
-_MAX_MESSAGES_PER_TASK = 500
-
-
 # ── SQLite：唯一持久化后端（2026-10-06 取代 PostgreSQL）──────────────────
 # 选型依据见 docs/db-sqlite-review-20261005.md：单机 + 单进程（uvicorn 无
 # worker）+ 单用户，用不上 C/S 数据库；SQLite 是 stdlib，干净机器 clone 后
@@ -253,6 +249,8 @@ class SqliteStore(BaseStore):
         self.path = path or _sqlite_path()
         self._conn = None
         self._lock = threading.Lock()  # 串行化所有写（沿用 PG 版 F9 的做法）
+        self._writes = 0  # 成功写计数：自动备份节奏用（每 200 次写触发一次）
+        self._writes_failed = 0  # 写失败计数：/health 的 store_writes_failed 观测位
 
     @property
     def target(self) -> str:
@@ -275,6 +273,8 @@ class SqliteStore(BaseStore):
         # WAL：读不阻塞写。代价是会多出 -wal/-shm 文件 —— 备份必须走
         # Connection.backup()，裸 cp 主文件会得到不完整快照。
         conn.execute("PRAGMA journal_mode = WAL")
+        # 显式 5s 事务锁等待：备份/外部工具短暂占用写锁时不立刻 'database is locked'
+        conn.execute("PRAGMA busy_timeout = 5000")
         conn.executescript(SQLITE_SCHEMA_SQL)
         return conn
 
@@ -283,15 +283,41 @@ class SqliteStore(BaseStore):
             self._conn = self._connect()
         return self._conn
 
-    def _execute(self, fn):
-        """在锁内执行一段以 conn 为参数的 SQL（懒连接 + 幂等建表）。"""
+    def _execute(self, fn, write: bool = False):
+        """在锁内执行一段以 conn 为参数的 SQL，**事务在此归口**。
+
+        成功 commit、失败 rollback 后原样重抛：半截事务既不许留在库里，也不许
+        拖着未提交事务占写锁（否则下一次 commit 会把上次的残骸一起提交）。
+        write=True 的成败会计入写计数（自动备份节奏 / store_writes_failed 观测位）。
+        """
         with self._lock:
             conn = self._conn_or_create()
-            return fn(conn)
+            try:
+                result = fn(conn)
+                conn.commit()
+                if write:
+                    self._writes += 1
+                return result
+            except Exception:
+                conn.rollback()
+                if write:
+                    self._writes_failed += 1
+                raise
 
     def ping(self) -> None:
-        """连通性/可写性自检（含幂等建表）。构造后调用一次。"""
-        self._execute(lambda conn: conn.execute("SELECT 1").fetchone())
+        """连通性 + 数据可读性自检（含幂等建表）。构造后调用一次。
+
+        `SELECT 1` 只证明「连得上」不证明「数据在」——文件损坏时照样回一行。
+        quick_check 才扫数据页（千行级 ~0.5ms），坏库在这里抛错，get_store()
+        的降级链才能接住并留痕。
+        """
+        def _run(conn):
+            row = conn.execute("PRAGMA quick_check(1)").fetchone()
+            verdict = row[0] if row else "?"
+            if verdict != "ok":
+                raise RuntimeError(f"sqlite quick_check failed: {verdict}")
+
+        self._execute(_run)
 
     def create_task(self, name: str) -> dict:
         tid = str(uuid.uuid4())
@@ -302,9 +328,8 @@ class SqliteStore(BaseStore):
                 "INSERT INTO tasks (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (tid, name, now, now),
             )
-            conn.commit()
 
-        self._execute(_run)
+        self._execute(_run, write=True)
         return {
             "id": tid,
             "name": name,
@@ -344,9 +369,8 @@ class SqliteStore(BaseStore):
                 "UPDATE tasks SET name = ?, updated_at = ? WHERE id = ?",
                 (name, _utc_now_iso(), task_id),
             )
-            conn.commit()
 
-        self._execute(_run)
+        self._execute(_run, write=True)
 
     def update_params(self, task_id: str, params: dict) -> None:
         def _run(conn):
@@ -354,9 +378,8 @@ class SqliteStore(BaseStore):
                 "UPDATE tasks SET params = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(params or {}), _utc_now_iso(), task_id),
             )
-            conn.commit()
 
-        self._execute(_run)
+        self._execute(_run, write=True)
 
     def add_message(self, task_id: str, role: str, content: str, turn: int = 0) -> None:
         def _run(conn):
@@ -371,9 +394,8 @@ class SqliteStore(BaseStore):
                 "SELECT id FROM messages WHERE task_id = ? ORDER BY id DESC LIMIT ?)",
                 (task_id, task_id, _MAX_MESSAGES_PER_TASK),
             )
-            conn.commit()
 
-        self._execute(_run)
+        self._execute(_run, write=True)
 
     def get_messages(self, task_id: str) -> List[dict]:
         def _run(conn):
@@ -394,9 +416,8 @@ class SqliteStore(BaseStore):
                 "UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ?",
                 (now, now, task_id),
             )
-            conn.commit()
 
-        self._execute(_run)
+        self._execute(_run, write=True)
 
     def backup_to(self, dest_path: str) -> None:
         """在线备份：走 sqlite3 的 backup API。

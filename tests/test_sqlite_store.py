@@ -197,6 +197,95 @@ def test_backup_api_produces_openable_snapshot(tmp_path):
         check.close()
 
 
+# ── S1 加固（2026-10-06：db-hardening-plan-20261006 C1）──────────────────
+
+def test_execute_rollback_leaves_no_partial_state(tmp_path):
+    """A1：_execute 事务归口——中途失败不留半截事务，后续写照常。
+
+    事故形态（S3/T1）：INSERT 成功、下一句失败时事务悬着，下一次 commit 会把
+    残骸一起提交。归口后必须：失败原样抛、半截 UPDATE 不落库、写计数有痕。
+    """
+    s = _mk(tmp_path)
+    tid = s.create_task("original")["id"]
+    assert s._writes == 1 and s._writes_failed == 0
+
+    def _half_then_fail(conn):
+        conn.execute("UPDATE tasks SET name = ? WHERE id = ?", ("half", tid))
+        raise RuntimeError("boom mid-transaction")
+
+    raised = False
+    try:
+        s._execute(_half_then_fail, write=True)
+    except RuntimeError:
+        raised = True
+    assert raised, "中途失败必须原样重抛，不许吞"
+
+    assert s.get_task(tid)["name"] == "original", "半截 UPDATE 不许落库"
+    assert s._writes == 1 and s._writes_failed == 1, "写失败必须计入观测位"
+    s.rename_task(tid, "after")  # 悬着的事务已回滚，后续写必须照常
+    assert s.get_task(tid)["name"] == "after"
+    s.close()
+
+
+def test_ping_quick_check_catches_corruption_select1_cannot(tmp_path):
+    """A2：坏数据页必须在 ping 就炸——`SELECT 1` 的假通是 P0 静默丢失路径 L1。
+
+    反证是本条的核心：砸掉中间数据页后 `SELECT 1` 照样返回一行（旧 ping 会
+    谎报健康），quick_check 才扫得到坏页。
+    """
+    db = tmp_path / "corrupt.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE t (x TEXT)")
+    conn.executemany("INSERT INTO t VALUES (?)", [("payload" * 200,) for _ in range(2000)])
+    conn.commit()
+    conn.close()
+
+    raw = bytearray(db.read_bytes())
+    for i in range(4096 * 4, 4096 * 4 + 512):  # 砸第 5 页（数据页），不碰文件头
+        raw[i] = 0xAA
+    db.write_bytes(raw)
+
+    conn = sqlite3.connect(db)
+    try:
+        assert conn.execute("SELECT 1").fetchone()[0] == 1, "反证前提：SELECT 1 对坏库照样通过"
+        try:
+            rows = conn.execute("PRAGMA quick_check(1)").fetchall()
+            detected = not rows or rows[0][0] != "ok"
+        except sqlite3.DatabaseError:
+            detected = True
+        assert detected, "quick_check 必须报出坏页"
+    finally:
+        conn.close()
+
+    s = SqliteStore(path=str(db))
+    raised = False
+    try:
+        s.ping()
+    except (RuntimeError, sqlite3.DatabaseError):
+        raised = True
+    assert raised, "ping 必须对坏库抛错，get_store 降级链才有机会接住"
+
+
+def test_busy_timeout_is_5000(tmp_path):
+    """A3：busy_timeout 显式 5s——备份/外部工具短暂占写锁时不立刻 locked。"""
+    s = _mk(tmp_path)
+    s.ping()
+    conn = s._conn_or_create()
+    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    s.close()
+
+
+def test_max_messages_constant_defined_once(tmp_path):
+    """A4：_MAX_MESSAGES_PER_TASK 全文件唯一定义（曾重复定义两处）。"""
+    src_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "src", "storage", "local_store.py",
+    )
+    with open(src_path, "r", encoding="utf-8") as f:
+        src = f.read()
+    assert src.count("_MAX_MESSAGES_PER_TASK =") == 1, "常量必须唯一定义"
+
+
 if __name__ == "__main__":
     import tempfile
 
