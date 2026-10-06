@@ -75,6 +75,17 @@ class BaseStore:
     def delete_task(self, task_id: str) -> None:
         raise NotImplementedError
 
+    def health_check(self) -> dict:
+        """存储健康快照（观测位）：degraded / integrity / writes_failed 三键。"""
+        raise NotImplementedError
+
+    def purge_deleted(self, days: int) -> int:
+        """物理删除 deleted_at 超过 days 天的任务（级联消息），返回删除数。
+
+        **破坏性操作，永不自动执行**——只由显式调用（db_tool purge --apply）触发。
+        """
+        raise NotImplementedError
+
     def close(self) -> None:
         """释放底层资源（如数据库连接）。内存版为空操作。"""
 
@@ -147,6 +158,30 @@ class MemoryStore(BaseStore):
             self._tasks[task_id]["deleted_at"] = time.time()
             self._tasks[task_id]["updated_at"] = time.time()
             self._msgs.pop(task_id, None)
+
+    def health_check(self) -> dict:
+        # 内存实现本身就是降级落点（重启即丢）：degraded=True 是诚实申报；
+        # 纯 dict 写不会失败，writes_failed 恒 0 不是冒充。
+        return {
+            "backend": type(self).__name__,
+            "target": self.target,
+            "degraded": True,
+            "integrity": "n/a",
+            "writes_failed": 0,
+        }
+
+    def purge_deleted(self, days: int) -> int:
+        if days < 1:
+            raise ValueError("days must be >= 1")
+        cutoff = time.time() - days * 86400
+        doomed = [
+            tid for tid, tk in self._tasks.items()
+            if tk["deleted_at"] is not None and tk["deleted_at"] < cutoff
+        ]
+        for tid in doomed:
+            del self._tasks[tid]
+            self._msgs.pop(tid, None)
+        return len(doomed)
 
     @property
     def target(self) -> str:
@@ -230,8 +265,8 @@ class SqliteStore(BaseStore):
     1. **外键必须显式开**。SQLite 的 `PRAGMA foreign_keys` **默认是 OFF**
        （实测 3.50.4 返回 0），DDL 里写了 `ON DELETE CASCADE` 也**不会生效**。
        所以每次建连接都要显式 `PRAGMA foreign_keys = ON`——靠 DDL 声明是幻觉。
-       （注：当前 `delete_task` 是软删，级联还不会被动到；这条是给未来的
-       物理删除路径兜底，成本为零。）
+       （注：`delete_task` 是软删，级联由 `purge_deleted` 的物理删除触发——
+       不开这条 PRAGMA，purge 会删任务留下孤儿消息。）
     2. **时间由 Python 侧生成**，不靠 SQL 的 `datetime('now')`：后者返回无时区
        标记的 UTC 串，与 Python 侧格式混用会让 `ORDER BY updated_at` 排错。
     3. **params 要显式 parse**。PG 的 JSONB 列读出来直接是 dict，SQLite 是 TEXT，
@@ -472,6 +507,47 @@ class SqliteStore(BaseStore):
             )
 
         self._execute(_run, write=True)
+
+    def health_check(self) -> dict:
+        """健康快照：integrity 用 quick_check 实测（坏页回报 corrupt: …）。
+
+        quick_check 对坏页返回错误行而不是抛错（实测），所以这里不需要
+        except 现场；文件彻底不可读（IO/头损坏）时异常向上抛——/health 500
+        本身也是「坏能知」信号。
+        """
+        def _run(conn):
+            row = conn.execute("PRAGMA quick_check(1)").fetchone()
+            return row[0] if row else "?"
+
+        verdict = self._execute(_run)
+        return {
+            "backend": type(self).__name__,
+            "target": self.target,
+            "degraded": False,
+            "integrity": "ok" if verdict == "ok" else f"corrupt: {verdict}",
+            "writes_failed": self._writes_failed,
+        }
+
+    def purge_deleted(self, days: int) -> int:
+        """物理删已删任务，消息走 FK ON DELETE CASCADE（foreign_keys=ON 已开）。
+
+        时间比较用 ISO 串同格式字典序（_utc_now_iso 同一生成器，见 A3 注）。
+        """
+        if days < 1:
+            raise ValueError("days must be >= 1")
+        cutoff = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(days=days)
+        ).isoformat()
+
+        def _run(conn):
+            cur = conn.execute(
+                "DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?",
+                (cutoff,),
+            )
+            return cur.rowcount
+
+        return self._execute(_run, write=True)
 
     def backup_to(self, dest_path: str) -> None:
         """在线备份：走 sqlite3 的 backup API。

@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -396,6 +397,104 @@ def test_task_dict_has_no_industry_key(tmp_path):
         assert "industry" not in s.get_task(t["id"])
         assert "industry" not in s.list_tasks()[0]
         s.close()
+
+
+# ── S3 加固（2026-10-06：health_check() / purge_deleted(days)）────────────
+
+def _age_deleted(store, tid, days=40):
+    """把某任务的 deleted_at 拨老（两后端各按自己的时间表示）。"""
+    if isinstance(store, SqliteStore):
+        old = (datetime.datetime.now(datetime.timezone.utc)
+               - datetime.timedelta(days=days)).isoformat()
+        conn = store._conn_or_create()
+        conn.execute("UPDATE tasks SET deleted_at = ? WHERE id = ?", (old, tid))
+        conn.commit()
+    else:
+        store._tasks[tid]["deleted_at"] = time.time() - days * 86400
+
+
+def test_purge_deleted_cascades_and_keeps_fresh(tmp_path):
+    """A8：物理删超期软删任务并级联消息；未超期的软删任务原样留下。
+
+    消息留存按后端既有约定（不是本条要改的）：SqliteStore 软删保留消息直到
+    purge（FK CASCADE 物理清）；MemoryStore 软删即清消息（R1 防泄漏，
+    见 test_local_store 的 test_soft_delete_hides_but_keeps）。
+    """
+    for s in (_mk(tmp_path, "p1.db"), MemoryStore()):
+        old_id = s.create_task("old")["id"]
+        fresh_id = s.create_task("fresh")["id"]
+        s.add_message(old_id, "user", "old msg")
+        s.add_message(fresh_id, "user", "fresh msg")
+        s.delete_task(old_id)
+        s.delete_task(fresh_id)
+        _age_deleted(s, old_id, days=40)  # fresh 刚删（<30 天）不动
+
+        assert s.purge_deleted(30) == 1
+        assert s.get_task(old_id) is None, "超期软删必须物理消失"
+        assert s.get_task(fresh_id) is not None, "未超期软删必须还在"
+        assert s.get_messages(old_id) == [], "旧任务消息必须随 purge 清掉"
+        if isinstance(s, SqliteStore):
+            assert [m["content"] for m in s.get_messages(fresh_id)] == ["fresh msg"], \
+                "purge 不许殃及未超期任务的消息"
+        else:
+            assert s.get_messages(fresh_id) == [], "MemoryStore 软删即清消息（R1）"
+        s.close()
+
+
+def test_purge_deleted_rejects_bad_days(tmp_path):
+    """A8：days<1 直接报错——purge 是破坏性操作，参数不容含糊。"""
+    for s in (_mk(tmp_path, "p2.db"), MemoryStore()):
+        for bad in (0, -1):
+            raised = False
+            try:
+                s.purge_deleted(bad)
+            except ValueError:
+                raised = True
+            assert raised, f"days={bad} 必须报 ValueError"
+        s.close()
+
+
+def test_health_check_contract(tmp_path):
+    """A7：三观测位契约——SqliteStore 诚实报状态，MemoryStore 申报降级。"""
+    s = _mk(tmp_path, "h.db")
+    s.ping()
+    hc = s.health_check()
+    assert hc["degraded"] is False and hc["integrity"] == "ok"
+    assert hc["writes_failed"] == 0 and hc["target"] == "h.db"
+
+    def _fail(conn):
+        raise RuntimeError("write broke")
+
+    try:
+        s._execute(_fail, write=True)
+    except RuntimeError:
+        pass
+    assert s.health_check()["writes_failed"] == 1, "写失败必须进观测位"
+    s.close()
+
+    m = MemoryStore()
+    hc = m.health_check()
+    assert hc["degraded"] is True and hc["integrity"] == "n/a", "内存实现必须申报降级"
+
+
+def test_health_check_reports_corrupt_without_raising(tmp_path):
+    """A7：坏页必须回报 corrupt: …（坏能知），health_check 自己不许炸。"""
+    db = tmp_path / "bad.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE t (x TEXT)")
+    conn.executemany("INSERT INTO t VALUES (?)", [("payload" * 200,) for _ in range(2000)])
+    conn.commit()
+    conn.close()
+    raw = bytearray(db.read_bytes())
+    for i in range(4096 * 4, 4096 * 4 + 512):
+        raw[i] = 0xAA
+    db.write_bytes(raw)
+
+    s = SqliteStore(path=str(db))
+    s._conn_or_create()  # 连接建好（建表不炸），坏页在 quick_check 才现形
+    hc = s.health_check()
+    assert hc["integrity"].startswith("corrupt:"), f"必须回报损坏: {hc}"
+    s.close()
 
 
 if __name__ == "__main__":
