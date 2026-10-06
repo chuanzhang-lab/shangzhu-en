@@ -156,7 +156,7 @@ def reset_state(thread_id: str) -> None:
         _SESSIONS[thread_id] = _new_state()
 
 
-def hydrate_session(thread_id: str, persisted_params: dict, industry: Optional[str] = None) -> dict:
+def hydrate_session(thread_id: str, persisted_params: dict) -> dict:
     """从持久化 store 把参数灌回 SessionState（锁内操作，防竞态）。
 
     在 web_server 请求入口处调用，确保 hydrate 写与 apply_turn_guarded 写互斥。
@@ -168,8 +168,6 @@ def hydrate_session(thread_id: str, persisted_params: dict, industry: Optional[s
             for k, v in persisted_params.items():
                 if not k.startswith("_") and v is not None:
                     st["params"][k] = v
-        if industry:
-            st["industry"] = industry
         return st
 
 

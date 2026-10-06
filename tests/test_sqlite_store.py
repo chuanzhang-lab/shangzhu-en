@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from storage.local_store import SqliteStore, SQLITE_SCHEMA_SQL  # noqa: E402
+from storage.local_store import MemoryStore, SqliteStore, SQLITE_SCHEMA_SQL  # noqa: E402
 
 
 def _mk(tmp_path, name="t.db"):
@@ -284,6 +284,118 @@ def test_max_messages_constant_defined_once(tmp_path):
     with open(src_path, "r", encoding="utf-8") as f:
         src = f.read()
     assert src.count("_MAX_MESSAGES_PER_TASK =") == 1, "常量必须唯一定义"
+
+
+# ── S2 加固（2026-10-06：user_version 迁移骨架 + 删 industry 死列）────────
+
+_V0_SCHEMA = """
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'New task',
+    params TEXT NOT NULL DEFAULT '{}',
+    industry TEXT,
+    turn INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    turn INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_task ON messages(task_id);
+"""
+
+
+def _mk_v0_db(db_path, industry_value=None):
+    """造一个 0.5.0 形状的库（带 industry 列、user_version=0）。"""
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_V0_SCHEMA)
+    conn.execute(
+        "INSERT INTO tasks (id, name, params, industry, created_at, updated_at) "
+        "VALUES ('t1', 'legacy', '{}', ?, '2026-10-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00')",
+        (industry_value,),
+    )
+    conn.execute(
+        "INSERT INTO messages (task_id, role, content, turn, created_at) "
+        "VALUES ('t1', 'user', 'hello', 1, '2026-10-01T00:00:00+00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_migrate_v0_drops_dead_industry_column(tmp_path):
+    """A5：v0 库自动迁 v1——industry 列消失、user_version=1、数据原样保留、重开幂等。
+
+    迁移前必须有 pre-migrate 快照（可溯源），迁移语句失败绝不半迁移。
+    """
+    db = tmp_path / "v0.db"
+    _mk_v0_db(db)
+
+    s = SqliteStore(path=str(db))
+    s.ping()
+    conn = s._conn_or_create()
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1, "迁移后必须是 v1"
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
+    assert "industry" not in cols, f"industry 死列必须消失，实得 {cols}"
+    t = s.get_task("t1")
+    assert t["name"] == "legacy" and "industry" not in t, "数据保留且 dict 形状同步"
+    assert s.get_messages("t1")[0]["content"] == "hello"
+    s.close()
+
+    snaps = list(tmp_path.glob("v0.db.pre-migrate-*"))
+    assert len(snaps) == 1, "迁移前必须打 pre-migrate 快照"
+    snap = sqlite3.connect(snaps[0])
+    try:
+        snap_cols = [r[1] for r in snap.execute("PRAGMA table_info(tasks)")]
+        assert "industry" in snap_cols, "快照必须保留迁移前形状"
+    finally:
+        snap.close()
+
+    s2 = SqliteStore(path=str(db))  # 重开幂等：不再迁移、不再打快照
+    s2.ping()
+    assert s2.get_task("t1")["name"] == "legacy"
+    s2.close()
+    assert len(list(tmp_path.glob("v0.db.pre-migrate-*"))) == 1, "幂等重开不重复快照"
+
+
+def test_migrate_refuses_when_industry_has_values(tmp_path):
+    """A5：industry 列有非 NULL 值 → 拒迁报错，列与数据原样留下。"""
+    db = tmp_path / "v0.db"
+    _mk_v0_db(db, industry_value="餐饮")
+
+    s = SqliteStore(path=str(db))
+    raised = False
+    try:
+        s.ping()
+    except RuntimeError as e:
+        raised = True
+        assert "refused" in str(e)
+    assert raised, "不明数据宁可停下，也不许静默销毁"
+
+    conn = sqlite3.connect(db)  # 直连复查：列还在、值还在、版本还是 0
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
+        assert "industry" in cols
+        assert conn.execute("SELECT industry FROM tasks WHERE id='t1'").fetchone()[0] == "餐饮"
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert not list(tmp_path.glob("v0.db.pre-migrate-*")), "拒迁不该留快照（没做任何变更）"
+
+
+def test_task_dict_has_no_industry_key(tmp_path):
+    """A5：死列删除后 task dict 形状同步（MemoryStore/SqliteStore 双后端一致）。"""
+    for s in (_mk(tmp_path), MemoryStore()):
+        t = s.create_task("T")
+        assert "industry" not in t, f"create_task 不许再带 industry 键: {sorted(t)}"
+        assert "industry" not in s.get_task(t["id"])
+        assert "industry" not in s.list_tasks()[0]
+        s.close()
 
 
 if __name__ == "__main__":

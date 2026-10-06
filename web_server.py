@@ -1619,7 +1619,7 @@ async def chat(req: ChatRequest):
     # else: legacy 非 uuid thread_id（如 "rb"），task=None → 纯内存，不碰 store
     if task is not None and task.get("params"):
         # hydrate：锁内操作，避免与 apply_turn_guarded 的并发写竞态（F1）
-        hydrate_session(tid, task.get("params"), industry=task.get("industry"))
+        hydrate_session(tid, task.get("params"))
 
     try:
         # 取最后一条用户消息

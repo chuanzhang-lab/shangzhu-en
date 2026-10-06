@@ -105,7 +105,6 @@ class MemoryStore(BaseStore):
             "id": tid,
             "name": name,
             "params": {},
-            "industry": None,
             "turn": 0,
             "created_at": now,
             "updated_at": now,
@@ -167,7 +166,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT 'New task',
     params TEXT NOT NULL DEFAULT '{}',
-    industry TEXT,
     turn INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -183,6 +181,9 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_task ON messages(task_id);
 """
+
+# schema 版本（PRAGMA user_version）。v1 = 2026-10-06 删 tasks.industry 死列。
+SCHEMA_VERSION = 1
 
 
 def _sqlite_path() -> str:
@@ -275,8 +276,62 @@ class SqliteStore(BaseStore):
         conn.execute("PRAGMA journal_mode = WAL")
         # 显式 5s 事务锁等待：备份/外部工具短暂占用写锁时不立刻 'database is locked'
         conn.execute("PRAGMA busy_timeout = 5000")
-        conn.executescript(SQLITE_SCHEMA_SQL)
+        self._migrate(conn)
         return conn
+
+    def _migrate(self, conn) -> None:
+        """幂等建表 + user_version 迁移骨架（迁移入口唯一）。
+
+        版本只进不退：库版本比本构建新直接报错，绝不「带病兼容」。
+        """
+        ver = conn.execute("PRAGMA user_version").fetchone()[0]
+        if ver > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"sqlite schema version {ver} is newer than this build ({SCHEMA_VERSION})"
+            )
+        conn.executescript(SQLITE_SCHEMA_SQL)  # 幂等建表（表在则不动结构）
+        if ver == 0:
+            self._migrate_v0_to_v1(conn)
+        # 未来的 v1→v2 迁移在下面加 elif ver == 1: ...
+        if ver != SCHEMA_VERSION:
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.commit()
+
+    def _migrate_v0_to_v1(self, conn) -> None:
+        """v0（0.5.0 初版）→ v1：删 tasks.industry 死列。
+
+        该列自 0.5.0 起无写入路径、全 NULL。迁移前先打 pre-migrate 快照
+        （backup API，WAL 安全）；列里若存在非 NULL 值即**拒迁报错**——
+        不明数据宁可停下人工看，也不静默销毁。
+        """
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
+        if "industry" not in cols:
+            return  # 全新库已是 v1 形状，无需迁移
+        n = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE industry IS NOT NULL"
+        ).fetchone()[0]
+        if n:
+            raise RuntimeError(
+                f"migration v0->v1 refused: {n} task(s) have industry values; "
+                "refusing to drop the column (manual review needed)"
+            )
+        snap = self._pre_migrate_snapshot(conn)
+        logger.warning(
+            "sqlite migrate v0->v1: dropping dead column 'industry' "
+            "(pre-migrate snapshot: %s)", os.path.basename(snap),
+        )
+        conn.execute("ALTER TABLE tasks DROP COLUMN industry")
+
+    def _pre_migrate_snapshot(self, conn) -> str:
+        """迁移前安全快照（backup API 处理 WAL；与数据文件同目录，名字可溯源）。"""
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
+        snap = f"{self.path}.pre-migrate-{ts}"
+        dest = self._sqlite3.connect(snap)
+        try:
+            conn.backup(dest)
+        finally:
+            dest.close()
+        return snap
 
     def _conn_or_create(self):
         if self._conn is None:
@@ -334,7 +389,6 @@ class SqliteStore(BaseStore):
             "id": tid,
             "name": name,
             "params": {},
-            "industry": None,
             "turn": 0,
             "created_at": now,
             "updated_at": now,
@@ -344,7 +398,7 @@ class SqliteStore(BaseStore):
     def list_tasks(self) -> List[dict]:
         def _run(conn):
             cur = conn.execute(
-                "SELECT id, name, params, industry, turn, created_at, updated_at, deleted_at "
+                "SELECT id, name, params, turn, created_at, updated_at, deleted_at "
                 "FROM tasks WHERE deleted_at IS NULL ORDER BY updated_at DESC"
             )
             return cur.fetchall()
@@ -354,7 +408,7 @@ class SqliteStore(BaseStore):
     def get_task(self, task_id: str) -> Optional[dict]:
         def _run(conn):
             cur = conn.execute(
-                "SELECT id, name, params, industry, turn, created_at, updated_at, deleted_at "
+                "SELECT id, name, params, turn, created_at, updated_at, deleted_at "
                 "FROM tasks WHERE id = ?",
                 (task_id,),
             )
@@ -455,11 +509,10 @@ def _row_to_task_sqlite(row) -> dict:
         "id": str(row[0]),
         "name": row[1],
         "params": params or {},
-        "industry": row[3],
-        "turn": row[4] if row[4] is not None else 0,
-        "created_at": row[5],
-        "updated_at": row[6],
-        "deleted_at": row[7],
+        "turn": row[3] if row[3] is not None else 0,
+        "created_at": row[4],
+        "updated_at": row[5],
+        "deleted_at": row[6],
     }
 
 

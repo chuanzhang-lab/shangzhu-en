@@ -39,7 +39,7 @@ def main() -> int:
     try:
         conn.row_factory = sqlite3.Row
         tasks = [dict(r) for r in conn.execute(
-            "SELECT id, name, params, industry, turn, created_at, updated_at, deleted_at "
+            "SELECT id, name, params, turn, created_at, updated_at, deleted_at "
             "FROM tasks ORDER BY created_at"
         )]
         for t in tasks:
